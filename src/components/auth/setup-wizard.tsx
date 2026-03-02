@@ -819,7 +819,7 @@ export function SetupWizard({ onComplete }: SetupWizardProps) {
               <button
                 onClick={saveProviderAndContinue}
                 disabled={(requiresKey && !apiKey.trim()) || saving}
-                className="px-8 py-3.5 rounded-[14px] border-none bg-[#6366F1] text-white text-[15px] font-display font-600
+                className="px-8 py-3.5 rounded-[14px] border-none bg-accent-bright text-white text-[15px] font-display font-600
                   cursor-pointer hover:brightness-110 active:scale-[0.97] transition-all duration-200
                   shadow-[0_6px_28px_rgba(99,102,241,0.3)] disabled:opacity-30"
               >
@@ -923,7 +923,7 @@ export function SetupWizard({ onComplete }: SetupWizardProps) {
               <button
                 onClick={createStarterAgent}
                 disabled={!agentName.trim() || saving}
-                className="px-10 py-3.5 rounded-[14px] border-none bg-[#6366F1] text-white text-[15px] font-display font-600
+                className="px-10 py-3.5 rounded-[14px] border-none bg-accent-bright text-white text-[15px] font-display font-600
                   cursor-pointer hover:brightness-110 active:scale-[0.97] transition-all duration-200
                   shadow-[0_6px_28px_rgba(99,102,241,0.3)] disabled:opacity-30"
               >

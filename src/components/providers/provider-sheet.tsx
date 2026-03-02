@@ -342,7 +342,7 @@ export function ProviderSheet() {
             <div
               onClick={() => setRequiresApiKey(!requiresApiKey)}
               className={`w-11 h-6 rounded-full transition-all duration-200 relative cursor-pointer
-                ${requiresApiKey ? 'bg-[#6366F1]' : 'bg-white/[0.08]'}`}
+                ${requiresApiKey ? 'bg-accent-bright' : 'bg-white/[0.08]'}`}
             >
               <div className={`absolute top-0.5 w-5 h-5 rounded-full bg-white transition-all duration-200
                 ${requiresApiKey ? 'left-[22px]' : 'left-0.5'}`} />
@@ -441,7 +441,7 @@ export function ProviderSheet() {
             <div
               onClick={() => setIsEnabled(!isEnabled)}
               className={`w-11 h-6 rounded-full transition-all duration-200 relative cursor-pointer
-                ${isEnabled ? 'bg-[#6366F1]' : 'bg-white/[0.08]'}`}
+                ${isEnabled ? 'bg-accent-bright' : 'bg-white/[0.08]'}`}
             >
               <div className={`absolute top-0.5 w-5 h-5 rounded-full bg-white transition-all duration-200
                 ${isEnabled ? 'left-[22px]' : 'left-0.5'}`} />
@@ -485,7 +485,7 @@ export function ProviderSheet() {
           <button
             onClick={handleSave}
             disabled={isBuiltin ? false : (!name.trim() || !baseUrl.trim())}
-            className="flex-1 py-3.5 rounded-[14px] border-none bg-[#6366F1] text-white text-[15px] font-600 cursor-pointer active:scale-[0.97] disabled:opacity-30 transition-all shadow-[0_4px_20px_rgba(99,102,241,0.25)] hover:brightness-110"
+            className="flex-1 py-3.5 rounded-[14px] border-none bg-accent-bright text-white text-[15px] font-600 cursor-pointer active:scale-[0.97] disabled:opacity-30 transition-all shadow-[0_4px_20px_rgba(99,102,241,0.25)] hover:brightness-110"
             style={{ fontFamily: 'inherit' }}
           >
             {editing ? 'Save' : 'Create'}

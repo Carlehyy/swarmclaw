@@ -5,6 +5,9 @@ import { useAppStore } from '@/stores/use-app-store'
 import { useChatStore } from '@/stores/use-chat-store'
 import { SessionCard } from './session-card'
 import { fetchMessages } from '@/lib/sessions'
+import { toast } from 'sonner'
+import { Skeleton } from '@/components/shared/skeleton'
+import { EmptyState } from '@/components/shared/empty-state'
 
 interface Props {
   inSidebar?: boolean
@@ -24,10 +27,16 @@ export function SessionList({ inSidebar, onSelect }: Props) {
   const setNewSessionOpen = useAppStore((s) => s.setNewSessionOpen)
   const clearSessions = useAppStore((s) => s.clearSessions)
   const togglePinSession = useAppStore((s) => s.togglePinSession)
+  const markChatRead = useAppStore((s) => s.markChatRead)
   const setMessages = useChatStore((s) => s.setMessages)
   const [search, setSearch] = useState('')
   const [typeFilter, setTypeFilter] = useState<SessionFilter>('all')
   const [sortMode, setSortMode] = useState<SortMode>('lastActive')
+  const [loaded, setLoaded] = useState(Object.keys(sessions).length > 0)
+
+  useEffect(() => {
+    if (Object.keys(sessions).length > 0 && !loaded) setLoaded(true)
+  }, [sessions, loaded])
 
   useEffect(() => {
     void loadConnectors()
@@ -67,6 +76,7 @@ export function SessionList({ inSidebar, onSelect }: Props) {
 
   const handleSelect = async (id: string) => {
     setCurrentSession(id)
+    markChatRead(id)
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('swarmclaw:scroll-bottom'))
     }
@@ -82,27 +92,33 @@ export function SessionList({ inSidebar, onSelect }: Props) {
 
   // Truly empty — no sessions at all for this user
   if (!allUserSessions.length) {
+    // Show skeleton cards while data is loading
+    if (!loaded) {
+      return (
+        <div className="flex-1 flex flex-col gap-1 px-2 pt-4">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <div key={i} className="py-3 px-4 rounded-[14px]">
+              <div className="flex items-center gap-2.5">
+                <Skeleton className="rounded-full" width={28} height={28} />
+                <Skeleton className="rounded-[6px]" width={140} height={14} />
+              </div>
+              <Skeleton className="rounded-[6px] mt-2" width="70%" height={12} />
+            </div>
+          ))}
+        </div>
+      )
+    }
     return (
-      <div className="flex-1 flex flex-col items-center justify-center gap-4 text-text-3 p-8 text-center">
-        <div className="w-12 h-12 rounded-[14px] bg-accent-soft flex items-center justify-center mb-1">
+      <EmptyState
+        icon={
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" className="text-accent-bright">
             <path d="M12 2L14.5 9.5L22 12L14.5 14.5L12 22L9.5 14.5L2 12L9.5 9.5L12 2Z" fill="currentColor" />
           </svg>
-        </div>
-        <p className="font-display text-[15px] font-600 text-text-2">No chats yet</p>
-        <p className="text-[13px] text-text-3/50">Create one to start chatting</p>
-        {!inSidebar && (
-          <button
-            onClick={() => setNewSessionOpen(true)}
-            className="mt-3 px-8 py-3 rounded-[14px] border-none bg-[#6366F1] text-white
-              text-[14px] font-600 cursor-pointer active:scale-95 transition-all duration-200
-              shadow-[0_4px_16px_rgba(99,102,241,0.2)]"
-            style={{ fontFamily: 'inherit' }}
-          >
-            + New Chat
-          </button>
-        )}
-      </div>
+        }
+        title="No chats yet"
+        subtitle="Create one to start chatting"
+        action={!inSidebar ? { label: '+ New Chat', onClick: () => setNewSessionOpen(true) } : undefined}
+      />
     )
   }
 
@@ -126,6 +142,7 @@ export function SessionList({ inSidebar, onSelect }: Props) {
             onClick={async () => {
               if (!window.confirm(`Delete ${filtered.length} chat${filtered.length === 1 ? '' : 's'}?`)) return
               await clearSessions(filtered.map((s) => s.id))
+              toast.success(`${filtered.length} chat${filtered.length === 1 ? '' : 's'} deleted`)
             }}
             className="ml-auto p-1.5 rounded-[8px] text-text-3/70 hover:text-red-400 hover:bg-red-400/[0.06]
               cursor-pointer transition-all bg-transparent border-none"
@@ -175,7 +192,7 @@ export function SessionList({ inSidebar, onSelect }: Props) {
                 onClick={() => handleSelect(s.id)}
               />
               <button
-                onClick={(e) => { e.stopPropagation(); togglePinSession(s.id) }}
+                onClick={(e) => { e.stopPropagation(); togglePinSession(s.id); toast.success(s.pinned ? 'Chat unpinned' : 'Chat pinned') }}
                 aria-label={s.pinned ? 'Unpin chat' : 'Pin chat'}
                 className={`absolute top-2 right-2 p-1 rounded-[6px] border-none cursor-pointer transition-all
                   ${s.pinned

@@ -4,6 +4,7 @@ import { useState } from 'react'
 import type { Agent } from '@/types'
 import { useAppStore } from '@/stores/use-app-store'
 import { useChatStore } from '@/stores/use-chat-store'
+import { useWs } from '@/hooks/use-ws'
 import { api } from '@/lib/api-client'
 import { createAgent, deleteAgent } from '@/lib/agents'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
@@ -17,16 +18,18 @@ import {
 import { ConfirmDialog } from '@/components/shared/confirm-dialog'
 import { useApprovalStore } from '@/stores/use-approval-store'
 import { AgentAvatar } from './agent-avatar'
+import { toast } from 'sonner'
 
 interface Props {
   agent: Agent
   isDefault?: boolean
   isRunning?: boolean
+  isOnline?: boolean
   isSelected?: boolean
   onSetDefault?: (id: string) => void
 }
 
-export function AgentCard({ agent, isDefault, isRunning, isSelected, onSetDefault }: Props) {
+export function AgentCard({ agent, isDefault, isRunning, isOnline, isSelected, onSetDefault }: Props) {
   const setEditingAgentId = useAppStore((s) => s.setEditingAgentId)
   const setAgentSheetOpen = useAppStore((s) => s.setAgentSheetOpen)
   const loadSessions = useAppStore((s) => s.loadSessions)
@@ -34,12 +37,18 @@ export function AgentCard({ agent, isDefault, isRunning, isSelected, onSetDefaul
   const setCurrentSession = useAppStore((s) => s.setCurrentSession)
   const setActiveView = useAppStore((s) => s.setActiveView)
   const setMessages = useChatStore((s) => s.setMessages)
+  const togglePinAgent = useAppStore((s) => s.togglePinAgent)
   const [running, setRunning] = useState(false)
   const [dialogOpen, setDialogOpen] = useState(false)
   const [taskInput, setTaskInput] = useState('')
   const [confirmDelete, setConfirmDelete] = useState(false)
   const approvals = useApprovalStore((s) => s.approvals)
   const pendingApprovalCount = Object.values(approvals).filter((a) => a.agentId === agent.id).length
+  const [heartbeatPulse, setHeartbeatPulse] = useState(false)
+  useWs(`heartbeat:agent:${agent.id}`, () => {
+    setHeartbeatPulse(true)
+    setTimeout(() => setHeartbeatPulse(false), 1500)
+  })
 
   const handleClick = () => {
     setEditingAgentId(agent.id)
@@ -74,11 +83,13 @@ export function AgentCard({ agent, isDefault, isRunning, isSelected, onSetDefaul
     const { id: _id, createdAt: _ca, updatedAt: _ua, ...rest } = agent
     await createAgent({ ...rest, name: agent.name + ' (Copy)' })
     await loadAgents()
+    toast.success('Agent duplicated')
   }
 
   const handleDelete = async () => {
     await deleteAgent(agent.id)
     await loadAgents()
+    toast.success('Agent moved to trash')
     setConfirmDelete(false)
   }
 
@@ -93,6 +104,21 @@ export function AgentCard({ agent, isDefault, isRunning, isSelected, onSetDefaul
             : 'bg-transparent border border-transparent hover:bg-white/[0.05] hover:border-white/[0.08]'}`}
       >
         {isSelected && <div className="card-select-indicator" />}
+        {/* Pin/star button */}
+        <button
+          onClick={(e) => {
+            e.stopPropagation()
+            togglePinAgent(agent.id)
+            toast.success(agent.pinned ? 'Agent unpinned' : 'Agent pinned')
+          }}
+          aria-label={agent.pinned ? 'Unpin agent' : 'Pin agent'}
+          className={`absolute top-3 right-10 p-1 rounded-[6px] transition-all bg-transparent border-none cursor-pointer hover:bg-white/[0.06]
+            ${agent.pinned ? 'opacity-100 text-amber-400' : 'opacity-0 group-hover:opacity-60 hover:!opacity-100 text-text-3'}`}
+        >
+          <svg width="12" height="12" viewBox="0 0 24 24" fill={agent.pinned ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+            <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+          </svg>
+        </button>
         {/* Three-dot dropdown */}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
@@ -111,9 +137,12 @@ export function AgentCard({ agent, isDefault, isRunning, isSelected, onSetDefaul
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="min-w-[140px]">
             <DropdownMenuItem onClick={handleClick}>Edit</DropdownMenuItem>
+            <DropdownMenuItem onClick={() => { togglePinAgent(agent.id); toast.success(agent.pinned ? 'Agent unpinned' : 'Agent pinned') }}>
+              {agent.pinned ? 'Unpin' : 'Pin'}
+            </DropdownMenuItem>
             <DropdownMenuItem onClick={handleDuplicate}>Duplicate</DropdownMenuItem>
             {!isDefault && onSetDefault && (
-              <DropdownMenuItem onClick={() => onSetDefault(agent.id)}>Set Default</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => { onSetDefault(agent.id); toast.success(`${agent.name} set as default`) }}>Set Default</DropdownMenuItem>
             )}
             <DropdownMenuSeparator />
             <DropdownMenuItem
@@ -126,10 +155,13 @@ export function AgentCard({ agent, isDefault, isRunning, isSelected, onSetDefaul
         </DropdownMenu>
 
         <div className="flex items-center gap-2.5">
-          <AgentAvatar seed={agent.avatarSeed} name={agent.name} size={28} />
-          {isRunning && (
-            <span className="shrink-0 w-2 h-2 rounded-full bg-emerald-400" style={{ animation: 'pulse 2s ease infinite' }} title="Running" />
-          )}
+          <AgentAvatar
+            seed={agent.avatarSeed}
+            name={agent.name}
+            size={28}
+            status={isRunning ? 'busy' : isOnline ? 'online' : undefined}
+            heartbeatPulse={heartbeatPulse}
+          />
           <span className="font-display text-[14px] font-600 truncate flex-1 tracking-[-0.01em]">{agent.name}</span>
           {pendingApprovalCount > 0 && (
             <span className="shrink-0 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-white text-[10px] font-700">
@@ -146,15 +178,16 @@ export function AgentCard({ agent, isDefault, isRunning, isSelected, onSetDefaul
               onClick={handleRunClick}
               disabled={running}
               className="shrink-0 text-[10px] font-600 uppercase tracking-wider px-2.5 py-1 rounded-[6px] cursor-pointer
-                transition-all border-none bg-[#6366F1]/20 text-[#818CF8] hover:bg-[#6366F1]/30 disabled:opacity-40"
+                transition-all border-none bg-accent-bright/20 text-[#818CF8] hover:bg-accent-bright/30 disabled:opacity-40"
               style={{ fontFamily: 'inherit' }}
             >
               {running ? '...' : 'Run'}
             </button>
           )}
           {agent.isOrchestrator && (
-            <span className="shrink-0 text-[10px] font-600 uppercase tracking-wider text-amber-400/80 bg-amber-400/[0.08] px-2 py-0.5 rounded-[6px]">
-              orch
+            <span className="shrink-0 text-[10px] font-600 uppercase tracking-wider text-amber-400/80 bg-amber-400/[0.08] px-2 py-0.5 rounded-[6px] flex items-center gap-1">
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M16 3h5v5"/><path d="M21 3l-7 7"/><path d="M8 21H3v-5"/><path d="M3 21l7-7"/></svg>
+              delegates
             </span>
           )}
         </div>
@@ -168,19 +201,19 @@ export function AgentCard({ agent, isDefault, isRunning, isSelected, onSetDefaul
           )}
         </div>
         <div className="flex items-center gap-3 mt-1.5 text-[11px] text-text-3/50">
-          {(agent as any).lastUsedAt ? (
+          {agent.lastUsedAt ? (
             <span>Last used: {(() => {
-              const days = Math.floor((Date.now() - (agent as any).lastUsedAt) / 86400000)
+              const days = Math.floor((Date.now() - agent.lastUsedAt) / 86400000)
               return days === 0 ? 'today' : `${days}d ago`
             })()}</span>
-          ) : (agent as any).updatedAt ? (
+          ) : agent.updatedAt ? (
             <span>Updated: {(() => {
               const days = Math.floor((Date.now() - agent.updatedAt) / 86400000)
               return days === 0 ? 'today' : `${days}d ago`
             })()}</span>
           ) : null}
-          {(agent as any).totalCost != null && (agent as any).totalCost > 0 && (
-            <span>Cost: ${((agent as any).totalCost as number).toFixed(2)}</span>
+          {agent.totalCost != null && agent.totalCost > 0 && (
+            <span>Cost: ${agent.totalCost.toFixed(2)}</span>
           )}
         </div>
       </div>
@@ -214,7 +247,7 @@ export function AgentCard({ agent, isDefault, isRunning, isSelected, onSetDefaul
             <button
               onClick={handleConfirmRun}
               disabled={!taskInput.trim()}
-              className="px-4 py-2 rounded-[10px] border-none bg-[#6366F1] text-white text-[13px] font-600 cursor-pointer disabled:opacity-30 transition-all hover:brightness-110"
+              className="px-4 py-2 rounded-[10px] border-none bg-accent-bright text-white text-[13px] font-600 cursor-pointer disabled:opacity-30 transition-all hover:brightness-110"
               style={{ fontFamily: 'inherit' }}
             >
               Run

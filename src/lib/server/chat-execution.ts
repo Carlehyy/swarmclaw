@@ -55,6 +55,7 @@ export interface ExecuteChatTurnInput {
   onEvent?: (event: SSEEvent) => void
   modelOverride?: string
   heartbeatConfig?: { ackMaxChars: number; showOk: boolean; showAlerts: boolean; target: string | null }
+  replyToId?: string
 }
 
 export interface ExecuteChatTurnResult {
@@ -341,13 +342,26 @@ function resolveApiKeyForSession(session: SessionWithCredentials, provider: Prov
   return null
 }
 
+function stripMarkupForHeartbeat(text: string): string {
+  return text
+    .replace(/<[^>]*>/g, ' ')       // strip HTML tags
+    .replace(/&nbsp;/gi, ' ')       // decode nbsp
+    .replace(/^[*`~_]+/, '')        // strip leading markdown
+    .replace(/[*`~_]+$/, '')        // strip trailing markdown
+    .trim()
+}
+
+const HEARTBEAT_OK_RE = /HEARTBEAT_OK[^\w]{0,4}$/
+const NO_MESSAGE_RE = /NO_MESSAGE[^\w]{0,4}$/
+
 function classifyHeartbeatResponse(text: string, ackMaxChars: number): 'suppress' | 'strip' | 'keep' {
-  const trimmed = text.trim()
-  if (trimmed === 'HEARTBEAT_OK' || trimmed === 'NO_MESSAGE') return 'suppress'
-  const stripped = trimmed.replace(/HEARTBEAT_OK/gi, '').replace(/NO_MESSAGE/gi, '').trim()
+  const cleaned = stripMarkupForHeartbeat(text)
+  if (cleaned === 'HEARTBEAT_OK' || cleaned === 'NO_MESSAGE') return 'suppress'
+  if (HEARTBEAT_OK_RE.test(cleaned) || NO_MESSAGE_RE.test(cleaned)) return 'suppress'
+  const stripped = cleaned.replace(/HEARTBEAT_OK/gi, '').replace(/NO_MESSAGE/gi, '').trim()
   if (!stripped) return 'suppress'
   if (stripped.length <= ackMaxChars) return 'suppress'
-  return stripped.length < trimmed.length ? 'strip' : 'keep'
+  return stripped.length < cleaned.length ? 'strip' : 'keep'
 }
 
 function estimateConversationTone(text: string): string {
@@ -542,6 +556,7 @@ export async function executeSessionChatTurn(input: ExecuteChatTurnInput): Promi
       imagePath: imagePath || undefined,
       imageUrl: imageUrl || undefined,
       attachedFiles: attachedFiles?.length ? attachedFiles : undefined,
+      replyToId: input.replyToId || undefined,
     })
     session.lastActiveAt = Date.now()
     saveSessions(sessions)
@@ -855,6 +870,11 @@ export async function executeSessionChatTurn(input: ExecuteChatTurnInput): Promi
   let heartbeatClassification: 'suppress' | 'strip' | 'keep' | null = null
   if (isHeartbeatRun && textForPersistence.length > 0) {
     heartbeatClassification = classifyHeartbeatResponse(textForPersistence, heartbeatConfig?.ackMaxChars ?? 300)
+  }
+
+  // Emit WS notification for every heartbeat completion so UI can show pulse
+  if (isHeartbeatRun && session.agentId) {
+    notify(`heartbeat:agent:${session.agentId}`)
   }
 
   const shouldPersistAssistant = textForPersistence.length > 0

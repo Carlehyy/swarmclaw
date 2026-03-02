@@ -1,11 +1,12 @@
 'use client'
 
-import { useCallback, useRef, useState } from 'react'
-import { useChatStore, type PendingFile } from '@/stores/use-chat-store'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { useChatStore } from '@/stores/use-chat-store'
 import { useAppStore } from '@/stores/use-app-store'
 import { uploadImage } from '@/lib/upload'
 import { useAutoResize } from '@/hooks/use-auto-resize'
 import { useSpeechRecognition } from '@/hooks/use-speech-recognition'
+import { FilePreview } from '@/components/shared/file-preview'
 
 interface Props {
   streaming: boolean
@@ -13,36 +14,7 @@ interface Props {
   onStop: () => void
 }
 
-function FilePreview({ file, onRemove }: { file: PendingFile; onRemove: () => void }) {
-  const isImage = file.file.type.startsWith('image/')
-  return (
-    <div className="relative">
-      {isImage ? (
-        <img
-          src={URL.createObjectURL(file.file)}
-          alt="Preview"
-          className="h-16 rounded-[10px] object-cover border border-white/[0.06]"
-        />
-      ) : (
-        <div className="flex items-center gap-2.5 px-3 py-2.5 rounded-[10px] border border-white/[0.06] bg-white/[0.03]">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" className="text-text-3 shrink-0">
-            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-            <polyline points="14 2 14 8 20 8" />
-          </svg>
-          <span className="text-[13px] text-text-2 font-500 truncate max-w-[180px]">{file.file.name}</span>
-        </div>
-      )}
-      <button
-        onClick={onRemove}
-        className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full border border-white/10 bg-raised
-          text-text-2 text-[10px] cursor-pointer flex items-center justify-center
-          hover:bg-danger-soft hover:text-danger hover:border-danger/20 transition-colors"
-      >
-        &times;
-      </button>
-    </div>
-  )
-}
+// FilePreview is now imported from @/components/shared/file-preview
 
 export function ChatInput({ streaming, onSend, onStop }: Props) {
   const [value, setValue] = useState('')
@@ -53,16 +25,51 @@ export function ChatInput({ streaming, onSend, onStop }: Props) {
   const addPendingFile = useChatStore((s) => s.addPendingFile)
   const removePendingFile = useChatStore((s) => s.removePendingFile)
   const speechRecognitionLang = useAppStore((s) => s.appSettings.speechRecognitionLang)
+  const sessionId = useAppStore((s) => s.currentSessionId)
+
+  const queuedMessages = useChatStore((s) => s.queuedMessages)
+  const addQueuedMessage = useChatStore((s) => s.addQueuedMessage)
+  const removeQueuedMessage = useChatStore((s) => s.removeQueuedMessage)
+
+  // Draft persistence: restore on session change
+  const draftTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  useEffect(() => {
+    if (!sessionId) return
+    const draft = localStorage.getItem(`sc_draft_${sessionId}`)
+    setValue(draft || '')
+  }, [sessionId])
+
+  // Debounced save to localStorage
+  useEffect(() => {
+    if (!sessionId) return
+    if (draftTimerRef.current) clearTimeout(draftTimerRef.current)
+    draftTimerRef.current = setTimeout(() => {
+      if (value) localStorage.setItem(`sc_draft_${sessionId}`, value)
+      else localStorage.removeItem(`sc_draft_${sessionId}`)
+    }, 300)
+    return () => { if (draftTimerRef.current) clearTimeout(draftTimerRef.current) }
+  }, [value, sessionId])
 
   const handleSend = useCallback(() => {
     const text = value.trim()
-    if ((!text && !pendingFiles.length) || streaming) return
+    if (!text && !pendingFiles.length) return
+    // If streaming, queue the message instead of blocking
+    if (streaming) {
+      if (text) {
+        addQueuedMessage(text)
+        setValue('')
+        if (textareaRef.current) textareaRef.current.style.height = 'auto'
+      }
+      return
+    }
     onSend(text || 'See attached file(s).')
     setValue('')
+    if (sessionId) localStorage.removeItem(`sc_draft_${sessionId}`)
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto'
     }
-  }, [value, streaming, onSend, pendingFiles.length])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [value, streaming, onSend, pendingFiles.length, sessionId])
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -128,6 +135,27 @@ export function ChatInput({ streaming, onSend, onStop }: Props) {
             >
               Stop generating
             </button>
+          </div>
+        )}
+
+        {queuedMessages.length > 0 && (
+          <div className="flex flex-wrap items-center gap-1.5 mb-2">
+            <span className="label-mono text-amber-400/70">Queued</span>
+            {queuedMessages.map((msg, i) => (
+              <span key={i} className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-[8px] bg-amber-500/10 border border-amber-500/15 text-[12px] text-amber-300 font-mono max-w-[200px]">
+                <span className="truncate">{msg}</span>
+                <button
+                  type="button"
+                  onClick={() => removeQueuedMessage(i)}
+                  className="shrink-0 text-amber-400/60 hover:text-amber-300 border-none bg-transparent cursor-pointer p-0"
+                >
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                    <line x1="18" y1="6" x2="6" y2="18" />
+                    <line x1="6" y1="6" x2="18" y2="18" />
+                  </svg>
+                </button>
+              </span>
+            ))}
           </div>
         )}
 
@@ -206,17 +234,27 @@ export function ChatInput({ streaming, onSend, onStop }: Props) {
 
             <button
               onClick={handleSend}
-              disabled={!hasContent || streaming}
+              disabled={!hasContent}
               className={`w-9 h-9 rounded-[11px] border-none flex items-center justify-center
                 shrink-0 cursor-pointer transition-all duration-250
-                ${hasContent && !streaming
-                  ? 'bg-[#6366F1] text-white active:scale-90 shadow-[0_4px_16px_rgba(99,102,241,0.3)]'
+                ${hasContent
+                  ? streaming
+                    ? 'bg-amber-500/20 text-amber-400 active:scale-90 border border-amber-500/30'
+                    : 'bg-accent-bright text-white active:scale-90 shadow-[0_4px_16px_rgba(99,102,241,0.3)]'
                   : 'bg-white/[0.04] text-text-3 pointer-events-none'}`}
+              title={streaming ? 'Queue message' : 'Send message'}
             >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-                <line x1="12" y1="19" x2="12" y2="5" />
-                <polyline points="5 12 12 5 19 12" />
-              </svg>
+              {streaming && hasContent ? (
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                  <line x1="12" y1="5" x2="12" y2="19" />
+                  <line x1="5" y1="12" x2="19" y2="12" />
+                </svg>
+              ) : (
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                  <line x1="12" y1="19" x2="12" y2="5" />
+                  <polyline points="5 12 12 5 19 12" />
+                </svg>
+              )}
             </button>
           </div>
         </div>

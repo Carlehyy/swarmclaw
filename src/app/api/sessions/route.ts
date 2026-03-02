@@ -23,7 +23,7 @@ export async function GET(_req: Request) {
 }
 
 export async function DELETE(req: Request) {
-  const { ids } = await req.json() as { ids: string[] }
+  const { ids } = await req.json().catch(() => ({ ids: [] })) as { ids: string[] }
   if (!Array.isArray(ids) || !ids.length) {
     return new NextResponse('Missing ids', { status: 400 })
   }
@@ -43,7 +43,7 @@ export async function DELETE(req: Request) {
 }
 
 export async function POST(req: Request) {
-  const body = await req.json()
+  const body = await req.json().catch(() => ({}))
   let cwd = (body.cwd || '').trim()
   if (cwd.startsWith('~/')) cwd = path.join(os.homedir(), cwd.slice(2))
   else if (cwd === '~') cwd = os.homedir()
@@ -64,7 +64,7 @@ export async function POST(req: Request) {
 
   sessions[id] = {
     id, name: sessionName, cwd,
-    user: body.user || 'wayde',
+    user: body.user || 'user',
     provider: body.provider || agent?.provider || 'claude-cli',
     model: body.model || agent?.model || '',
     credentialId: body.credentialId || agent?.credentialId || null,

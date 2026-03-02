@@ -4,7 +4,7 @@ import { loadAgents, loadTasks, saveTasks } from '@/lib/server/storage'
 import { enqueueTask } from '@/lib/server/queue'
 
 export async function POST(req: Request) {
-  const { agentId, task } = await req.json()
+  const { agentId, task } = await req.json().catch(() => ({}))
   if (!agentId || !task) {
     return NextResponse.json({ error: 'agentId and task are required' }, { status: 400 })
   }

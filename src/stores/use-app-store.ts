@@ -53,6 +53,7 @@ interface AppState {
 
   agents: Record<string, Agent>
   loadAgents: () => Promise<void>
+  togglePinAgent: (id: string) => void
 
   schedules: Record<string, Schedule>
   loadSchedules: () => Promise<void>
@@ -180,9 +181,17 @@ interface AppState {
   fleetFilter: FleetFilter
   setFleetFilter: (filter: FleetFilter) => void
 
+  // Chat list filter
+  chatFilter: 'all' | 'active' | 'recent'
+  setChatFilter: (filter: 'all' | 'active' | 'recent') => void
+
   // Activity / Audit Trail
   activityEntries: ActivityEntry[]
   loadActivity: (filters?: { entityType?: string; limit?: number }) => Promise<void>
+
+  // Unread tracking (localStorage-backed)
+  lastReadTimestamps: Record<string, number>
+  markChatRead: (id: string) => void
 
   // Notifications
   notifications: AppNotification[]
@@ -200,7 +209,8 @@ export const useAppStore = create<AppState>((set, get) => ({
   hydrate: () => {
     if (typeof window === 'undefined') return
     const user = localStorage.getItem('sc_user')
-    set({ currentUser: user, _hydrated: true })
+    const savedAgentId = localStorage.getItem('sc_agent')
+    set({ currentUser: user, currentAgentId: savedAgentId, _hydrated: true })
   },
   setUser: (user) => {
     if (user) localStorage.setItem('sc_user', user)
@@ -305,16 +315,18 @@ export const useAppStore = create<AppState>((set, get) => ({
   newSessionOpen: false,
   setNewSessionOpen: (open) => set({ newSessionOpen: open }),
 
-  activeView: 'agents',
+  activeView: 'home',
   setActiveView: (view) => set({ activeView: view }),
 
   currentAgentId: null,
   setCurrentAgent: async (id) => {
     if (!id) {
       set({ currentAgentId: null })
+      if (typeof window !== 'undefined') localStorage.removeItem('sc_agent')
       return
     }
     set({ currentAgentId: id })
+    if (typeof window !== 'undefined') localStorage.setItem('sc_agent', id)
     try {
       const user = get().currentUser || 'default'
       const session = await api<Session>('POST', `/agents/${id}/thread`, { user })
@@ -334,6 +346,14 @@ export const useAppStore = create<AppState>((set, get) => ({
       set({ agents })
     } catch {
       // ignore
+    }
+  },
+  togglePinAgent: (id) => {
+    const agents = { ...get().agents }
+    if (agents[id]) {
+      agents[id] = { ...agents[id], pinned: !agents[id].pinned }
+      set({ agents })
+      void api('PUT', `/agents/${id}`, { pinned: agents[id].pinned })
     }
   },
 
@@ -584,6 +604,10 @@ export const useAppStore = create<AppState>((set, get) => ({
   fleetFilter: 'all',
   setFleetFilter: (filter) => set({ fleetFilter: filter }),
 
+  // Chat list filter
+  chatFilter: 'all' as const,
+  setChatFilter: (filter) => set({ chatFilter: filter }),
+
   // Activity / Audit Trail
   activityEntries: [],
   loadActivity: async (filters) => {
@@ -597,6 +621,16 @@ export const useAppStore = create<AppState>((set, get) => ({
     } catch {
       // ignore
     }
+  },
+
+  // Unread tracking
+  lastReadTimestamps: typeof window !== 'undefined'
+    ? (() => { try { return JSON.parse(localStorage.getItem('sc_last_read') || '{}') } catch { return {} } })()
+    : {},
+  markChatRead: (id) => {
+    const ts = { ...get().lastReadTimestamps, [id]: Date.now() }
+    set({ lastReadTimestamps: ts })
+    try { localStorage.setItem('sc_last_read', JSON.stringify(ts)) } catch { /* ignore */ }
   },
 
   // Notifications

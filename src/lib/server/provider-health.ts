@@ -111,3 +111,128 @@ export function getProviderHealthSnapshot(): Record<string, ProviderHealthState 
   return out
 }
 
+// ---------------------------------------------------------------------------
+// Lightweight provider ping functions (extracted from check-provider/route.ts)
+// ---------------------------------------------------------------------------
+
+const PING_TIMEOUT_MS = 8_000
+
+async function parseErrorMessage(res: Response, fallback: string): Promise<string> {
+  const text = await res.text().catch(() => '')
+  if (!text) return fallback
+  try {
+    const parsed = JSON.parse(text)
+    if (typeof parsed?.error?.message === 'string' && parsed.error.message.trim()) return parsed.error.message.trim()
+    if (typeof parsed?.error === 'string' && parsed.error.trim()) return parsed.error.trim()
+    if (typeof parsed?.message === 'string' && parsed.message.trim()) return parsed.message.trim()
+    if (typeof parsed?.detail === 'string' && parsed.detail.trim()) return parsed.detail.trim()
+  } catch { /* non-JSON */ }
+  return text.slice(0, 300).trim() || fallback
+}
+
+export const OPENAI_COMPATIBLE_DEFAULTS: Record<string, { name: string; defaultEndpoint: string }> = {
+  openai: { name: 'OpenAI', defaultEndpoint: 'https://api.openai.com/v1' },
+  google: { name: 'Google Gemini', defaultEndpoint: 'https://generativelanguage.googleapis.com/v1beta/openai' },
+  deepseek: { name: 'DeepSeek', defaultEndpoint: 'https://api.deepseek.com/v1' },
+  groq: { name: 'Groq', defaultEndpoint: 'https://api.groq.com/openai/v1' },
+  together: { name: 'Together AI', defaultEndpoint: 'https://api.together.xyz/v1' },
+  mistral: { name: 'Mistral AI', defaultEndpoint: 'https://api.mistral.ai/v1' },
+  xai: { name: 'xAI (Grok)', defaultEndpoint: 'https://api.x.ai/v1' },
+  fireworks: { name: 'Fireworks AI', defaultEndpoint: 'https://api.fireworks.ai/inference/v1' },
+}
+
+export async function pingOpenAiCompatible(
+  apiKey: string,
+  endpoint: string,
+): Promise<{ ok: boolean; message: string }> {
+  const normalizedEndpoint = endpoint.replace(/\/+$/, '')
+  const res = await fetch(`${normalizedEndpoint}/models`, {
+    headers: { authorization: `Bearer ${apiKey}` },
+    signal: AbortSignal.timeout(PING_TIMEOUT_MS),
+    cache: 'no-store',
+  })
+  if (!res.ok) {
+    const detail = await parseErrorMessage(res, `Provider returned ${res.status}.`)
+    return { ok: false, message: detail }
+  }
+  return { ok: true, message: 'Connected.' }
+}
+
+export async function pingAnthropic(apiKey: string): Promise<{ ok: boolean; message: string }> {
+  const res = await fetch('https://api.anthropic.com/v1/models', {
+    headers: {
+      'x-api-key': apiKey,
+      'anthropic-version': '2023-06-01',
+    },
+    signal: AbortSignal.timeout(PING_TIMEOUT_MS),
+    cache: 'no-store',
+  })
+  if (!res.ok) {
+    const detail = await parseErrorMessage(res, `Anthropic returned ${res.status}.`)
+    return { ok: false, message: detail }
+  }
+  return { ok: true, message: 'Connected to Anthropic.' }
+}
+
+export async function pingOllama(endpoint: string): Promise<{ ok: boolean; message: string }> {
+  const normalizedEndpoint = (endpoint || 'http://localhost:11434').replace(/\/+$/, '')
+  const res = await fetch(`${normalizedEndpoint}/api/tags`, {
+    signal: AbortSignal.timeout(PING_TIMEOUT_MS),
+    cache: 'no-store',
+  })
+  if (!res.ok) {
+    const detail = await parseErrorMessage(res, `Ollama returned ${res.status}.`)
+    return { ok: false, message: detail }
+  }
+  return { ok: true, message: 'Connected to Ollama.' }
+}
+
+export async function pingOpenClaw(
+  apiKey: string | undefined,
+  endpoint: string,
+): Promise<{ ok: boolean; message: string }> {
+  const { wsConnect } = await import('@/lib/providers/openclaw')
+  let url = (endpoint || 'http://localhost:18789').replace(/\/+$/, '')
+  if (!/^(https?|wss?):\/\//i.test(url)) url = `http://${url}`
+  const wsUrl = url.replace(/^http:/i, 'ws:').replace(/^https:/i, 'wss:')
+  const result = await wsConnect(wsUrl, apiKey || undefined, true, PING_TIMEOUT_MS)
+  if (result.ws) try { result.ws.close() } catch { /* ignore */ }
+  return { ok: result.ok, message: result.ok ? 'Connected to OpenClaw.' : result.message }
+}
+
+/**
+ * Ping a provider to check reachability. Returns `{ ok, message }`.
+ * Skips CLI-based providers (claude-cli, codex-cli, opencode-cli) — returns ok.
+ */
+export async function pingProvider(
+  provider: string,
+  apiKey: string | undefined,
+  endpoint: string | undefined,
+): Promise<{ ok: boolean; message: string }> {
+  const CLI_PROVIDERS = ['claude-cli', 'codex-cli', 'opencode-cli']
+  if (CLI_PROVIDERS.includes(provider)) return { ok: true, message: 'CLI provider — skipped.' }
+
+  try {
+    if (provider === 'anthropic') {
+      if (!apiKey) return { ok: false, message: 'No API key configured.' }
+      return await pingAnthropic(apiKey)
+    }
+    if (provider === 'ollama') {
+      return await pingOllama(endpoint || 'http://localhost:11434')
+    }
+    if (provider === 'openclaw') {
+      return await pingOpenClaw(apiKey, endpoint || 'http://localhost:18789')
+    }
+    // OpenAI-compatible providers (openai, google, deepseek, groq, together, mistral, xai, fireworks, custom)
+    const defaults = OPENAI_COMPATIBLE_DEFAULTS[provider]
+    const resolvedEndpoint = endpoint || defaults?.defaultEndpoint
+    if (!resolvedEndpoint) return { ok: false, message: `No endpoint for provider "${provider}".` }
+    if (!apiKey) return { ok: false, message: 'No API key configured.' }
+    return await pingOpenAiCompatible(apiKey, resolvedEndpoint)
+  } catch (err: unknown) {
+    const msg = err instanceof Error && err.name === 'TimeoutError'
+      ? 'Connection timed out.'
+      : (err instanceof Error ? err.message : String(err))
+    return { ok: false, message: msg }
+  }
+}

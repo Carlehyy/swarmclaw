@@ -103,7 +103,7 @@ export function PluginManager() {
                   <div
                     onClick={() => togglePlugin(p.filename, !p.enabled)}
                     className={`w-11 h-6 rounded-full transition-all duration-200 relative cursor-pointer shrink-0
-                      ${p.enabled ? 'bg-[#6366F1]' : 'bg-white/[0.08]'}`}
+                      ${p.enabled ? 'bg-accent-bright' : 'bg-white/[0.08]'}`}
                   >
                     <div className={`absolute top-0.5 w-5 h-5 rounded-full bg-white transition-all duration-200
                       ${p.enabled ? 'left-[22px]' : 'left-0.5'}`} />

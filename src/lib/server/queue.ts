@@ -12,7 +12,8 @@ import { getCheckpointSaver } from './langgraph-checkpoint'
 import { isProtectedMainSession } from './main-session'
 import type { Agent, BoardTask, Message } from '@/types'
 
-let processing = false
+// HMR-safe: pin processing flag to globalThis so hot reloads don't reset it
+const _queueState = ((globalThis as Record<string, unknown>).__swarmclaw_queue__ ??= { processing: false }) as { processing: boolean }
 
 interface SessionMessageLike {
   role?: string
@@ -467,8 +468,8 @@ function dequeueNextRunnableTask(queue: string[], tasks: Record<string, BoardTas
 }
 
 export async function processNext() {
-  if (processing) return
-  processing = true
+  if (_queueState.processing) return
+  _queueState.processing = true
 
   try {
     // Recover orphaned tasks: status is 'queued' but missing from the queue array
@@ -805,7 +806,7 @@ export async function processNext() {
       }
     }
   } finally {
-    processing = false
+    _queueState.processing = false
   }
 }
 

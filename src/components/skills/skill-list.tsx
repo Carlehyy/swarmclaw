@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from 'react'
 import { useAppStore } from '@/stores/use-app-store'
 import { api } from '@/lib/api-client'
 import { Badge } from '@/components/ui/badge'
+import { AgentAvatar } from '@/components/agents/agent-avatar'
 import { ClawHubBrowser } from './clawhub-browser'
 import { toast } from 'sonner'
 
@@ -27,6 +28,8 @@ interface SearchResponse {
 export function SkillList({ inSidebar }: { inSidebar?: boolean }) {
   const skills = useAppStore((s) => s.skills)
   const loadSkills = useAppStore((s) => s.loadSkills)
+  const agents = useAppStore((s) => s.agents)
+  const loadAgents = useAppStore((s) => s.loadAgents)
   const setSkillSheetOpen = useAppStore((s) => s.setSkillSheetOpen)
   const setEditingSkillId = useAppStore((s) => s.setEditingSkillId)
   const activeProjectFilter = useAppStore((s) => s.activeProjectFilter)
@@ -45,6 +48,8 @@ export function SkillList({ inSidebar }: { inSidebar?: boolean }) {
 
   useEffect(() => {
     loadSkills()
+    loadAgents()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const skillList = Object.values(skills).filter((s) => !activeProjectFilter || s.projectId === activeProjectFilter)
@@ -258,37 +263,63 @@ export function SkillList({ inSidebar }: { inSidebar?: boolean }) {
           </div>
         ) : (
           <div className={inSidebar ? 'space-y-2' : 'grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3'}>
-            {skillList.map((skill) => (
-              <button
-                key={skill.id}
-                onClick={() => handleEdit(skill.id)}
-                className="w-full text-left p-4 rounded-[14px] border border-white/[0.06] bg-surface hover:bg-surface-2 transition-all cursor-pointer"
-              >
-                <div className="flex items-center justify-between mb-1">
-                  <span className="font-display text-[14px] font-600 text-text truncate">{skill.name}</span>
-                  <div className="flex items-center gap-2 shrink-0 ml-2">
-                    <span className="text-[10px] font-mono text-text-3/50">{skill.filename}</span>
-                    {!inSidebar && (
-                      <button
-                        onClick={(e) => handleDelete(e, skill.id)}
-                        className="text-text-3/40 hover:text-red-400 transition-colors p-0.5"
-                        title="Delete"
-                      >
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-                          <path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-                        </svg>
-                      </button>
-                    )}
+            {skillList.map((skill) => {
+              const skillScope = skill.scope || 'global'
+              const skillAgentIds = skill.agentIds || []
+              const scopeLabel = skillScope === 'global' ? 'Global' : `${skillAgentIds.length} agent(s)`
+              const scopedAgents = skillScope === 'agent'
+                ? skillAgentIds.map((id) => agents[id]).filter(Boolean)
+                : []
+              return (
+                <button
+                  key={skill.id}
+                  onClick={() => handleEdit(skill.id)}
+                  className="w-full text-left p-4 rounded-[14px] border border-white/[0.06] bg-surface hover:bg-surface-2 transition-all cursor-pointer"
+                >
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="font-display text-[14px] font-600 text-text truncate">{skill.name}</span>
+                    <div className="flex items-center gap-2 shrink-0 ml-2">
+                      <span className="text-[10px] font-mono text-text-3/50">{skill.filename}</span>
+                      {!inSidebar && (
+                        <button
+                          onClick={(e) => handleDelete(e, skill.id)}
+                          className="text-text-3/40 hover:text-red-400 transition-colors p-0.5"
+                          title="Delete"
+                        >
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                            <path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                          </svg>
+                        </button>
+                      )}
+                    </div>
                   </div>
-                </div>
-                {skill.description && (
-                  <p className="text-[12px] text-text-3/60 line-clamp-2">{skill.description}</p>
-                )}
-                <div className="text-[11px] text-text-3/70 mt-1.5">
-                  {skill.content.length} chars
-                </div>
-              </button>
-            ))}
+                  {skill.description && (
+                    <p className="text-[12px] text-text-3/60 line-clamp-2">{skill.description}</p>
+                  )}
+                  <div className="flex items-center gap-2 mt-1.5">
+                    <span className="text-[11px] text-text-3/70">{skill.content.length} chars</span>
+                    <span className="text-[11px] text-text-3/60">·</span>
+                    <span className={`text-[10px] font-600 ${
+                      skillScope === 'global' ? 'text-emerald-400' : 'text-amber-400'
+                    }`}>
+                      {scopeLabel}
+                    </span>
+                  </div>
+                  {scopedAgents.length > 0 && (
+                    <div className="flex items-center gap-1.5 mt-1.5">
+                      <div className="flex items-center -space-x-1.5">
+                        {scopedAgents.slice(0, 5).map((agent) => (
+                          <AgentAvatar key={agent.id} seed={agent.avatarSeed} name={agent.name} size={16} className="ring-1 ring-surface" />
+                        ))}
+                      </div>
+                      {scopedAgents.length > 5 && (
+                        <span className="text-[10px] font-600 text-text-3/60 ml-0.5">+{scopedAgents.length - 5}</span>
+                      )}
+                    </div>
+                  )}
+                </button>
+              )
+            })}
           </div>
         )
       )}

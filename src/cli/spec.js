@@ -25,6 +25,21 @@ const COMMAND_GROUPS = {
       login: { description: 'Validate an access key', method: 'POST', path: '/auth' },
     },
   },
+  chatrooms: {
+    description: 'Manage multi-agent chatrooms',
+    commands: {
+      list: { description: 'List chatrooms', method: 'GET', path: '/chatrooms' },
+      get: { description: 'Get chatroom by id', method: 'GET', path: '/chatrooms/:id', params: ['id'] },
+      create: { description: 'Create a chatroom', method: 'POST', path: '/chatrooms' },
+      update: { description: 'Update a chatroom', method: 'PUT', path: '/chatrooms/:id', params: ['id'] },
+      delete: { description: 'Delete a chatroom', method: 'DELETE', path: '/chatrooms/:id', params: ['id'] },
+      chat: { description: 'Post chatroom message and stream agent replies', method: 'POST', path: '/chatrooms/:id/chat', params: ['id'] },
+      'add-member': { description: 'Add an agent to a chatroom', method: 'POST', path: '/chatrooms/:id/members', params: ['id'] },
+      'remove-member': { description: 'Remove an agent from a chatroom', method: 'DELETE', path: '/chatrooms/:id/members', params: ['id'] },
+      react: { description: 'Toggle reaction on a chatroom message', method: 'POST', path: '/chatrooms/:id/reactions', params: ['id'] },
+      pin: { description: 'Toggle pin on a chatroom message', method: 'POST', path: '/chatrooms/:id/pins', params: ['id'] },
+    },
+  },
   connectors: {
     description: 'Manage chat connectors',
     commands: {
@@ -303,6 +318,7 @@ const COMMAND_GROUPS = {
       list: { description: 'List tasks', method: 'GET', path: '/tasks' },
       get: { description: 'Get task by id', method: 'GET', path: '/tasks/:id', params: ['id'] },
       create: { description: 'Create task', method: 'POST', path: '/tasks' },
+      bulk: { description: 'Bulk update tasks (status/agent/project)', method: 'POST', path: '/tasks/bulk' },
       update: { description: 'Update task', method: 'PUT', path: '/tasks/:id', params: ['id'] },
       delete: { description: 'Archive task', method: 'DELETE', path: '/tasks/:id', params: ['id'] },
       archive: { description: 'Archive task', method: 'DELETE', path: '/tasks/:id', params: ['id'] },

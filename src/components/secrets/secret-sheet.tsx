@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useAppStore } from '@/stores/use-app-store'
 import { BottomSheet } from '@/components/shared/bottom-sheet'
+import { AgentAvatar } from '@/components/agents/agent-avatar'
 import { api } from '@/lib/api-client'
 
 const inputClass = 'w-full px-4 py-3 rounded-[14px] bg-bg border border-white/[0.06] text-text text-[14px] outline-none focus:border-accent-bright/40 transition-colors placeholder:text-text-3/70'
@@ -25,7 +26,7 @@ export function SecretSheet() {
   const [saving, setSaving] = useState(false)
 
   const editing = editingId ? secrets[editingId] : null
-  const orchestrators = Object.values(agents).filter((p) => p.isOrchestrator)
+  const agentList = Object.values(agents)
 
   useEffect(() => {
     if (open) loadAgents()
@@ -74,8 +75,8 @@ export function SecretSheet() {
       }
       await loadSecrets()
       handleClose()
-    } catch (err: any) {
-      console.error('Failed to save secret:', err.message)
+    } catch (err: unknown) {
+      console.error('Failed to save secret:', err instanceof Error ? err.message : String(err))
     } finally {
       setSaving(false)
     }
@@ -87,10 +88,20 @@ export function SecretSheet() {
       await api('DELETE', `/secrets/${editing.id}`)
       await loadSecrets()
       handleClose()
-    } catch (err: any) {
-      console.error('Failed to delete secret:', err.message)
+    } catch (err: unknown) {
+      console.error('Failed to delete secret:', err instanceof Error ? err.message : String(err))
     }
   }
+
+  const toggleAgent = (id: string) => {
+    setAgentIds((prev) => prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id])
+  }
+
+  const scopeHelperText = scope === 'global'
+    ? 'This secret will be accessible to all agents'
+    : agentIds.length === 0
+      ? 'Select which agents can access this secret'
+      : `${agentIds.length} agent(s) selected`
 
   return (
     <BottomSheet open={open} onClose={handleClose}>
@@ -125,30 +136,42 @@ export function SecretSheet() {
                 }`}
                 style={{ fontFamily: 'inherit' }}
               >
-                {s === 'global' ? 'All Orchestrators' : 'Specific'}
+                {s === 'global' ? 'Global' : 'Specific'}
               </button>
             ))}
           </div>
+          <p className="text-[11px] text-text-3/60 mt-1.5 pl-1">{scopeHelperText}</p>
         </div>
 
-        {scope === 'agent' && orchestrators.length > 0 && (
+        {scope === 'agent' && (
           <div>
-            <label className="block font-display text-[11px] font-600 text-text-3 uppercase tracking-[0.08em] mb-2">Orchestrators</label>
-            <div className="flex flex-wrap gap-2">
-              {orchestrators.map((p) => (
-                <button
-                  key={p.id}
-                  onClick={() => setAgentIds((prev) => prev.includes(p.id) ? prev.filter((x) => x !== p.id) : [...prev, p.id])}
-                  className={`px-3 py-2 rounded-[10px] text-[12px] font-600 cursor-pointer transition-all border ${
-                    agentIds.includes(p.id)
-                      ? 'bg-accent-soft border-accent-bright/25 text-accent-bright'
-                      : 'bg-bg border-white/[0.06] text-text-3 hover:text-text-2'
-                  }`}
-                  style={{ fontFamily: 'inherit' }}
-                >
-                  {p.name}
-                </button>
-              ))}
+            <label className="block font-display text-[11px] font-600 text-text-3 uppercase tracking-[0.08em] mb-2">Agents</label>
+            <div className="max-h-[240px] overflow-y-auto rounded-[12px] border border-white/[0.06] bg-white/[0.03]">
+              {agentList.length === 0 ? (
+                <p className="p-3 text-[12px] text-text-3">No agents available</p>
+              ) : (
+                agentList.map((agent) => {
+                  const selected = agentIds.includes(agent.id)
+                  return (
+                    <button
+                      key={agent.id}
+                      onClick={() => toggleAgent(agent.id)}
+                      className={`w-full flex items-center gap-2.5 px-3 py-2 text-left transition-all cursor-pointer ${
+                        selected ? 'bg-accent-soft/40' : 'hover:bg-white/[0.04]'
+                      }`}
+                      style={{ fontFamily: 'inherit' }}
+                    >
+                      <AgentAvatar seed={agent.avatarSeed} name={agent.name} size={24} />
+                      <span className="text-[13px] text-text flex-1 truncate">{agent.name}</span>
+                      {selected && (
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-accent-bright shrink-0">
+                          <polyline points="20 6 9 17 4 12" />
+                        </svg>
+                      )}
+                    </button>
+                  )
+                })
+              )}
             </div>
           </div>
         )}
@@ -168,7 +191,7 @@ export function SecretSheet() {
           <button
             onClick={handleSave}
             disabled={saving || !name.trim() || (!editing && !value.trim())}
-            className="px-8 py-3 rounded-[14px] border-none bg-[#6366F1] text-white text-[14px] font-600 cursor-pointer disabled:opacity-30 transition-all hover:brightness-110"
+            className="px-8 py-3 rounded-[14px] border-none bg-accent-bright text-white text-[14px] font-600 cursor-pointer disabled:opacity-30 transition-all hover:brightness-110"
             style={{ fontFamily: 'inherit' }}
           >
             {saving ? 'Saving...' : editing ? 'Update' : 'Save'}

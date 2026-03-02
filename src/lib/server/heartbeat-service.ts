@@ -5,6 +5,7 @@ import { enqueueSessionRun, getSessionRunState } from './session-run-manager'
 import { log } from './logger'
 import { buildMainLoopHeartbeatPrompt, getMainLoopStateForSession, isMainSession } from './main-agent-loop'
 import { WORKSPACE_DIR } from './data-dir'
+import { drainSystemEvents } from './system-events'
 
 const HEARTBEAT_TICK_MS = 5_000
 
@@ -131,8 +132,27 @@ function readHeartbeatFile(session: any): string {
   return ''
 }
 
+/** Detect HEARTBEAT.md files that contain only skeleton structure (headers, empty list items) but no real content. */
+export function isHeartbeatContentEffectivelyEmpty(content: string | undefined | null): boolean {
+  if (!content || typeof content !== 'string') return true
+  for (const line of content.split('\n')) {
+    const trimmed = line.trim()
+    if (!trimmed) continue
+    if (/^#+(\s|$)/.test(trimmed)) continue                           // ATX headers
+    if (/^[-*+]\s*(\[[\sXx]?\]\s*)?$/.test(trimmed)) continue        // empty list items / checkboxes
+    return false  // real content found
+  }
+  return true
+}
+
 function buildAgentHeartbeatPrompt(session: any, agent: any, fallbackPrompt: string, heartbeatFileContent: string): string {
   if (!agent) return fallbackPrompt
+
+  // Drain system events accumulated since last heartbeat
+  const events = drainSystemEvents(session.id)
+  const eventBlock = events.length > 0
+    ? events.map((e) => `- [${new Date(e.timestamp).toISOString()}] ${e.text}`).join('\n')
+    : ''
 
   // Dynamic goal (agent-set) takes priority over static system prompt
   const dynamicGoal = agent.heartbeatGoal || ''
@@ -146,17 +166,21 @@ function buildAgentHeartbeatPrompt(session: any, agent: any, fallbackPrompt: str
     .map((m: any) => `[${m.role}]: ${(m.text || '').slice(0, 200)}`)
     .join('\n')
 
+  // Don't inject effectively-empty HEARTBEAT.md content
+  const effectiveFileContent = isHeartbeatContentEffectivelyEmpty(heartbeatFileContent) ? '' : heartbeatFileContent
+
   return [
     'AGENT_HEARTBEAT_TICK',
     `Time: ${new Date().toISOString()}`,
     `Agent: ${agent.name}`,
     description ? `Description: ${description}` : '',
+    eventBlock ? `Events since last heartbeat:\n${eventBlock}` : '',
     dynamicGoal
       ? `Current goal (self-set): ${dynamicGoal}`
       : goalSummary ? `System prompt (initial goal):\n${goalSummary}` : '',
     dynamicNextAction ? `Planned next action: ${dynamicNextAction}` : '',
     soul ? `Persona: ${soul.slice(0, 300)}` : '',
-    heartbeatFileContent ? `\nHEARTBEAT.md contents:\n${heartbeatFileContent.slice(0, 2000)}` : '',
+    effectiveFileContent ? `\nHEARTBEAT.md contents:\n${effectiveFileContent.slice(0, 2000)}` : '',
     recentContext ? `Recent conversation:\n${recentContext}` : '',
     fallbackPrompt !== DEFAULT_HEARTBEAT_PROMPT ? `\nAgent instructions:\n${fallbackPrompt}` : '',
     '',
@@ -330,9 +354,12 @@ async function tickHeartbeats() {
     if (isMainSession(session)) {
       const loopState = getMainLoopStateForSession(session.id)
       if (loopState?.paused) continue
-      const loopStatus = loopState?.status || 'idle'
-      const pendingEvents = loopState?.pendingEvents?.length || 0
-      if ((loopStatus === 'ok' || loopStatus === 'idle') && pendingEvents === 0) continue
+      // Only suppress idle main sessions when heartbeat is inherited (not explicitly enabled)
+      if (!explicitOptIn) {
+        const loopStatus = loopState?.status || 'idle'
+        const pendingEvents = loopState?.pendingEvents?.length || 0
+        if ((loopStatus === 'ok' || loopStatus === 'idle') && pendingEvents === 0) continue
+      }
     }
 
     const last = state.lastBySession.get(session.id) || 0
@@ -345,7 +372,8 @@ async function tickHeartbeats() {
     if (isMainSession(session)) {
       heartbeatMessage = buildMainLoopHeartbeatPrompt(session, cfg.prompt)
     } else {
-      const heartbeatFileContent = readHeartbeatFile(session)
+      const rawHeartbeatFileContent = readHeartbeatFile(session)
+      const heartbeatFileContent = isHeartbeatContentEffectivelyEmpty(rawHeartbeatFileContent) ? '' : rawHeartbeatFileContent
       const hasGoal = !!(agent?.heartbeatGoal || agent?.description || agent?.systemPrompt || agent?.soul)
       const hasCustomPrompt = cfg.prompt !== DEFAULT_HEARTBEAT_PROMPT
       // Skip heartbeat only if there's truly nothing to drive it:
@@ -420,6 +448,13 @@ export function stopHeartbeatService() {
     clearInterval(state.timer)
     state.timer = null
   }
+}
+
+/** Clear tracked state and restart the heartbeat timer. Call when heartbeat config changes. */
+export function restartHeartbeatService() {
+  stopHeartbeatService()
+  state.lastBySession.clear()
+  startHeartbeatService()
 }
 
 export function getHeartbeatServiceStatus() {

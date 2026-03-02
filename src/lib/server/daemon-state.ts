@@ -1,4 +1,4 @@
-import { loadQueue, loadSchedules, loadSessions, saveSessions, loadConnectors, saveConnectors, loadWebhookRetryQueue, upsertWebhookRetry, deleteWebhookRetry, loadWebhooks, loadAgents, appendWebhookLog } from './storage'
+import { loadQueue, loadSchedules, loadSessions, saveSessions, loadConnectors, saveConnectors, loadWebhookRetryQueue, upsertWebhookRetry, deleteWebhookRetry, loadWebhooks, loadAgents, appendWebhookLog, loadCredentials, decryptKey } from './storage'
 import { notify } from './ws-hub'
 import { processNext, cleanupFinishedTaskSessions, validateCompletedTasksQueue, recoverStalledRunningTasks } from './queue'
 import { startScheduler, stopScheduler } from './scheduler'
@@ -18,11 +18,14 @@ import { WORKSPACE_DIR } from './data-dir'
 import { genId } from '@/lib/id'
 import type { WebhookRetryEntry } from '@/types'
 import { createNotification } from '@/lib/server/create-notification'
+import { pingProvider, OPENAI_COMPATIBLE_DEFAULTS } from '@/lib/server/provider-health'
 
 const QUEUE_CHECK_INTERVAL = 30_000 // 30 seconds
 const BROWSER_SWEEP_INTERVAL = 60_000 // 60 seconds
 const BROWSER_MAX_AGE = 10 * 60 * 1000 // 10 minutes idle = orphaned
 const HEALTH_CHECK_INTERVAL = 120_000 // 2 minutes
+const MEMORY_CONSOLIDATION_INTERVAL = 6 * 3600_000 // 6 hours
+const MEMORY_CONSOLIDATION_INITIAL_DELAY = 60_000 // 1 minute after daemon start
 const STALE_MULTIPLIER = 4 // session is stale after N × heartbeat interval
 const STALE_MIN_MS = 4 * 60 * 1000 // minimum 4 minutes regardless of interval
 const STALE_AUTO_DISABLE_MULTIPLIER = 16 // auto-disable after much longer sustained staleness
@@ -74,6 +77,8 @@ const ds: {
   queueIntervalId: ReturnType<typeof setInterval> | null
   browserSweepId: ReturnType<typeof setInterval> | null
   healthIntervalId: ReturnType<typeof setInterval> | null
+  memoryConsolidationTimeoutId: ReturnType<typeof setTimeout> | null
+  memoryConsolidationIntervalId: ReturnType<typeof setInterval> | null
   /** Session IDs we've already alerted as stale (alert-once semantics). */
   staleSessionIds: Set<string>
   connectorRestartState: Map<string, { lastAttemptAt: number; failCount: number; wakeAttempts: number }>
@@ -85,6 +90,8 @@ const ds: {
   queueIntervalId: null,
   browserSweepId: null,
   healthIntervalId: null,
+  memoryConsolidationTimeoutId: null,
+  memoryConsolidationIntervalId: null,
   staleSessionIds: new Set<string>(),
   connectorRestartState: new Map<string, { lastAttemptAt: number; failCount: number; wakeAttempts: number }>(),
   manualStopRequested: false,
@@ -100,6 +107,8 @@ if (!ds.connectorRestartState) ds.connectorRestartState = new Map<string, { last
 if ((ds as any).issueLastAlertAt) delete (ds as any).issueLastAlertAt
 if (ds.healthIntervalId === undefined) ds.healthIntervalId = null
 if (ds.manualStopRequested === undefined) ds.manualStopRequested = false
+if (ds.memoryConsolidationTimeoutId === undefined) ds.memoryConsolidationTimeoutId = null
+if (ds.memoryConsolidationIntervalId === undefined) ds.memoryConsolidationIntervalId = null
 
 export function ensureDaemonStarted(source = 'unknown'): boolean {
   if (ds.running) return false
@@ -121,23 +130,32 @@ export function startDaemon(options?: { source?: string; manualStart?: boolean }
     startBrowserSweep()
     startHealthMonitor()
     startHeartbeatService()
+    startMemoryConsolidation()
     return
   }
   ds.running = true
   notify('daemon')
   console.log(`[daemon] Starting daemon (source=${source}, scheduler + queue processor + heartbeat)`)
 
-  validateCompletedTasksQueue()
-  cleanupFinishedTaskSessions()
-  startScheduler()
-  startQueueProcessor()
-  startBrowserSweep()
-  startHealthMonitor()
-  startHeartbeatService()
+  try {
+    validateCompletedTasksQueue()
+    cleanupFinishedTaskSessions()
+    startScheduler()
+    startQueueProcessor()
+    startBrowserSweep()
+    startHealthMonitor()
+    startHeartbeatService()
+    startMemoryConsolidation()
+  } catch (err: unknown) {
+    ds.running = false
+    notify('daemon')
+    console.error('[daemon] Failed to start:', err instanceof Error ? err.message : String(err))
+    throw err
+  }
 
   // Auto-start enabled connectors
-  autoStartConnectors().catch((err) => {
-    console.error('[daemon] Error auto-starting connectors:', err.message)
+  autoStartConnectors().catch((err: unknown) => {
+    console.error('[daemon] Error auto-starting connectors:', err instanceof Error ? err.message : String(err))
   })
 }
 
@@ -154,6 +172,7 @@ export function stopDaemon(options?: { source?: string; manualStop?: boolean }) 
   stopBrowserSweep()
   stopHealthMonitor()
   stopHeartbeatService()
+  stopMemoryConsolidation()
   stopAllConnectors().catch(() => {})
 }
 
@@ -259,6 +278,7 @@ async function runConnectorHealthChecks(now: number) {
         type: 'error',
         title: `Connector "${connector.name}" failed`,
         message: `Auto-restart gave up after ${MAX_WAKE_ATTEMPTS} consecutive failures.`,
+        dedupKey: `connector-gave-up:${connector.id}`,
         entityType: 'connector',
         entityId: connector.id,
       })
@@ -270,6 +290,18 @@ async function runConnectorHealthChecks(now: number) {
       CONNECTOR_RESTART_BASE_MS * (2 ** Math.min(6, current.failCount)),
     )
     if ((now - current.lastAttemptAt) < backoffMs) continue
+
+    // Notify on first detection of a down connector
+    if (current.wakeAttempts === 0) {
+      createNotification({
+        type: 'warning',
+        title: `Connector "${connector.name}" is down`,
+        message: 'Auto-restart in progress.',
+        dedupKey: `connector-down:${connector.id}`,
+        entityType: 'connector',
+        entityId: connector.id,
+      })
+    }
 
     current.lastAttemptAt = now
     ds.connectorRestartState.set(connector.id, current)
@@ -284,6 +316,11 @@ async function runConnectorHealthChecks(now: number) {
       const message = err instanceof Error ? err.message : String(err)
       console.warn(`[health] Connector auto-restart failed for ${connector.name} (attempt ${current.wakeAttempts}/${MAX_WAKE_ATTEMPTS}): ${message}`)
     }
+  }
+
+  // Purge restart state for connectors that no longer exist in storage
+  for (const id of ds.connectorRestartState.keys()) {
+    if (!connectors[id]) ds.connectorRestartState.delete(id)
   }
 }
 
@@ -429,6 +466,73 @@ async function processWebhookRetries() {
   }
 }
 
+async function runProviderHealthChecks() {
+  const agents = loadAgents()
+  const credentials = loadCredentials()
+
+  // Build deduplicated set of { provider, credentialId, apiEndpoint } tuples
+  const seen = new Set<string>()
+  const tuples: { provider: string; credentialId: string; apiEndpoint: string; agentId: string; credentialName: string }[] = []
+
+  for (const agent of Object.values(agents) as Record<string, unknown>[]) {
+    if (!agent?.id || typeof agent.id !== 'string') continue
+    const provider = typeof agent.provider === 'string' ? agent.provider : ''
+    if (!provider || ['claude-cli', 'codex-cli', 'opencode-cli'].includes(provider)) continue
+
+    const credentialId = typeof agent.credentialId === 'string' ? agent.credentialId : ''
+    const apiEndpoint = typeof agent.apiEndpoint === 'string' ? agent.apiEndpoint : ''
+
+    // For OpenClaw, scope per agent (each may have a different gateway)
+    const key = provider === 'openclaw'
+      ? `openclaw:${agent.id}`
+      : `${provider}:${credentialId || 'no-cred'}:${apiEndpoint}`
+    if (seen.has(key)) continue
+    seen.add(key)
+
+    const cred = credentialId ? (credentials[credentialId] as Record<string, unknown> | undefined) : undefined
+    const credName = typeof cred?.name === 'string' ? cred.name : provider
+
+    tuples.push({
+      provider,
+      credentialId,
+      apiEndpoint,
+      agentId: agent.id,
+      credentialName: credName,
+    })
+  }
+
+  for (const tuple of tuples) {
+    let apiKey: string | undefined
+    if (tuple.credentialId) {
+      const cred = credentials[tuple.credentialId] as Record<string, unknown> | undefined
+      if (cred?.encryptedKey && typeof cred.encryptedKey === 'string') {
+        try { apiKey = decryptKey(cred.encryptedKey) } catch { /* skip undecryptable */ continue }
+      }
+    }
+
+    const endpoint = tuple.apiEndpoint || OPENAI_COMPATIBLE_DEFAULTS[tuple.provider]?.defaultEndpoint || undefined
+    const result = await pingProvider(tuple.provider, apiKey, endpoint)
+
+    if (!result.ok) {
+      const dedupKey = tuple.provider === 'openclaw'
+        ? `openclaw-down:${tuple.agentId}`
+        : `provider-down:${tuple.credentialId || tuple.provider}`
+
+      const entityType = tuple.credentialId ? 'credential' : undefined
+      const entityId = tuple.credentialId || undefined
+
+      createNotification({
+        type: 'warning',
+        title: `Provider unreachable: ${tuple.credentialName}`,
+        message: result.message,
+        dedupKey,
+        entityType,
+        entityId,
+      })
+    }
+  }
+}
+
 async function runHealthChecks() {
   // Continuously keep the completed queue honest.
   validateCompletedTasksQueue()
@@ -490,6 +594,13 @@ async function runHealthChecks() {
 
   await runConnectorHealthChecks(now)
 
+  // Provider reachability checks
+  try {
+    await runProviderHealthChecks()
+  } catch (err: unknown) {
+    console.error('[daemon] Provider health check failed:', err instanceof Error ? err.message : String(err))
+  }
+
   // Process webhook retry queue
   try {
     await processWebhookRetries()
@@ -511,6 +622,42 @@ function stopHealthMonitor() {
   if (ds.healthIntervalId) {
     clearInterval(ds.healthIntervalId)
     ds.healthIntervalId = null
+  }
+}
+
+function runConsolidationTick() {
+  import('./memory-consolidation').then(({ runDailyConsolidation }) =>
+    runDailyConsolidation().then((stats) => {
+      if (stats.digests > 0 || stats.pruned > 0 || stats.deduped > 0) {
+        console.log(`[daemon] Memory consolidation: ${stats.digests} digest(s), ${stats.pruned} pruned, ${stats.deduped} deduped`)
+      }
+      if (stats.errors.length > 0) {
+        console.warn(`[daemon] Memory consolidation errors: ${stats.errors.join('; ')}`)
+      }
+    }),
+  ).catch((err: unknown) => {
+    console.error('[daemon] Memory consolidation failed:', err instanceof Error ? err.message : String(err))
+  })
+}
+
+function startMemoryConsolidation() {
+  if (ds.memoryConsolidationTimeoutId || ds.memoryConsolidationIntervalId) return
+  // Deferred first run, then repeat on interval
+  ds.memoryConsolidationTimeoutId = setTimeout(() => {
+    ds.memoryConsolidationTimeoutId = null
+    runConsolidationTick()
+    ds.memoryConsolidationIntervalId = setInterval(runConsolidationTick, MEMORY_CONSOLIDATION_INTERVAL)
+  }, MEMORY_CONSOLIDATION_INITIAL_DELAY)
+}
+
+function stopMemoryConsolidation() {
+  if (ds.memoryConsolidationTimeoutId) {
+    clearTimeout(ds.memoryConsolidationTimeoutId)
+    ds.memoryConsolidationTimeoutId = null
+  }
+  if (ds.memoryConsolidationIntervalId) {
+    clearInterval(ds.memoryConsolidationIntervalId)
+    ds.memoryConsolidationIntervalId = null
   }
 }
 

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { loadCredentials, decryptKey } from '@/lib/server/storage'
 import { getDeviceId, wsConnect } from '@/lib/providers/openclaw'
+import { OPENAI_COMPATIBLE_DEFAULTS } from '@/lib/server/provider-health'
 
 type SetupProvider =
   | 'openai'
@@ -14,20 +15,6 @@ type SetupProvider =
   | 'fireworks'
   | 'ollama'
   | 'openclaw'
-
-const OPENAI_COMPATIBLE_PROVIDER_INFO: Record<
-  'openai' | 'google' | 'deepseek' | 'groq' | 'together' | 'mistral' | 'xai' | 'fireworks',
-  { name: string; defaultEndpoint: string }
-> = {
-  openai: { name: 'OpenAI', defaultEndpoint: 'https://api.openai.com/v1' },
-  google: { name: 'Google Gemini', defaultEndpoint: 'https://generativelanguage.googleapis.com/v1beta/openai' },
-  deepseek: { name: 'DeepSeek', defaultEndpoint: 'https://api.deepseek.com/v1' },
-  groq: { name: 'Groq', defaultEndpoint: 'https://api.groq.com/openai/v1' },
-  together: { name: 'Together AI', defaultEndpoint: 'https://api.together.xyz/v1' },
-  mistral: { name: 'Mistral AI', defaultEndpoint: 'https://api.mistral.ai/v1' },
-  xai: { name: 'xAI (Grok)', defaultEndpoint: 'https://api.x.ai/v1' },
-  fireworks: { name: 'Fireworks AI', defaultEndpoint: 'https://api.fireworks.ai/inference/v1' },
-}
 
 interface SetupCheckBody {
   provider?: string
@@ -196,7 +183,7 @@ export async function POST(req: Request) {
     switch (provider) {
       case 'openai': {
         if (!apiKey) return NextResponse.json({ ok: false, message: 'OpenAI API key is required.' })
-        const info = OPENAI_COMPATIBLE_PROVIDER_INFO.openai
+        const info = OPENAI_COMPATIBLE_DEFAULTS.openai
         const result = await checkOpenAiCompatible(info.name, apiKey, endpoint, info.defaultEndpoint)
         return NextResponse.json(result)
       }
@@ -212,7 +199,7 @@ export async function POST(req: Request) {
       case 'mistral':
       case 'xai':
       case 'fireworks': {
-        const info = OPENAI_COMPATIBLE_PROVIDER_INFO[provider]
+        const info = OPENAI_COMPATIBLE_DEFAULTS[provider]
         if (!apiKey) return NextResponse.json({ ok: false, message: `${info.name} API key is required.` })
         const result = await checkOpenAiCompatible(info.name, apiKey, endpoint, info.defaultEndpoint)
         return NextResponse.json(result)

@@ -88,7 +88,14 @@ export function AccessKeyGate({ onAuthenticated }: AccessKeyGateProps) {
     }
   }
 
-  if (checking) return null
+  if (checking) return (
+    <div className="h-full flex items-center justify-center bg-bg">
+      <div
+        className="h-6 w-6 rounded-full border-2 border-white/[0.08] border-t-accent-bright"
+        style={{ animation: 'spin 0.8s linear infinite' }}
+      />
+    </div>
+  )
 
   return (
     <div className="h-full flex flex-col items-center justify-center px-8 bg-bg relative overflow-hidden">
@@ -192,7 +199,7 @@ export function AccessKeyGate({ onAuthenticated }: AccessKeyGateProps) {
             <button
               onClick={handleClaimKey}
               disabled={loading}
-              className="px-12 py-4 rounded-[16px] border-none bg-[#6366F1] text-white text-[16px] font-display font-600
+              className="px-12 py-4 rounded-[16px] border-none bg-accent-bright text-white text-[16px] font-display font-600
                 cursor-pointer hover:brightness-110 active:scale-[0.97] transition-all duration-200
                 shadow-[0_6px_28px_rgba(99,102,241,0.3)] disabled:opacity-30"
             >
@@ -233,7 +240,7 @@ export function AccessKeyGate({ onAuthenticated }: AccessKeyGateProps) {
               <button
                 type="submit"
                 disabled={!key.trim() || loading}
-                className="px-12 py-4 rounded-[16px] border-none bg-[#6366F1] text-white text-[16px] font-display font-600
+                className="px-12 py-4 rounded-[16px] border-none bg-accent-bright text-white text-[16px] font-display font-600
                   cursor-pointer hover:brightness-110 active:scale-[0.97] transition-all duration-200
                   shadow-[0_6px_28px_rgba(99,102,241,0.3)] disabled:opacity-30"
               >

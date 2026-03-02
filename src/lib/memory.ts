@@ -40,3 +40,6 @@ export const updateMemory = (id: string, data: Partial<MemoryEntry>) =>
 
 export const deleteMemory = (id: string) =>
   api<string>('DELETE', `/memory/${id}`)
+
+export const getMemoryCounts = () =>
+  api<Record<string, number>>('GET', '/memory?counts=true')

@@ -40,9 +40,10 @@ Inspired by [OpenClaw](https://github.com/openclaw).
 - **Loop Runtime Controls** — Switch between bounded and ongoing loops with configurable step caps, runtime guards, heartbeat cadence, and timeout budgets
 - **Session Run Queue** — Per-session queued runs with followup/steer/collect modes, collect coalescing for bursty inputs, and run-state APIs
 - **Chat Iteration Workflow** — Edit-and-resend user turns, fork a new session from any message, bookmark key messages, use contextual follow-up suggestion chips, and auto-continue after tool access grants
+- **Agent Chatrooms** — Multi-agent room conversations with `@mention` routing, chained agent replies, reactions, and file/image-aware chat context
 - **Live Chat Telemetry** — Thinking/tool/responding stream phases, live main-loop status badges, connector activity presence, tone indicator, and optional sound notifications
 - **Global Search Palette** — `Cmd/Ctrl+K` search across agents, tasks, sessions, schedules, webhooks, and skills from anywhere in the app
-- **Notification Center** — Real-time in-app notifications for task/schedule/daemon events with unread tracking and quick actions
+- **Notification Center** — Real-time in-app notifications for task/schedule/daemon events with unread tracking, mark-all/clear-read controls, and optional action links
 - **Preview-Rich Chat UI** — Side preview panel for tool outputs (image/browser/html/code), inline code/PDF previews for attachments, and image lightbox support
 - **Voice Settings** — Per-instance ElevenLabs API key + voice ID for TTS replies, plus configurable speech recognition language for chat input
 - **Chat Connectors** — Bridge agents to Discord, Slack, Telegram, WhatsApp, BlueBubbles (iMessage), Signal, Microsoft Teams, Google Chat, Matrix, and OpenClaw with media-aware inbound handling
@@ -85,7 +86,7 @@ curl -fsSL https://raw.githubusercontent.com/swarmclawai/swarmclaw/main/install.
 ```
 
 The installer resolves the latest stable release tag and installs that version by default.
-To pin a version: `SWARMCLAW_VERSION=v0.5.3 curl ... | bash`
+To pin a version: `SWARMCLAW_VERSION=v0.6.0 curl ... | bash`
 
 Or run locally from the repo (friendly for non-technical users):
 
@@ -100,6 +101,8 @@ npm run quickstart
 - Install dependencies
 - Prepare `.env.local` and `data/`
 - Start the app at `http://localhost:3456`
+
+`postinstall` rebuilds `better-sqlite3` natively. If you install with `--ignore-scripts`, run `npm rebuild better-sqlite3` manually.
 
 On first launch, SwarmClaw will:
 1. Generate an **access key** and display it in the terminal
@@ -165,8 +168,10 @@ src/
 │   ├── agents/       # Agent builder UI
 │   ├── auth/         # Access key gate + user picker
 │   ├── chat/         # Message rendering, streaming, code blocks
+│   ├── chatrooms/    # Multi-agent chatroom UI
 │   ├── connectors/   # Discord/Slack/Telegram/WhatsApp config
 │   ├── layout/       # App shell, sidebar, mobile header
+│   ├── memory/       # Memory browser and maintenance UI
 │   ├── providers/    # Provider management
 │   ├── schedules/    # Cron scheduler
 │   ├── skills/       # Skills manager
@@ -175,7 +180,7 @@ src/
 ├── lib/
 │   ├── providers/    # LLM provider implementations
 │   └── server/       # Storage, orchestrator, connectors, tools
-├── stores/           # Zustand state (app store, chat store)
+├── stores/           # Zustand state (app store, chat store, chatroom store)
 └── types/            # TypeScript interfaces
 ```
 
@@ -292,6 +297,7 @@ Agents with platform tools enabled can manage the SwarmClaw instance:
 | Manage Documents | Upload/search/get/delete indexed docs for lightweight RAG workflows |
 | Manage Webhooks | Register external webhook endpoints that trigger agent sessions |
 | Manage Connectors | Manage chat platform bridges |
+| Manage Chatrooms | Create/list/update chatrooms, manage members, and post room messages for multi-agent collaboration |
 | Manage Sessions | Enable `sessions_tool` for list/history/status/send/spawn/stop, plus `context_status` and `context_summarize` for context window management |
 | Manage Secrets | Store and retrieve encrypted reusable secrets |
 
@@ -317,6 +323,8 @@ Token usage and estimated costs are tracked per message for API-based providers 
 
 The daemon auto-processes queued tasks from the scheduler on a 30-second interval. It also runs recurring health checks that detect stale heartbeat sessions and can send proactive WhatsApp alerts when issues are detected. Toggle the daemon from the sidebar indicator or via API.
 
+Daemon runtime also triggers memory consolidation (daily summary generation plus recurring dedupe/prune maintenance).
+
 - **API:** `GET /api/daemon` (status), `POST /api/daemon` with `{"action": "start"}` or `{"action": "stop"}`
 - Auto-starts on first authenticated runtime traffic (`/api/auth` or `/api/daemon`) unless `SWARMCLAW_DAEMON_AUTOSTART=0`
 
@@ -331,7 +339,7 @@ For autonomous long-running missions, enable the **Main Loop** on a session. Thi
   - `autonomous`: Agent executes safe actions without confirmation, only asks when blocked by permissions/credentials
   - `assist`: Agent asks before irreversible external actions (sending messages, purchases, account mutations)
 - **API:** `POST /api/sessions/[id]/main-loop` with `{"tick":true}` to trigger a mission tick
-- **CLI:** `swarmclaw sessions main-loop --session-id <id>` (via daemon schedule)
+- **CLI:** `swarmclaw sessions main-loop <id>` to inspect loop state, or `swarmclaw sessions main-loop-action <id> --data '{"action":"nudge"}'` to control it
 
 Use this for background agents that should "keep working" on a goal until blocked or complete.
 
@@ -534,7 +542,7 @@ git push origin main --follow-tags
 ```
 
 On `v*` tags, GitHub Actions will:
-1. Run CI checks
+1. Run release gates (`npm run test:cli`, `npm run test:openclaw`, `npm run build:ci`)
 2. Create a GitHub Release
 3. Build and publish Docker images to `ghcr.io/swarmclawai/swarmclaw` (`:vX.Y.Z`, `:latest`, `:sha-*`)
 
@@ -560,9 +568,18 @@ swarmclaw [global-options] <group> <command> [command-options]
 
 | Flag | Description |
 |-|-|
-| `-u, --url <url>` | SwarmClaw base URL (default: `http://localhost:3456`) |
-| `-k, --key <key>` | Access key (or set `SWARMCLAW_ACCESS_KEY`) |
-| `--raw` | Print compact JSON output |
+| `--base-url <url>` | API base URL (default: `http://localhost:3456`) |
+| `--access-key <key>` | Access key override (else `SWARMCLAW_API_KEY` or `platform-api-key.txt`) |
+| `--data <json\|@file\|->` | Request JSON body |
+| `--query key=value` | Query parameter (repeatable) |
+| `--header key=value` | Extra HTTP header (repeatable) |
+| `--json` | Compact JSON output |
+| `--wait` | Wait for run/task completion when IDs are returned |
+| `--timeout-ms <ms>` | Request/wait timeout (default `300000`) |
+| `--interval-ms <ms>` | Poll interval for `--wait` (default `2000`) |
+| `--out <file>` | Write binary response to file |
+
+Routing note: `swarmclaw` uses a hybrid router. Some legacy rich commands still support `-u/--url`, `-k/--key`, and `--raw`; mapped API commands use the options above.
 
 ### Command Groups
 
@@ -574,7 +591,9 @@ Notable setup/operations groups include:
 | `setup` | Setup helpers like provider checks and `doctor` diagnostics |
 | `version` | Version status and update helpers |
 | `sessions` | Session lifecycle, chat, browser/devserver controls, mailbox |
+| `chatrooms` | Multi-agent chatrooms (members, reactions, streamed room chat) |
 | `memory` | Memory CRUD and maintenance utilities |
+| `notifications` | In-app notification listing and read-state controls |
 
 ### Examples
 
@@ -596,6 +615,18 @@ swarmclaw setup init --provider openai --api-key "$OPENAI_API_KEY"
 
 # run memory maintenance analysis
 swarmclaw memory maintenance
+
+# list chatrooms
+swarmclaw chatrooms list
+
+# send a room message and stream agent replies
+swarmclaw chatrooms chat <chatroomId> --data '{"text":"@all status update?"}'
+
+# react to a room message
+swarmclaw chatrooms react <chatroomId> --data '{"messageId":"<messageId>","emoji":"👍"}'
+
+# pin/unpin a room message
+swarmclaw chatrooms pin <chatroomId> --data '{"messageId":"<messageId>"}'
 ```
 
 ## Credits

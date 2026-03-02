@@ -2,7 +2,6 @@
 
 import { Component, useState, useEffect, useCallback } from 'react'
 import type { ReactNode, ErrorInfo } from 'react'
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { useAppStore } from '@/stores/use-app-store'
 import { useMediaQuery } from '@/hooks/use-media-query'
 import { Avatar } from '@/components/shared/avatar'
@@ -12,9 +11,9 @@ import { AgentChatList } from '@/components/agents/agent-chat-list'
 import { AgentSheet } from '@/components/agents/agent-sheet'
 import { ScheduleList } from '@/components/schedules/schedule-list'
 import { ScheduleSheet } from '@/components/schedules/schedule-sheet'
-import { MemoryList } from '@/components/memory/memory-list'
+import { MemoryAgentList } from '@/components/memory/memory-agent-list'
 import { MemorySheet } from '@/components/memory/memory-sheet'
-import { MemoryDetail } from '@/components/memory/memory-detail'
+import { MemoryBrowser } from '@/components/memory/memory-browser'
 import { TaskList } from '@/components/tasks/task-list'
 import { TaskSheet } from '@/components/tasks/task-sheet'
 import { TaskBoard } from '@/components/tasks/task-board'
@@ -26,6 +25,10 @@ import { SkillList } from '@/components/skills/skill-list'
 import { SkillSheet } from '@/components/skills/skill-sheet'
 import { ConnectorList } from '@/components/connectors/connector-list'
 import { ConnectorSheet } from '@/components/connectors/connector-sheet'
+import { ChatroomList } from '@/components/chatrooms/chatroom-list'
+import { ChatroomView } from '@/components/chatrooms/chatroom-view'
+import { ChatroomSheet } from '@/components/chatrooms/chatroom-sheet'
+import { useChatroomStore } from '@/stores/use-chatroom-store'
 import { WebhookList } from '@/components/webhooks/webhook-list'
 import { WebhookSheet } from '@/components/webhooks/webhook-sheet'
 import { LogList } from '@/components/logs/log-list'
@@ -39,8 +42,13 @@ import { RunList } from '@/components/runs/run-list'
 import { ActivityFeed } from '@/components/activity/activity-feed'
 import { MetricsDashboard } from '@/components/usage/metrics-dashboard'
 import { ProjectList } from '@/components/projects/project-list'
+import { ProjectDetail } from '@/components/projects/project-detail'
 import { ProjectSheet } from '@/components/projects/project-sheet'
 import { SearchDialog } from '@/components/shared/search-dialog'
+import { AgentSwitchDialog } from '@/components/shared/agent-switch-dialog'
+import { KeyboardShortcutsDialog } from '@/components/shared/keyboard-shortcuts-dialog'
+import { ProfileSheet } from '@/components/shared/profile-sheet'
+import { HomeView } from '@/components/home/home-view'
 import { NetworkBanner } from './network-banner'
 import { UpdateBanner } from './update-banner'
 import { MobileHeader } from './mobile-header'
@@ -48,9 +56,12 @@ import { DaemonIndicator } from './daemon-indicator'
 import { NotificationCenter } from '@/components/shared/notification-center'
 import { ChatArea } from '@/components/chat/chat-area'
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip'
+import { api } from '@/lib/api-client'
 import type { AppView } from '@/types'
 
 const RAIL_EXPANDED_KEY = 'sc_rail_expanded'
+const STAR_NOTIFICATION_KEY = 'sc_star_notification_v1'
+const GITHUB_REPO_URL = 'https://github.com/swarmclawai/swarmclaw'
 
 export function AppLayout() {
   const currentUser = useAppStore((s) => s.currentUser)
@@ -58,8 +69,6 @@ export function AppLayout() {
   const currentSessionId = useAppStore((s) => s.currentSessionId)
   const sidebarOpen = useAppStore((s) => s.sidebarOpen)
   const setSidebarOpen = useAppStore((s) => s.setSidebarOpen)
-  const setUser = useAppStore((s) => s.setUser)
-  const setCurrentSession = useAppStore((s) => s.setCurrentSession)
   const activeView = useAppStore((s) => s.activeView)
   const setActiveView = useAppStore((s) => s.setActiveView)
   const setAgentSheetOpen = useAppStore((s) => s.setAgentSheetOpen)
@@ -79,23 +88,25 @@ export function AppLayout() {
   const hasSelectedSession = !!(currentSessionId && sessions[currentSessionId])
   const pendingApprovalCount = Object.values(tasks).filter((t) => t.pendingApproval).length
 
+  const appSettings = useAppStore((s) => s.appSettings)
   const [agentViewMode, setAgentViewMode] = useState<'chat' | 'config'>('chat')
-  const [shortcutsOpen, setShortcutsOpen] = useState(false)
+  const [profileSheetOpen, setProfileSheetOpen] = useState(false)
 
   const handleShortcutKey = useCallback((e: KeyboardEvent) => {
-    // Ctrl+/ or Cmd+/
-    if ((e.ctrlKey || e.metaKey) && e.key === '/') {
+    const mod = e.metaKey || e.ctrlKey
+    // Cmd+N / Ctrl+N — new chat
+    if (mod && !e.shiftKey && e.key.toLowerCase() === 'n') {
       e.preventDefault()
-      setShortcutsOpen((v) => !v)
+      const state = useAppStore.getState()
+      const allAgents = Object.values(state.agents).filter((a) => !a.trashedAt)
+      const target = allAgents.find((a) => a.id === 'default') || allAgents[0]
+      if (target) void state.setCurrentAgent(target.id)
       return
     }
-    // ? key when not in an input/textarea/contenteditable
-    if (e.key === '?' && !e.ctrlKey && !e.metaKey && !e.altKey) {
-      const tag = (e.target as HTMLElement)?.tagName?.toLowerCase()
-      const editable = (e.target as HTMLElement)?.isContentEditable
-      if (tag === 'input' || tag === 'textarea' || editable) return
+    // Cmd+Shift+T / Ctrl+Shift+T — jump to tasks
+    if (mod && e.shiftKey && e.key.toLowerCase() === 't') {
       e.preventDefault()
-      setShortcutsOpen((v) => !v)
+      useAppStore.getState().setActiveView('tasks')
     }
   }, [])
 
@@ -103,6 +114,31 @@ export function AppLayout() {
     window.addEventListener('keydown', handleShortcutKey)
     return () => window.removeEventListener('keydown', handleShortcutKey)
   }, [handleShortcutKey])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    if (localStorage.getItem(STAR_NOTIFICATION_KEY)) return
+    localStorage.setItem(STAR_NOTIFICATION_KEY, '1')
+    void api('POST', '/notifications', {
+      type: 'info',
+      title: 'Enjoying SwarmClaw?',
+      message: 'If SwarmClaw helps your workflow, please star the GitHub repo to support the project.',
+      actionLabel: 'Star on GitHub',
+      actionUrl: GITHUB_REPO_URL,
+      entityType: 'support',
+      entityId: 'github-star',
+    }).then(() => {
+      void useAppStore.getState().loadNotifications()
+    }).catch(() => {})
+  }, [])
+
+  // Apply theme hue on mount/change
+  useEffect(() => {
+    const hue = appSettings.themeHue
+    if (hue) {
+      document.documentElement.style.setProperty('--neutral-tint', hue)
+    }
+  }, [appSettings.themeHue])
 
   const [railExpanded, setRailExpanded] = useState(() => {
     if (typeof window === 'undefined') return true
@@ -117,8 +153,7 @@ export function AppLayout() {
   }
 
   const handleSwitchUser = () => {
-    setUser(null)
-    setCurrentSession(null)
+    setProfileSheetOpen(true)
   }
 
   const openNewSheet = () => {
@@ -129,6 +164,7 @@ export function AppLayout() {
     else if (activeView === 'providers') setProviderSheetOpen(true)
     else if (activeView === 'skills') setSkillSheetOpen(true)
     else if (activeView === 'connectors') setConnectorSheetOpen(true)
+    else if (activeView === 'chatrooms') useChatroomStore.getState().setChatroomSheetOpen(true)
     else if (activeView === 'webhooks') setWebhookSheetOpen(true)
     else if (activeView === 'mcp_servers') setMcpServerSheetOpen(true)
     else if (activeView === 'knowledge') setKnowledgeSheetOpen(true)
@@ -151,11 +187,14 @@ export function AppLayout() {
   const agents = useAppStore((s) => s.agents)
   const currentAgentId = useAppStore((s) => s.currentAgentId)
   const setCurrentAgent = useAppStore((s) => s.setCurrentAgent)
+  const defaultAgentId = appSettings.defaultAgentId && agents[appSettings.defaultAgentId]
+    ? appSettings.defaultAgentId
+    : Object.values(agents)[0]?.id || null
+  const isMainChat = activeView === 'agents' && currentAgentId === defaultAgentId
+
   const goToMainChat = async () => {
-    // Navigate to default agent's chat thread
-    const defaultAgent = agents['default'] || Object.values(agents)[0]
-    if (defaultAgent) {
-      await setCurrentAgent(defaultAgent.id)
+    if (defaultAgentId) {
+      await setCurrentAgent(defaultAgentId)
     }
     setActiveView('agents')
     setSidebarOpen(false)
@@ -169,7 +208,7 @@ export function AppLayout() {
       {/* Desktop: Navigation rail (expandable) */}
       {isDesktop && (
         <div
-          className="shrink-0 bg-raised border-r border-white/[0.04] flex flex-col py-4 transition-all duration-200 overflow-hidden"
+          className="shrink-0 bg-raised border-r border-white/[0.04] flex flex-col py-4 transition-all duration-200 overflow-visible"
           style={{ width: railExpanded ? 180 : 60 }}
         >
           {/* Logo + collapse toggle */}
@@ -216,9 +255,9 @@ export function AppLayout() {
               <button
                 onClick={goToMainChat}
                 className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-[10px] text-[13px] font-600 cursor-pointer transition-all
-                  ${activeView === 'agents' && currentAgentId && (currentAgentId === 'default' || currentAgentId === Object.keys(agents)[0])
-                    ? 'bg-[#6366F1]/15 border border-[#6366F1]/25 text-accent-bright'
-                    : 'bg-[#6366F1]/10 border border-[#6366F1]/20 text-accent-bright hover:bg-[#6366F1]/15'}`}
+                  ${isMainChat
+                    ? 'bg-accent-bright/15 border border-[#6366F1]/25 text-accent-bright'
+                    : 'bg-accent-bright/10 border border-[#6366F1]/20 text-accent-bright hover:bg-accent-bright/15'}`}
                 style={{ fontFamily: 'inherit' }}
               >
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
@@ -231,7 +270,7 @@ export function AppLayout() {
             <RailTooltip label="Main Chat" description="Your persistent assistant chat">
               <button
                 onClick={goToMainChat}
-                className={`rail-btn self-center mb-2 ${activeView === 'agents' && currentAgentId && (currentAgentId === 'default' || currentAgentId === Object.keys(agents)[0]) ? 'active' : ''}`}
+                className={`rail-btn self-center mb-2 ${isMainChat ? 'active' : ''}`}
               >
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
                   <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
@@ -273,9 +312,20 @@ export function AppLayout() {
 
           {/* Nav items */}
           <div className={`flex flex-col gap-0.5 ${railExpanded ? 'px-3' : 'items-center'}`}>
+            <NavItem view="home" label="Home" expanded={railExpanded} active={activeView} sidebarOpen={sidebarOpen} onClick={() => handleNavClick('home')}>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" /><polyline points="9 22 9 12 15 12 15 22" />
+              </svg>
+            </NavItem>
             <NavItem view="agents" label="Agents" expanded={railExpanded} active={activeView} sidebarOpen={sidebarOpen} onClick={() => handleNavClick('agents')}>
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
                 <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" />
+              </svg>
+            </NavItem>
+            <NavItem view="chatrooms" label="Chatrooms" expanded={railExpanded} active={activeView} sidebarOpen={sidebarOpen} onClick={() => handleNavClick('chatrooms')}>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+                <path d="M8 10h8" /><path d="M8 14h4" />
               </svg>
             </NavItem>
             <NavItem view="projects" label="Projects" expanded={railExpanded} active={activeView} sidebarOpen={sidebarOpen} onClick={() => handleNavClick('projects')}>
@@ -395,42 +445,53 @@ export function AppLayout() {
                 </a>
               </RailTooltip>
             )}
-            {railExpanded && <DaemonIndicator />}
             {railExpanded ? (
-              <div className="flex items-center gap-1 px-3 py-1">
-                <span className="text-[12px] font-500 text-text-3 flex-1">Alerts</span>
-                <NotificationCenter />
-              </div>
-            ) : (
-              <RailTooltip label="Notifications" description="View system notifications">
-                <div className="rail-btn flex items-center justify-center">
-                  <NotificationCenter />
-                </div>
-              </RailTooltip>
-            )}
-            {railExpanded ? (
-              <button
-                onClick={() => handleNavClick('settings')}
+              <a
+                href={GITHUB_REPO_URL}
+                target="_blank"
+                rel="noopener noreferrer"
                 className="w-full flex items-center gap-2.5 px-3 py-2 rounded-[10px] text-[13px] font-500 cursor-pointer transition-all
-                  bg-transparent text-text-3 hover:text-text hover:bg-white/[0.04] border-none"
+                  bg-transparent text-text-3 hover:text-text hover:bg-white/[0.04] no-underline"
                 style={{ fontFamily: 'inherit' }}
               >
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="shrink-0">
-                  <circle cx="12" cy="12" r="3" />
-                  <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+                  <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
                 </svg>
-                Settings
-              </button>
+                Star on GitHub
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" className="ml-auto opacity-40">
+                  <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" /><polyline points="15 3 21 3 21 9" /><line x1="10" y1="14" x2="21" y2="3" />
+                </svg>
+              </a>
             ) : (
-              <RailTooltip label="Settings" description="API keys, providers & app config">
-                <button onClick={() => handleNavClick('settings')} className="rail-btn">
+              <RailTooltip label="Star on GitHub" description="Support SwarmClaw with a GitHub star">
+                <a
+                  href={GITHUB_REPO_URL}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="rail-btn"
+                >
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-                    <circle cx="12" cy="12" r="3" />
-                    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+                    <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
                   </svg>
-                </button>
+                </a>
               </RailTooltip>
             )}
+            {railExpanded && <DaemonIndicator />}
+            {railExpanded ? (
+              <NotificationCenter variant="row" align="left" direction="up" />
+            ) : (
+              <RailTooltip label="Notifications" description="View system notifications">
+                <div className="rail-btn flex items-center justify-center">
+                  <NotificationCenter align="left" direction="up" />
+                </div>
+              </RailTooltip>
+            )}
+            <NavItem view="settings" label="Settings" expanded={railExpanded} active={activeView} sidebarOpen={sidebarOpen} onClick={() => handleNavClick('settings')}>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                <circle cx="12" cy="12" r="3" />
+                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+              </svg>
+            </NavItem>
 
             {railExpanded ? (
               <button
@@ -439,13 +500,13 @@ export function AppLayout() {
                   bg-transparent hover:bg-white/[0.04] border-none"
                 style={{ fontFamily: 'inherit' }}
               >
-                <Avatar user={currentUser!} size="sm" />
+                <Avatar user={currentUser!} size="sm" avatarSeed={appSettings.userAvatarSeed} />
                 <span className="text-[13px] font-500 text-text-2 capitalize truncate">{currentUser}</span>
               </button>
             ) : (
-              <RailTooltip label="Switch User" description="Sign in as a different user">
+              <RailTooltip label="Profile" description="Edit your profile">
                 <button onClick={handleSwitchUser} className="mt-2 bg-transparent border-none cursor-pointer shrink-0">
-                  <Avatar user={currentUser!} size="sm" />
+                  <Avatar user={currentUser!} size="sm" avatarSeed={appSettings.userAvatarSeed} />
                 </button>
               </RailTooltip>
             )}
@@ -464,7 +525,7 @@ export function AppLayout() {
             {activeView === 'logs' || activeView === 'usage' || activeView === 'runs' ? null : activeView === 'memory' ? (
               <button
                 onClick={() => useAppStore.getState().setMemorySheetOpen(true)}
-                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-[8px] text-[11px] font-600 text-accent-bright bg-accent-soft hover:bg-[#6366F1]/15 transition-all cursor-pointer"
+                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-[8px] text-[11px] font-600 text-accent-bright bg-accent-soft hover:bg-accent-bright/15 transition-all cursor-pointer"
                 style={{ fontFamily: 'inherit' }}
               >
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
@@ -475,7 +536,7 @@ export function AppLayout() {
             ) : (
               <button
                 onClick={openNewSheet}
-                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-[8px] text-[11px] font-600 text-accent-bright bg-accent-soft hover:bg-[#6366F1]/15 transition-all cursor-pointer"
+                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-[8px] text-[11px] font-600 text-accent-bright bg-accent-soft hover:bg-accent-bright/15 transition-all cursor-pointer"
                 style={{ fontFamily: 'inherit' }}
               >
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
@@ -505,7 +566,7 @@ export function AppLayout() {
             </>
           )}
           {activeView === 'schedules' && <ScheduleList inSidebar />}
-          {activeView === 'memory' && <MemoryList inSidebar />}
+          {activeView === 'memory' && <MemoryAgentList />}
           {activeView === 'tasks' && <TaskList inSidebar />}
           {activeView === 'secrets' && <SecretsList inSidebar />}
           {activeView === 'providers' && <ProviderList inSidebar />}
@@ -540,19 +601,19 @@ export function AppLayout() {
                   <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z" /><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z" />
                 </svg>
               </a>
-              <button onClick={() => handleNavClick('settings')} className="rail-btn">
+              <button onClick={() => handleNavClick('settings')} className={`rail-btn ${activeView === 'settings' ? 'active' : ''}`}>
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
                   <circle cx="12" cy="12" r="3" />
                   <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
                 </svg>
               </button>
               <button onClick={handleSwitchUser} className="bg-transparent border-none cursor-pointer shrink-0">
-                <Avatar user={currentUser!} size="sm" />
+                <Avatar user={currentUser!} size="sm" avatarSeed={appSettings.userAvatarSeed} />
               </button>
             </div>
             {/* View selector tabs */}
             <div className="flex px-4 py-2 gap-1 shrink-0 flex-wrap">
-              {(['agents', 'schedules', 'memory', 'tasks', 'secrets', 'providers', 'skills', 'connectors', 'webhooks', 'mcp_servers', 'knowledge', 'plugins', 'usage', 'runs', 'logs'] as AppView[]).map((v) => (
+              {(['agents', 'chatrooms', 'schedules', 'memory', 'tasks', 'secrets', 'providers', 'skills', 'connectors', 'webhooks', 'mcp_servers', 'knowledge', 'plugins', 'usage', 'runs', 'logs'] as AppView[]).map((v) => (
                 <button
                   key={v}
                   onClick={() => setActiveView(v)}
@@ -573,7 +634,7 @@ export function AppLayout() {
                   setSidebarOpen(false)
                   openNewSheet()
                 }}
-                className="w-full py-3 rounded-[12px] border-none bg-[#6366F1] text-white text-[14px] font-600 cursor-pointer
+                className="w-full py-3 rounded-[12px] border-none bg-accent-bright text-white text-[14px] font-600 cursor-pointer
                   hover:brightness-110 active:scale-[0.98] transition-all
                   shadow-[0_2px_12px_rgba(99,102,241,0.15)]"
                 style={{ fontFamily: 'inherit' }}
@@ -601,7 +662,7 @@ export function AppLayout() {
               </>
             )}
             {activeView === 'schedules' && <ScheduleList inSidebar />}
-            {activeView === 'memory' && <MemoryList inSidebar onSelect={() => setSidebarOpen(false)} />}
+            {activeView === 'memory' && <MemoryAgentList />}
             {activeView === 'tasks' && <TaskList inSidebar />}
             {activeView === 'secrets' && <SecretsList inSidebar />}
             {activeView === 'providers' && <ProviderList inSidebar />}
@@ -611,7 +672,6 @@ export function AppLayout() {
             {activeView === 'mcp_servers' && <McpServerList />}
             {activeView === 'knowledge' && <KnowledgeList />}
             {activeView === 'plugins' && <PluginList inSidebar />}
-            {activeView === 'projects' && <ProjectList />}
             {activeView === 'runs' && <RunList />}
             {activeView === 'logs' && <LogList />}
           </div>
@@ -622,7 +682,9 @@ export function AppLayout() {
       <ErrorBoundary>
         <div className="flex-1 flex flex-col h-full min-w-0 bg-bg">
           {!isDesktop && <MobileHeader />}
-          {activeView === 'agents' && hasSelectedSession ? (
+          {activeView === 'home' ? (
+            <HomeView />
+          ) : activeView === 'agents' && hasSelectedSession ? (
             <ChatArea />
           ) : activeView === 'agents' ? (
             <div className="flex-1 flex flex-col">
@@ -644,11 +706,38 @@ export function AppLayout() {
           ) : activeView === 'tasks' && isDesktop ? (
             <TaskBoard />
           ) : activeView === 'memory' ? (
-            <MemoryDetail />
+            <MemoryBrowser />
           ) : activeView === 'activity' ? (
             <ActivityFeed />
           ) : activeView === 'usage' ? (
             <MetricsDashboard />
+          ) : activeView === 'chatrooms' ? (
+            <div className="flex-1 flex h-full min-w-0">
+              <div className="w-[280px] shrink-0 border-r border-white/[0.06] flex flex-col">
+                <div className="flex items-center px-4 pt-4 pb-2 shrink-0">
+                  <h2 className="font-display text-[14px] font-600 text-text-2 tracking-[-0.01em] flex-1">Chatrooms</h2>
+                  <button
+                    onClick={() => { useChatroomStore.getState().setEditingChatroomId(null); useChatroomStore.getState().setChatroomSheetOpen(true) }}
+                    className="flex items-center gap-1 px-2 py-1 rounded-[6px] text-[11px] font-600 text-accent-bright bg-accent-soft hover:bg-accent-bright/15 transition-all cursor-pointer"
+                    style={{ fontFamily: 'inherit' }}
+                  >
+                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                      <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
+                    </svg>
+                    New
+                  </button>
+                </div>
+                <ChatroomList />
+              </div>
+              <ChatroomView />
+            </div>
+          ) : activeView === 'projects' ? (
+            <div className="flex-1 flex h-full min-w-0">
+              <div className="w-[280px] shrink-0 border-r border-white/[0.06] flex flex-col">
+                <ProjectList />
+              </div>
+              <ProjectDetail />
+            </div>
           ) : activeView === 'settings' ? (
             <SettingsPage />
           ) : !sidebarOpen && FULL_WIDTH_VIEWS.has(activeView) ? (
@@ -660,13 +749,13 @@ export function AppLayout() {
                 {activeView !== 'runs' && activeView !== 'logs' && (
                   <button
                     onClick={openNewSheet}
-                    className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-[8px] text-[11px] font-600 text-accent-bright bg-accent-soft hover:bg-[#6366F1]/15 transition-all cursor-pointer"
+                    className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-[8px] text-[11px] font-600 text-accent-bright bg-accent-soft hover:bg-accent-bright/15 transition-all cursor-pointer"
                     style={{ fontFamily: 'inherit' }}
                   >
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
                       <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
                     </svg>
-                    {activeView === 'schedules' ? 'Schedule' : activeView === 'secrets' ? 'Secret' : activeView === 'providers' ? 'Provider' : activeView === 'skills' ? 'Skill' : activeView === 'connectors' ? 'Connector' : activeView === 'webhooks' ? 'Webhook' : activeView === 'mcp_servers' ? 'MCP Server' : activeView === 'knowledge' ? 'Knowledge' : activeView === 'plugins' ? 'Plugin' : activeView === 'projects' ? 'Project' : 'New'}
+                    {activeView === 'schedules' ? 'Schedule' : activeView === 'secrets' ? 'Secret' : activeView === 'providers' ? 'Provider' : activeView === 'skills' ? 'Skill' : activeView === 'connectors' ? 'Connector' : activeView === 'webhooks' ? 'Webhook' : activeView === 'mcp_servers' ? 'MCP Server' : activeView === 'knowledge' ? 'Knowledge' : activeView === 'plugins' ? 'Plugin' : 'New'}
                   </button>
                 )}
               </div>
@@ -679,7 +768,6 @@ export function AppLayout() {
               {activeView === 'mcp_servers' && <McpServerList />}
               {activeView === 'knowledge' && <KnowledgeList />}
               {activeView === 'plugins' && <PluginList />}
-              {activeView === 'projects' && <ProjectList />}
               {activeView === 'runs' && <RunList />}
               {activeView === 'logs' && <LogList />}
             </div>
@@ -690,6 +778,8 @@ export function AppLayout() {
       </ErrorBoundary>
 
       <SearchDialog />
+      <AgentSwitchDialog />
+      <KeyboardShortcutsDialog />
       <AgentSheet />
       <ScheduleSheet />
       <MemorySheet />
@@ -698,32 +788,14 @@ export function AppLayout() {
       <ProviderSheet />
       <SkillSheet />
       <ConnectorSheet />
+      <ChatroomSheet />
       <WebhookSheet />
       <McpServerSheet />
       <KnowledgeSheet />
       <PluginSheet />
       <ProjectSheet />
+      <ProfileSheet open={profileSheetOpen} onClose={() => setProfileSheetOpen(false)} />
 
-      <Dialog open={shortcutsOpen} onOpenChange={setShortcutsOpen}>
-        <DialogContent className="sm:max-w-[380px] bg-raised border-white/[0.08]">
-          <DialogHeader>
-            <DialogTitle className="text-text">Keyboard Shortcuts</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-3 py-2">
-            {([
-              ['Enter', 'Send message'],
-              ['Shift + Enter', 'New line'],
-              ['Ctrl + F', 'Search in chat'],
-              ['Ctrl + /', 'Show shortcuts'],
-            ] as const).map(([keys, desc]) => (
-              <div key={keys} className="flex items-center justify-between">
-                <span className="text-[13px] text-text-2">{desc}</span>
-                <kbd className="px-2 py-1 rounded-[6px] bg-white/[0.06] border border-white/[0.08] text-[11px] font-mono text-text-3">{keys}</kbd>
-              </div>
-            ))}
-          </div>
-        </DialogContent>
-      </Dialog>
     </div>
   )
 }
@@ -762,7 +834,7 @@ class ErrorBoundary extends Component<{ children: ReactNode }, { hasError: boole
             </p>
             <button
               onClick={() => window.location.reload()}
-              className="inline-flex items-center gap-2 px-6 py-3 rounded-[12px] border-none bg-[#6366F1] text-white text-[14px] font-600 cursor-pointer
+              className="inline-flex items-center gap-2 px-6 py-3 rounded-[12px] border-none bg-accent-bright text-white text-[14px] font-600 cursor-pointer
                 hover:brightness-110 active:scale-[0.97] transition-all shadow-[0_4px_16px_rgba(99,102,241,0.2)]"
               style={{ fontFamily: 'inherit' }}
             >
@@ -782,7 +854,9 @@ class ErrorBoundary extends Component<{ children: ReactNode }, { hasError: boole
 }
 
 const VIEW_DESCRIPTIONS: Record<AppView, string> = {
+  home: 'Dashboard overview',
   agents: 'Chat with & configure your AI agents',
+  chatrooms: 'Multi-agent collaborative chatrooms',
   schedules: 'Automated task schedules',
   memory: 'Long-term agent memory store',
   tasks: 'Task board for orchestrator jobs',
@@ -803,12 +877,18 @@ const VIEW_DESCRIPTIONS: Record<AppView, string> = {
 }
 
 const FULL_WIDTH_VIEWS = new Set<AppView>([
-  'schedules', 'secrets', 'providers', 'skills',
+  'home', 'chatrooms', 'schedules', 'secrets', 'providers', 'skills',
   'connectors', 'webhooks', 'mcp_servers', 'knowledge', 'plugins',
-  'usage', 'runs', 'logs', 'settings', 'projects', 'activity',
+  'usage', 'runs', 'logs', 'settings', 'activity', 'projects',
 ])
 
-const VIEW_EMPTY_STATES: Record<Exclude<AppView, 'agents'>, { icon: string; title: string; description: string; features: string[] }> = {
+const VIEW_EMPTY_STATES: Record<Exclude<AppView, 'agents' | 'home'>, { icon: string; title: string; description: string; features: string[] }> = {
+  chatrooms: {
+    icon: 'message-square',
+    title: 'Chatrooms',
+    description: 'Multi-agent chatrooms for collaborative conversations. Add agents and use @mentions to trigger responses.',
+    features: ['Create chatrooms with multiple AI agents', 'Use @AgentName to trigger specific agents', '@all mentions trigger all agents sequentially', 'Agents can chain by mentioning each other'],
+  },
   schedules: {
     icon: 'clock',
     title: 'Schedules',
@@ -914,8 +994,8 @@ const VIEW_EMPTY_STATES: Record<Exclude<AppView, 'agents'>, { icon: string; titl
 }
 
 function ViewEmptyState({ view }: { view: AppView }) {
-  if (view === 'agents') return null
-  const config = VIEW_EMPTY_STATES[view as Exclude<AppView, 'agents'>]
+  if (view === 'agents' || view === 'home') return null
+  const config = VIEW_EMPTY_STATES[view as Exclude<AppView, 'agents' | 'home'>]
   if (!config) return null
 
   return (
@@ -1102,7 +1182,7 @@ function DesktopEmptyState({ userName }: { userName: string | null }) {
         </p>
         <button
           onClick={() => setNewSessionOpen(true)}
-          className="inline-flex items-center gap-2.5 px-12 py-4 rounded-[16px] border-none bg-[#6366F1] text-white text-[16px] font-display font-600
+          className="inline-flex items-center gap-2.5 px-12 py-4 rounded-[16px] border-none bg-accent-bright text-white text-[16px] font-display font-600
             cursor-pointer hover:brightness-110 active:scale-[0.97] transition-all duration-200
             shadow-[0_6px_28px_rgba(99,102,241,0.3)]"
           style={{ fontFamily: 'inherit' }}

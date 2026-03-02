@@ -16,6 +16,7 @@ export function ToolRequestBanner({ text, toolOutputs = [] }: Props) {
   const currentSessionId = useAppStore((s) => s.currentSessionId)
   const sessions = useAppStore((s) => s.sessions)
   const [granted, setGranted] = useState<Set<string>>(new Set())
+  const [denied, setDenied] = useState<Set<string>>(new Set())
   const continueSentRef = useRef(false)
 
   const toolRequests: { toolId: string; reason: string }[] = []
@@ -74,10 +75,22 @@ export function ToolRequestBanner({ text, toolOutputs = [] }: Props) {
     }
   }
 
+  const handleDeny = (toolId: string) => {
+    setDenied((prev) => new Set(prev).add(toolId))
+    const label = TOOL_LABELS[toolId] || toolId
+    setTimeout(() => {
+      const { streaming, sendMessage } = useChatStore.getState()
+      if (!streaming) {
+        sendMessage(`Tool access denied for ${label} — proceed without it.`)
+      }
+    }, 200)
+  }
+
   return (
     <div className="max-w-[85%] md:max-w-[72%] flex flex-col gap-2 mt-2">
       {toolRequests.map(({ toolId, reason }) => {
         const isGranted = granted.has(toolId) || (session?.tools || []).includes(toolId)
+        const isDenied = denied.has(toolId)
         const label = TOOL_LABELS[toolId] || toolId
         return (
           <div
@@ -96,14 +109,25 @@ export function ToolRequestBanner({ text, toolOutputs = [] }: Props) {
             </div>
             {isGranted ? (
               <span className="text-[11px] text-emerald-400 font-600 shrink-0">Granted</span>
+            ) : isDenied ? (
+              <span className="text-[11px] text-red-400 font-600 shrink-0">Denied</span>
             ) : (
-              <button
-                onClick={() => handleGrant(toolId)}
-                className="px-3 py-1.5 rounded-[8px] bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 text-[11px] font-600 border-none cursor-pointer transition-colors shrink-0"
-                style={{ fontFamily: 'inherit' }}
-              >
-                Grant
-              </button>
+              <div className="flex gap-1.5 shrink-0">
+                <button
+                  onClick={() => handleGrant(toolId)}
+                  className="px-3 py-1.5 rounded-[8px] bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 text-[11px] font-600 border-none cursor-pointer transition-colors"
+                  style={{ fontFamily: 'inherit' }}
+                >
+                  Grant
+                </button>
+                <button
+                  onClick={() => handleDeny(toolId)}
+                  className="px-3 py-1.5 rounded-[8px] bg-red-500/15 hover:bg-red-500/25 text-red-400 text-[11px] font-600 border-none cursor-pointer transition-colors"
+                  style={{ fontFamily: 'inherit' }}
+                >
+                  Deny
+                </button>
+              </div>
             )}
           </div>
         )

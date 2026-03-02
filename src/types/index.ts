@@ -17,6 +17,7 @@ export interface Message {
   suppressed?: boolean
   bookmarked?: boolean
   suggestions?: string[]
+  replyToId?: string
 }
 
 export type ProviderType = 'claude-cli' | 'codex-cli' | 'opencode-cli' | 'openai' | 'ollama' | 'anthropic' | 'openclaw' | 'google' | 'deepseek' | 'groq' | 'together' | 'mistral' | 'xai' | 'fireworks'
@@ -182,11 +183,13 @@ export interface MarketplacePlugin {
 }
 
 export interface SSEEvent {
-  t: 'd' | 'md' | 'r' | 'done' | 'err' | 'tool_call' | 'tool_result' | 'status'
+  t: 'd' | 'md' | 'r' | 'done' | 'err' | 'tool_call' | 'tool_result' | 'status' | 'thinking' | 'cr_agent_start' | 'cr_agent_done'
   text?: string
   toolName?: string
   toolInput?: string
   toolOutput?: string
+  agentId?: string
+  agentName?: string
 }
 
 export interface Directory {
@@ -253,6 +256,9 @@ export interface Agent {
   thinkingLevel?: 'minimal' | 'low' | 'medium' | 'high'
   projectId?: string
   avatarSeed?: string
+  pinned?: boolean
+  lastUsedAt?: number
+  totalCost?: number
   trashedAt?: number
   openclawSkillMode?: SkillAllowlistMode
   openclawAllowedSkills?: string[]
@@ -331,12 +337,50 @@ export interface MemoryEntry {
   image?: MemoryImage | null
   imagePath?: string | null
   linkedMemoryIds?: string[]
+  pinned?: boolean
+  sharedWith?: string[]
   createdAt: number
   updatedAt: number
 }
 
 export type SessionType = 'human' | 'orchestrated'
-export type AppView = 'agents' | 'schedules' | 'memory' | 'tasks' | 'secrets' | 'providers' | 'skills' | 'connectors' | 'webhooks' | 'mcp_servers' | 'knowledge' | 'plugins' | 'usage' | 'runs' | 'logs' | 'settings' | 'projects' | 'activity'
+export type AppView = 'home' | 'agents' | 'chatrooms' | 'schedules' | 'memory' | 'tasks' | 'secrets' | 'providers' | 'skills' | 'connectors' | 'webhooks' | 'mcp_servers' | 'knowledge' | 'plugins' | 'usage' | 'runs' | 'logs' | 'settings' | 'projects' | 'activity'
+
+// --- Chatrooms ---
+
+export interface ChatroomReaction {
+  emoji: string
+  reactorId: string   // 'user' or agentId
+  time: number
+}
+
+export interface ChatroomMessage {
+  id: string
+  senderId: string    // 'user' or agentId
+  senderName: string
+  role: 'user' | 'assistant'
+  text: string
+  mentions: string[]  // parsed agentIds
+  reactions: ChatroomReaction[]
+  toolEvents?: MessageToolEvent[]
+  time: number
+  attachedFiles?: string[]
+  imagePath?: string
+  replyToId?: string
+}
+
+export interface Chatroom {
+  id: string
+  name: string
+  description?: string
+  agentIds: string[]
+  messages: ChatroomMessage[]
+  pinnedMessageIds?: string[]
+  chatMode?: 'sequential' | 'parallel'
+  autoAddress?: boolean
+  createdAt: number
+  updatedAt: number
+}
 
 // --- Activity / Audit Trail ---
 
@@ -382,8 +426,11 @@ export interface AppNotification {
   type: 'info' | 'success' | 'warning' | 'error'
   title: string
   message?: string
+  actionLabel?: string
+  actionUrl?: string
   entityType?: string
   entityId?: string
+  dedupKey?: string
   read: boolean
   createdAt: number
 }
@@ -455,6 +502,7 @@ export interface AppSettings {
   shellCommandTimeoutSec?: number
   claudeCodeTimeoutSec?: number
   cliProcessTimeoutSec?: number
+  userAvatarSeed?: string
   elevenLabsApiKey?: string | null
   elevenLabsVoiceId?: string | null
   speechRecognitionLang?: string | null
@@ -499,6 +547,10 @@ export interface AppSettings {
   memoryMaxPerLookup?: number
   // Voice conversation
   voiceAutoSendDelaySec?: number
+  // Default agent for main chat on startup
+  defaultAgentId?: string | null
+  // Theme
+  themeHue?: string
   // Web search provider
   webSearchProvider?: 'duckduckgo' | 'google' | 'bing' | 'searxng' | 'tavily' | 'brave'
   searxngUrl?: string
@@ -561,6 +613,8 @@ export interface Skill {
   description?: string
   sourceUrl?: string
   sourceFormat?: 'openclaw' | 'plain'
+  scope?: 'global' | 'agent'
+  agentIds?: string[]
   createdAt: number
   updatedAt: number
 }

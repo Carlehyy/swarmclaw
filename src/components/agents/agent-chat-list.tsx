@@ -1,11 +1,12 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useAppStore } from '@/stores/use-app-store'
 import { useChatStore } from '@/stores/use-chat-store'
 import { fetchMessages } from '@/lib/sessions'
 import type { Agent, Session } from '@/types'
 import { AgentAvatar } from './agent-avatar'
+import { toast } from 'sonner'
 
 interface Props {
   inSidebar?: boolean
@@ -21,8 +22,22 @@ export function AgentChatList({ inSidebar, onSelect }: Props) {
   const setMessages = useChatStore((s) => s.setMessages)
   const setAgentSheetOpen = useAppStore((s) => s.setAgentSheetOpen)
   const tasks = useAppStore((s) => s.tasks)
+  const togglePinAgent = useAppStore((s) => s.togglePinAgent)
+  const appSettings = useAppStore((s) => s.appSettings)
+  const updateSettings = useAppStore((s) => s.updateSettings)
   const streamingSessionId = useChatStore((s) => s.streamingSessionId)
+  const chatFilter = useAppStore((s) => s.chatFilter ?? 'all')
+  const setChatFilter = useAppStore((s) => s.setChatFilter)
   const [search, setSearch] = useState('')
+
+  // FLIP animation refs
+  const rowRefs = useRef<Map<string, HTMLElement>>(new Map())
+  const previousTopRef = useRef<Map<string, number>>(new Map())
+
+  const setRowRef = useCallback((id: string, el: HTMLElement | null) => {
+    if (el) rowRefs.current.set(id, el)
+    else rowRefs.current.delete(id)
+  }, [])
 
   useEffect(() => { loadAgents() }, [loadAgents])
 
@@ -50,6 +65,41 @@ export function AgentChatList({ inSidebar, onSelect }: Props) {
     }
     return set
   }, [tasks])
+
+  // Apply chatFilter
+  const filteredAgents = useMemo(() => {
+    if (chatFilter === 'all') return sortedAgents
+    const now = Date.now()
+    return sortedAgents.filter((a) => {
+      const threadSession = a.threadSessionId ? sessions[a.threadSessionId] as Session | undefined : undefined
+      const isRunning = runningAgentIds.has(a.id) || (threadSession?.active ?? false)
+      const isStreaming = streamingSessionId === a.threadSessionId
+      if (chatFilter === 'active') return isRunning || isStreaming
+      // 'recent' — activity within 24h
+      const lastActive = threadSession?.lastActiveAt || a.updatedAt
+      return now - lastActive < 86_400_000
+    })
+  }, [sortedAgents, chatFilter, sessions, runningAgentIds, streamingSessionId])
+
+  // FLIP: animate row position changes
+  useLayoutEffect(() => {
+    const prevTop = previousTopRef.current
+    for (const agent of filteredAgents) {
+      const el = rowRefs.current.get(agent.id)
+      if (!el) continue
+      const newTop = el.getBoundingClientRect().top
+      const oldTop = prevTop.get(agent.id)
+      if (oldTop !== undefined && oldTop !== newTop) {
+        const delta = oldTop - newTop
+        el.animate(
+          [{ transform: `translateY(${delta}px)` }, { transform: 'translateY(0)' }],
+          { duration: 300, easing: 'cubic-bezier(0.16, 1, 0.3, 1)' },
+        )
+      }
+      prevTop.set(agent.id, newTop)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filteredAgents.map((a) => a.id).join(',')])
 
   const handleSelect = async (agent: Agent) => {
     await setCurrentAgent(agent.id)
@@ -84,7 +134,7 @@ export function AgentChatList({ inSidebar, onSelect }: Props) {
         {!inSidebar && (
           <button
             onClick={() => setAgentSheetOpen(true)}
-            className="mt-3 px-8 py-3 rounded-[14px] border-none bg-[#6366F1] text-white
+            className="mt-3 px-8 py-3 rounded-[14px] border-none bg-accent-bright text-white
               text-[14px] font-600 cursor-pointer active:scale-95 transition-all duration-200
               shadow-[0_4px_16px_rgba(99,102,241,0.2)]"
             style={{ fontFamily: 'inherit' }}
@@ -98,6 +148,24 @@ export function AgentChatList({ inSidebar, onSelect }: Props) {
 
   return (
     <div className="flex-1 overflow-y-auto">
+      {/* Filter control */}
+      {sortedAgents.length > 2 && (
+        <div className="flex items-center gap-1 px-4 pt-2.5 pb-1">
+          {(['all', 'active', 'recent'] as const).map((f) => (
+            <button
+              key={f}
+              type="button"
+              onClick={() => setChatFilter(f)}
+              data-active={chatFilter === f || undefined}
+              className="label-mono px-2.5 py-1 rounded-[6px] border-none cursor-pointer transition-colors
+                data-[active]:bg-accent-soft data-[active]:text-accent-bright
+                bg-transparent text-text-3 hover:text-text-2 hover:bg-white/[0.04]"
+            >
+              {f}
+            </button>
+          ))}
+        </div>
+      )}
       {(sortedAgents.length > 5 || search) && (
         <div className="px-4 py-2.5">
           <input
@@ -112,26 +180,27 @@ export function AgentChatList({ inSidebar, onSelect }: Props) {
         </div>
       )}
       <div className="flex flex-col gap-0.5 px-2 pb-4">
-        {sortedAgents.map((agent) => {
+        {filteredAgents.map((agent) => {
           const threadSession = agent.threadSessionId ? sessions[agent.threadSessionId] as Session | undefined : undefined
           const lastMsg = threadSession?.messages?.at(-1)
           const isActive = currentAgentId === agent.id
-          const isWorking = runningAgentIds.has(agent.id) || (threadSession?.active ?? false) || (threadSession?.heartbeatEnabled ?? false)
+          const heartbeatOn = agent.heartbeatEnabled === true && (agent.tools?.length ?? 0) > 0
+          const recentlyActive = (threadSession?.lastActiveAt ?? 0) > Date.now() - 30 * 60 * 1000
+          const isWorking = runningAgentIds.has(agent.id) || (threadSession?.active ?? false) || heartbeatOn || recentlyActive
           const isTyping = streamingSessionId === agent.threadSessionId
           const preview = lastMsg?.text?.slice(0, 80)?.replace(/\n/g, ' ') || ''
 
           return (
-            <button
+            <div
               key={agent.id}
-              onClick={() => handleSelect(agent)}
-              className={`w-full text-left py-3 px-3.5 rounded-[12px] cursor-pointer transition-all duration-150 border-none
+              ref={(el) => setRowRef(agent.id, el)}
+              className={`group/row relative w-full text-left py-3 px-3.5 rounded-[12px] cursor-pointer transition-all duration-150 border-none
                 ${isActive
                   ? 'bg-accent-soft/80 border border-accent-bright/20'
                   : 'bg-transparent hover:bg-white/[0.02]'}`}
-              style={{ fontFamily: 'inherit' }}
+              onClick={() => handleSelect(agent)}
             >
               <div className="flex items-center gap-2.5">
-                {/* Avatar with status dot */}
                 <div className="relative shrink-0">
                   <AgentAvatar seed={agent.avatarSeed || null} name={agent.name} size={36} />
                   <div className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-bg ${
@@ -146,6 +215,50 @@ export function AgentChatList({ inSidebar, onSelect }: Props) {
                     <span className="text-[10px] text-text-3/60 font-mono shrink-0">
                       {agent.model ? agent.model.split('/').pop()?.split(':')[0] : agent.provider}
                     </span>
+                    {/* Set as default agent */}
+                    {(() => {
+                      const isDefault = appSettings.defaultAgentId === agent.id
+                      return (
+                        <button
+                          onClick={async (e) => {
+                            e.stopPropagation()
+                            if (isDefault) {
+                              await updateSettings({ defaultAgentId: null })
+                              toast.success('Default agent cleared')
+                            } else {
+                              await updateSettings({ defaultAgentId: agent.id })
+                              toast.success(`${agent.name} set as default`)
+                            }
+                          }}
+                          aria-label={isDefault ? 'Remove as default' : 'Set as default agent'}
+                          title={isDefault ? 'Default agent — click to clear' : 'Set as default agent'}
+                          className={`shrink-0 p-1 rounded-[6px] transition-all bg-transparent border-none cursor-pointer hover:bg-white/[0.06]
+                            ${isDefault ? 'opacity-100 text-accent-bright' : 'opacity-0 group-hover/row:opacity-60 hover:!opacity-100 text-text-3'}`}
+                          style={{ fontFamily: 'inherit' }}
+                        >
+                          <svg width="11" height="11" viewBox="0 0 24 24" fill={isDefault ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                            <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+                            {isDefault && <path d="M9 22V12h6v10" fill="rgba(0,0,0,0.3)" stroke="none" />}
+                          </svg>
+                        </button>
+                      )
+                    })()}
+                    {/* Pin button — inline after model label */}
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        togglePinAgent(agent.id)
+                        toast.success(agent.pinned ? 'Agent unpinned' : 'Agent pinned')
+                      }}
+                      aria-label={agent.pinned ? 'Unpin agent' : 'Pin agent'}
+                      className={`shrink-0 p-1 rounded-[6px] transition-all bg-transparent border-none cursor-pointer hover:bg-white/[0.06]
+                        ${agent.pinned ? 'opacity-100 text-amber-400' : 'opacity-0 group-hover/row:opacity-60 hover:!opacity-100 text-text-3'}`}
+                      style={{ fontFamily: 'inherit' }}
+                    >
+                      <svg width="11" height="11" viewBox="0 0 24 24" fill={agent.pinned ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                        <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+                      </svg>
+                    </button>
                   </div>
                   {isTyping ? (
                     <div className="text-[12px] text-accent-bright/70 mt-0.5 flex items-center gap-1.5">
@@ -163,7 +276,7 @@ export function AgentChatList({ inSidebar, onSelect }: Props) {
                   ) : null}
                 </div>
               </div>
-            </button>
+            </div>
           )
         })}
       </div>

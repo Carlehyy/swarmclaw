@@ -25,7 +25,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
     return NextResponse.json({ error: 'Invalid JSON body.' }, { status: 400 })
   }
 
-  const { title, content, tags } = body as Record<string, unknown>
+  const { title, content, tags, scope, agentIds } = body as Record<string, unknown>
 
   const updates: Record<string, unknown> = {}
   if (typeof title === 'string' && title.trim()) {
@@ -36,12 +36,23 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
   }
 
   const existingMeta = (existing.metadata || {}) as Record<string, unknown>
+  const metaUpdates: Record<string, unknown> = { ...existingMeta }
+
   if (Array.isArray(tags)) {
     const normalizedTags = (tags as unknown[]).filter(
       (t): t is string => typeof t === 'string' && t.trim().length > 0,
     )
-    updates.metadata = { ...existingMeta, tags: normalizedTags }
+    metaUpdates.tags = normalizedTags
   }
+
+  if (scope === 'global' || scope === 'agent') {
+    metaUpdates.scope = scope
+    metaUpdates.agentIds = scope === 'agent' && Array.isArray(agentIds)
+      ? (agentIds as unknown[]).filter((id): id is string => typeof id === 'string')
+      : []
+  }
+
+  updates.metadata = metaUpdates
 
   const updated = db.update(id, updates)
   if (!updated) {

@@ -11,6 +11,9 @@ import type { ProviderType, ClaudeSkill } from '@/types'
 import { AVAILABLE_TOOLS, PLATFORM_TOOLS } from '@/lib/tool-definitions'
 import { NATIVE_CAPABILITY_PROVIDER_IDS, NON_LANGGRAPH_PROVIDER_IDS } from '@/lib/provider-sets'
 import { AgentAvatar } from './agent-avatar'
+import { AgentPickerList } from '@/components/shared/agent-picker-list'
+import { randomSoul } from '@/lib/soul-suggestions'
+import { SectionLabel } from '@/components/shared/section-label'
 
 const HB_PRESETS = [30, 60, 120, 300, 600, 1800, 3600] as const
 
@@ -92,7 +95,7 @@ export function AgentSheet() {
   const [mcpTools, setMcpTools] = useState<Record<string, { name: string; description: string }[]>>({})
   const [mcpToolsLoading, setMcpToolsLoading] = useState(false)
   const [fallbackCredentialIds, setFallbackCredentialIds] = useState<string[]>([])
-  const [platformAssignScope, setPlatformAssignScope] = useState<'self' | 'all'>('self')
+  // platformAssignScope is derived from isOrchestrator — no separate state needed
   const [capabilities, setCapabilities] = useState<string[]>([])
   const [capInput, setCapInput] = useState('')
   const [ollamaMode, setOllamaMode] = useState<'local' | 'cloud'>('local')
@@ -167,13 +170,13 @@ export function AgentSheet() {
         setMcpServerIds(editing.mcpServerIds || [])
         setMcpDisabledTools(editing.mcpDisabledTools || [])
         setFallbackCredentialIds(editing.fallbackCredentialIds || [])
-        setPlatformAssignScope(editing.platformAssignScope || 'self')
+        // platformAssignScope derived from isOrchestrator — no separate state
         setCapabilities(editing.capabilities || [])
         setCapInput('')
         setOllamaMode(editing.credentialId && editing.provider === 'ollama' ? 'cloud' : 'local')
         setOpenclawEnabled(editing.provider === 'openclaw')
         setProjectId(editing.projectId)
-        setAvatarSeed(editing.avatarSeed || '')
+        setAvatarSeed(editing.avatarSeed || crypto.randomUUID().slice(0, 8))
         setThinkingLevel(editing.thinkingLevel || '')
         setHeartbeatEnabled(editing.heartbeatEnabled || false)
         setHeartbeatIntervalSec(parseDurationToSec(editing.heartbeatInterval, editing.heartbeatIntervalSec))
@@ -182,7 +185,7 @@ export function AgentSheet() {
       } else {
         setName('')
         setDescription('')
-        setSoul('')
+        setSoul(randomSoul())
         setSystemPrompt('')
         setProvider('claude-cli')
         setModel('')
@@ -195,7 +198,6 @@ export function AgentSheet() {
         setSkillIds([])
         setMcpDisabledTools([])
         setFallbackCredentialIds([])
-        setPlatformAssignScope('self')
         setCapabilities([])
         setCapInput('')
         setOllamaMode('local')
@@ -292,7 +294,7 @@ export function AgentSheet() {
       mcpServerIds,
       mcpDisabledTools: mcpDisabledTools.length ? mcpDisabledTools : undefined,
       fallbackCredentialIds,
-      platformAssignScope,
+      platformAssignScope: (isOrchestrator ? 'all' : 'self') as 'all' | 'self',
       capabilities,
       projectId: projectId || undefined,
       avatarSeed: avatarSeed.trim() || undefined,
@@ -305,8 +307,10 @@ export function AgentSheet() {
     }
     if (editing) {
       await updateAgent(editing.id, data)
+      toast.success('Agent saved')
     } else {
       await createAgent(data)
+      toast.success('Agent created')
     }
     await loadAgents()
     onClose()
@@ -315,6 +319,7 @@ export function AgentSheet() {
   const handleDelete = async () => {
     if (editing) {
       await deleteAgent(editing.id)
+      toast.success('Agent moved to trash')
       await loadAgents()
       onClose()
     }
@@ -452,12 +457,12 @@ export function AgentSheet() {
       </div>
 
       <div className="mb-8">
-        <label className="block font-display text-[12px] font-600 text-text-2 uppercase tracking-[0.08em] mb-3">Name</label>
+        <SectionLabel>Name</SectionLabel>
         <input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. SEO Researcher" className={inputClass} style={{ fontFamily: 'inherit' }} />
       </div>
 
       <div className="mb-8">
-        <label className="block font-display text-[12px] font-600 text-text-2 uppercase tracking-[0.08em] mb-3">Avatar</label>
+        <SectionLabel>Avatar</SectionLabel>
         <div className="flex items-center gap-3">
           <AgentAvatar seed={avatarSeed || null} name={name || 'A'} size={40} />
           <input
@@ -470,25 +475,29 @@ export function AgentSheet() {
           />
           <button
             type="button"
-            onClick={() => setAvatarSeed(Math.random().toString(36).slice(2, 10))}
-            className="px-3 py-2 rounded-[10px] border border-white/[0.08] bg-transparent text-text-3 text-[12px] font-600 cursor-pointer transition-all hover:bg-white/[0.04] shrink-0"
+            onClick={() => setAvatarSeed(crypto.randomUUID().slice(0, 8))}
+            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-[10px] border border-white/[0.08] bg-transparent text-text-3 text-[12px] font-600 cursor-pointer transition-all hover:bg-white/[0.04] hover:text-text-2 active:scale-95 shrink-0"
             style={{ fontFamily: 'inherit' }}
+            title="Shuffle avatar"
           >
-            Randomize
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+              <rect x="4" y="4" width="16" height="16" rx="2" />
+              <circle cx="9" cy="9" r="1" fill="currentColor" />
+              <circle cx="15" cy="15" r="1" fill="currentColor" />
+            </svg>
+            Shuffle
           </button>
         </div>
       </div>
 
       <div className="mb-8">
-        <label className="block font-display text-[12px] font-600 text-text-2 uppercase tracking-[0.08em] mb-3">Description</label>
+        <SectionLabel>Description</SectionLabel>
         <input type="text" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="What does this agent do?" className={inputClass} style={{ fontFamily: 'inherit' }} />
       </div>
 
       {/* Capabilities — hidden for OpenClaw (gateway manages its own capabilities) */}
       {!openclawEnabled && <div className="mb-8">
-        <label className="block font-display text-[12px] font-600 text-text-2 uppercase tracking-[0.08em] mb-3">
-          Capabilities <span className="normal-case tracking-normal font-normal text-text-3">(for agent delegation)</span>
-        </label>
+        <SectionLabel>Capabilities <span className="normal-case tracking-normal font-normal text-text-3">(for agent delegation)</span></SectionLabel>
         <div className="flex flex-wrap gap-1.5 mb-2">
           {capabilities.map((cap) => (
             <span
@@ -629,6 +638,20 @@ export function AgentSheet() {
           </label>
           <div className="flex items-center gap-2 mb-3">
             <p className="text-[12px] text-text-3/60">Define the agent&apos;s voice, tone, and personality. Injected before the system prompt.</p>
+            <button
+              type="button"
+              onClick={() => setSoul(randomSoul())}
+              className="inline-flex items-center gap-1.5 shrink-0 px-2 py-1 rounded-[8px] border border-white/[0.08] bg-transparent text-[11px] text-text-3 hover:text-text-2 cursor-pointer transition-colors"
+              style={{ fontFamily: 'inherit' }}
+              title="Randomize personality"
+            >
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                <rect x="4" y="4" width="16" height="16" rx="2" />
+                <circle cx="9" cy="9" r="1" fill="currentColor" />
+                <circle cx="15" cy="15" r="1" fill="currentColor" />
+              </svg>
+              Shuffle
+            </button>
             <button onClick={() => soulFileRef.current?.click()} className="shrink-0 px-2 py-1 rounded-[8px] border border-white/[0.08] bg-surface text-[11px] text-text-3 hover:text-text-2 cursor-pointer transition-colors" style={{ fontFamily: 'inherit' }}>Upload .md</button>
             <input ref={soulFileRef} type="file" accept=".md,.txt,.markdown" onChange={handleFileUpload(setSoul)} className="hidden" />
           </div>
@@ -854,7 +877,7 @@ export function AgentSheet() {
       )}
 
       {!openclawEnabled && <div className="mb-8">
-        <label className="block font-display text-[12px] font-600 text-text-2 uppercase tracking-[0.08em] mb-3">Provider</label>
+        <SectionLabel>Provider</SectionLabel>
         <div className="grid grid-cols-3 gap-3">
           {providers.filter((p) => !isOrchestrator || p.id !== 'claude-cli').map((p) => {
             const isConnected = !p.requiresApiKey || Object.values(credentials).some((c) => c.provider === p.id)
@@ -883,7 +906,7 @@ export function AgentSheet() {
 
       {!openclawEnabled && currentProvider && currentProvider.models.length > 0 && (
         <div className="mb-8">
-          <label className="block font-display text-[12px] font-600 text-text-2 uppercase tracking-[0.08em] mb-3">Model</label>
+          <SectionLabel>Model</SectionLabel>
           <ModelCombobox
             providerId={currentProvider.id}
             value={model}
@@ -900,7 +923,7 @@ export function AgentSheet() {
       {/* Ollama Mode Toggle */}
       {!openclawEnabled && provider === 'ollama' && (
         <div className="mb-8">
-          <label className="block font-display text-[12px] font-600 text-text-2 uppercase tracking-[0.08em] mb-3">Mode</label>
+          <SectionLabel>Mode</SectionLabel>
           <div className="flex p-1 rounded-[14px] bg-surface border border-white/[0.06]">
             {(['local', 'cloud'] as const).map((mode) => (
               <button
@@ -931,9 +954,7 @@ export function AgentSheet() {
 
       {!openclawEnabled && (currentProvider?.requiresApiKey || currentProvider?.optionalApiKey || (provider === 'ollama' && ollamaMode === 'cloud')) && (
         <div className="mb-8">
-          <label className="block font-display text-[12px] font-600 text-text-2 uppercase tracking-[0.08em] mb-3">
-            API Key{currentProvider?.optionalApiKey && !currentProvider?.requiresApiKey && <span className="normal-case tracking-normal font-normal text-text-3"> (optional)</span>}
-          </label>
+          <SectionLabel>API Key{currentProvider?.optionalApiKey && !currentProvider?.requiresApiKey && <span className="normal-case tracking-normal font-normal text-text-3"> (optional)</span>}</SectionLabel>
           {providerCredentials.length > 0 && !addingKey ? (
             <div className="flex gap-2">
               <select value={credentialId || ''} onChange={(e) => {
@@ -1037,9 +1058,7 @@ export function AgentSheet() {
 
       {currentProvider?.requiresEndpoint && (provider === 'openclaw' || (provider === 'ollama' && ollamaMode === 'local')) && (
         <div className="mb-8">
-          <label className="block font-display text-[12px] font-600 text-text-2 uppercase tracking-[0.08em] mb-3">
-            {provider === 'openclaw' ? 'OpenClaw Endpoint' : 'Endpoint'}
-          </label>
+          <SectionLabel>{provider === 'openclaw' ? 'OpenClaw Endpoint' : 'Endpoint'}</SectionLabel>
           <input type="text" value={apiEndpoint || ''} onChange={(e) => setApiEndpoint(e.target.value || null)} placeholder={currentProvider.defaultEndpoint || 'http://localhost:11434'} className={`${inputClass} font-mono text-[14px]`} />
           {provider === 'openclaw' && (
             <p className="text-[13px] text-text-3/70 mt-2">The URL of your OpenClaw gateway</p>
@@ -1058,7 +1077,7 @@ export function AgentSheet() {
                 <div
                   onClick={() => setTools((prev) => prev.includes(t.id) ? prev.filter((x) => x !== t.id) : [...prev, t.id])}
                   className={`w-11 h-6 rounded-full transition-all duration-200 relative cursor-pointer shrink-0
-                    ${tools.includes(t.id) ? 'bg-[#6366F1]' : 'bg-white/[0.08]'}`}
+                    ${tools.includes(t.id) ? 'bg-accent-bright' : 'bg-white/[0.08]'}`}
                 >
                   <div className={`absolute top-0.5 w-5 h-5 rounded-full bg-white transition-all duration-200
                     ${tools.includes(t.id) ? 'left-[22px]' : 'left-0.5'}`} />
@@ -1082,7 +1101,7 @@ export function AgentSheet() {
                 <div
                   onClick={() => setTools((prev) => prev.includes(t.id) ? prev.filter((x) => x !== t.id) : [...prev, t.id])}
                   className={`w-11 h-6 rounded-full transition-all duration-200 relative cursor-pointer shrink-0
-                    ${tools.includes(t.id) ? 'bg-[#6366F1]' : 'bg-white/[0.08]'}`}
+                    ${tools.includes(t.id) ? 'bg-accent-bright' : 'bg-white/[0.08]'}`}
                 >
                   <div className={`absolute top-0.5 w-5 h-5 rounded-full bg-white transition-all duration-200
                     ${tools.includes(t.id) ? 'left-[22px]' : 'left-0.5'}`} />
@@ -1092,22 +1111,6 @@ export function AgentSheet() {
               </label>
             ))}
           </div>
-          {(tools.includes('manage_tasks') || tools.includes('manage_schedules')) && (
-            <div className="mt-4 ml-1 pt-3 border-t border-white/[0.04]">
-              <label className="flex items-center gap-3 cursor-pointer">
-                <div
-                  onClick={() => setPlatformAssignScope((prev) => prev === 'all' ? 'self' : 'all')}
-                  className={`w-11 h-6 rounded-full transition-all duration-200 relative cursor-pointer shrink-0
-                    ${platformAssignScope === 'all' ? 'bg-[#6366F1]' : 'bg-white/[0.08]'}`}
-                >
-                  <div className={`absolute top-0.5 w-5 h-5 rounded-full bg-white transition-all duration-200
-                    ${platformAssignScope === 'all' ? 'left-[22px]' : 'left-0.5'}`} />
-                </div>
-                <span className="font-display text-[14px] font-600 text-text-2">Assign to Other Agents</span>
-                <span className="text-[12px] text-text-3">Allow this agent to assign tasks and schedules to other agents</span>
-              </label>
-            </div>
-          )}
         </div>
       )}
 
@@ -1259,7 +1262,7 @@ export function AgentSheet() {
                               enabled ? [...prev, fullName] : prev.filter((x) => x !== fullName)
                             )}
                             className={`w-11 h-6 rounded-full transition-all duration-200 relative cursor-pointer shrink-0
-                              ${enabled ? 'bg-[#6366F1]' : 'bg-white/[0.08]'}`}
+                              ${enabled ? 'bg-accent-bright' : 'bg-white/[0.08]'}`}
                           >
                             <div className={`absolute top-0.5 w-5 h-5 rounded-full bg-white transition-all duration-200
                               ${enabled ? 'left-[22px]' : 'left-0.5'}`} />
@@ -1287,35 +1290,25 @@ export function AgentSheet() {
                 if (next && provider === 'claude-cli') setProvider('anthropic')
               }}
               className={`w-11 h-6 rounded-full transition-all duration-200 relative cursor-pointer
-                ${isOrchestrator ? 'bg-[#6366F1]' : 'bg-white/[0.08]'}`}
+                ${isOrchestrator ? 'bg-accent-bright' : 'bg-white/[0.08]'}`}
             >
               <div className={`absolute top-0.5 w-5 h-5 rounded-full bg-white transition-all duration-200
                 ${isOrchestrator ? 'left-[22px]' : 'left-0.5'}`} />
             </div>
-            <span className="font-display text-[14px] font-600 text-text-2">Orchestrator</span>
-            <span className="text-[12px] text-text-3">Can delegate tasks to other agents</span>
+            <span className="font-display text-[14px] font-600 text-text-2">Can Delegate to Other Agents</span>
+            <span className="text-[12px] text-text-3">Route work to specialized agents and coordinate multi-agent tasks</span>
           </label>
         </div>
       )}
 
       {provider !== 'openclaw' && isOrchestrator && agentOptions.length > 0 && (
         <div className="mb-8">
-          <label className="block font-display text-[12px] font-600 text-text-2 uppercase tracking-[0.08em] mb-3">Available Agents</label>
-          <div className="flex flex-wrap gap-2">
-            {agentOptions.map((a) => (
-              <button
-                key={a.id}
-                onClick={() => toggleAgent(a.id)}
-                className={`px-3 py-2 rounded-[10px] text-[13px] font-600 cursor-pointer transition-all border
-                  ${subAgentIds.includes(a.id)
-                    ? 'bg-accent-soft border-accent-bright/25 text-accent-bright'
-                    : 'bg-surface border-white/[0.06] text-text-3 hover:text-text-2'}`}
-                style={{ fontFamily: 'inherit' }}
-              >
-                {a.name}
-              </button>
-            ))}
-          </div>
+          <SectionLabel>Available Agents</SectionLabel>
+          <AgentPickerList
+            agents={agentOptions}
+            selected={subAgentIds}
+            onSelect={(id) => toggleAgent(id)}
+          />
         </div>
       )}
 
@@ -1366,7 +1359,7 @@ export function AgentSheet() {
           onClick={handleTestAndSave}
           disabled={!name.trim() || providerNeedsKey || testStatus === 'testing' || saving || (!openclawEnabled && testStatus === 'pass')}
           className={`flex-1 py-3.5 rounded-[14px] border-none text-white text-[15px] font-600 cursor-pointer active:scale-[0.97] disabled:opacity-60 transition-all hover:brightness-110
-            ${testStatus === 'pass' ? 'bg-emerald-600 shadow-[0_4px_20px_rgba(16,185,129,0.25)]' : 'bg-[#6366F1] shadow-[0_4px_20px_rgba(99,102,241,0.25)]'}`}
+            ${testStatus === 'pass' ? 'bg-emerald-600 shadow-[0_4px_20px_rgba(16,185,129,0.25)]' : 'bg-accent-bright shadow-[0_4px_20px_rgba(99,102,241,0.25)]'}`}
           style={{ fontFamily: 'inherit' }}
         >
           {openclawEnabled

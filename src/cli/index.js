@@ -57,6 +57,29 @@ const COMMAND_GROUPS = [
     ],
   },
   {
+    name: 'chatrooms',
+    description: 'Manage multi-agent chatrooms',
+    commands: [
+      cmd('list', 'GET', '/chatrooms', 'List chatrooms'),
+      cmd('get', 'GET', '/chatrooms/:id', 'Get chatroom by id'),
+      cmd('create', 'POST', '/chatrooms', 'Create a chatroom', { expectsJsonBody: true }),
+      cmd('update', 'PUT', '/chatrooms/:id', 'Update a chatroom', { expectsJsonBody: true }),
+      cmd('delete', 'DELETE', '/chatrooms/:id', 'Delete a chatroom'),
+      cmd('chat', 'POST', '/chatrooms/:id/chat', 'Post a message to a chatroom and stream agent replies', {
+        expectsJsonBody: true,
+        responseType: 'sse',
+      }),
+      cmd('add-member', 'POST', '/chatrooms/:id/members', 'Add an agent to a chatroom (use --data \'{"agentId":"..."}\')', { expectsJsonBody: true }),
+      cmd('remove-member', 'DELETE', '/chatrooms/:id/members', 'Remove an agent from a chatroom (use --data \'{"agentId":"..."}\')', { expectsJsonBody: true }),
+      cmd('react', 'POST', '/chatrooms/:id/reactions', 'Toggle a reaction on a chatroom message', {
+        expectsJsonBody: true,
+      }),
+      cmd('pin', 'POST', '/chatrooms/:id/pins', 'Toggle pin on a chatroom message', {
+        expectsJsonBody: true,
+      }),
+    ],
+  },
+  {
     name: 'connectors',
     description: 'Manage chat connectors',
     commands: [
@@ -427,6 +450,7 @@ const COMMAND_GROUPS = [
       cmd('list', 'GET', '/tasks', 'List tasks'),
       cmd('get', 'GET', '/tasks/:id', 'Get task'),
       cmd('create', 'POST', '/tasks', 'Create task', { expectsJsonBody: true }),
+      cmd('bulk', 'POST', '/tasks/bulk', 'Bulk update tasks (status/agent/project)', { expectsJsonBody: true }),
       cmd('update', 'PUT', '/tasks/:id', 'Update task', { expectsJsonBody: true }),
       cmd('delete', 'DELETE', '/tasks/:id', 'Delete task'),
       cmd('purge', 'DELETE', '/tasks', 'Bulk delete tasks', { expectsJsonBody: true }),

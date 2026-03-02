@@ -1,8 +1,11 @@
 'use client'
 
+import { AgentAvatar } from '@/components/agents/agent-avatar'
+
 interface Props {
   user: string
   size?: 'xs' | 'sm' | 'md' | 'lg'
+  avatarSeed?: string
 }
 
 const sizes = {
@@ -22,7 +25,13 @@ function userGradient(name: string): string {
   return `linear-gradient(135deg, hsl(${hue}, 70%, 35%), hsl(${(hue + 30) % 360}, 75%, 50%))`
 }
 
-export function Avatar({ user, size = 'md' }: Props) {
+const pixelSizes: Record<string, number> = { xs: 24, sm: 28, md: 36, lg: 72 }
+
+export function Avatar({ user, size = 'md', avatarSeed }: Props) {
+  if (avatarSeed) {
+    return <AgentAvatar seed={avatarSeed} name={user} size={pixelSizes[size] || 36} />
+  }
+
   const initial = (user || '?')[0].toUpperCase()
   return (
     <div

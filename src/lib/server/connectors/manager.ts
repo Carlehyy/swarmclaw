@@ -7,6 +7,8 @@ import { WORKSPACE_DIR } from '../data-dir'
 import { streamAgentChat } from '../stream-agent-chat'
 import { notify } from '../ws-hub'
 import { logExecution } from '../execution-log'
+import { enqueueSystemEvent } from '../system-events'
+import { requestHeartbeatNow } from '../heartbeat-wake'
 import type { Connector } from '@/types'
 import type { ConnectorInstance, InboundMessage, InboundMedia } from './types'
 import {
@@ -430,6 +432,15 @@ async function routeMessage(connector: Connector, msg: InboundMessage): Promise<
   const effectiveAgentId = msg.agentIdOverride || connector.agentId
   const agent = agents[effectiveAgentId]
   if (!agent) return '[Error] Connector agent not found.'
+
+  // Enqueue system event + heartbeat wake for the agent
+  const preview = (msg.text || '').slice(0, 80)
+  enqueueSystemEvent(
+    `connector:${connector.id}:${msg.channelId}`,
+    `Inbound message from ${msg.platform}: ${preview}`,
+    'connector-message',
+  )
+  requestHeartbeatNow({ agentId: effectiveAgentId, reason: 'connector-message' })
 
   // Log connector trigger
   const triggerSessionKey = `connector:${connector.id}:${msg.channelId}`

@@ -1,8 +1,8 @@
 {
   "version": 1,
-  "generatedAt": "2026-03-01T18:56:22.545Z",
-  "totalIssues": 639,
-  "uniqueIssues": 231,
+  "generatedAt": "2026-03-02T17:52:37.319Z",
+  "totalIssues": 601,
+  "uniqueIssues": 214,
   "issues": [
     {
       "filePath": "bin/server-cmd.js",
@@ -68,13 +68,6 @@
       "count": 1
     },
     {
-      "filePath": "src/app/api/credentials/route.ts",
-      "ruleId": "@typescript-eslint/no-explicit-any",
-      "severity": 2,
-      "message": "Unexpected any. Specify a different type.",
-      "count": 2
-    },
-    {
       "filePath": "src/app/api/daemon/route.ts",
       "ruleId": "@typescript-eslint/no-unused-vars",
       "severity": 1,
@@ -135,13 +128,6 @@
       "ruleId": "@typescript-eslint/no-unused-vars",
       "severity": 1,
       "message": "'_req' is defined but never used.",
-      "count": 1
-    },
-    {
-      "filePath": "src/app/api/plugins/install/route.ts",
-      "ruleId": "@typescript-eslint/no-explicit-any",
-      "severity": 2,
-      "message": "Unexpected any. Specify a different type.",
       "count": 1
     },
     {
@@ -384,13 +370,6 @@
     },
     {
       "filePath": "src/components/agents/agent-card.tsx",
-      "ruleId": "@typescript-eslint/no-explicit-any",
-      "severity": 2,
-      "message": "Unexpected any. Specify a different type.",
-      "count": 6
-    },
-    {
-      "filePath": "src/components/agents/agent-card.tsx",
       "ruleId": "react-hooks/purity",
       "severity": 2,
       "message": "Error: Cannot call impure function during render `Date.now` is an impure function. Calling an impure function can produce unstable results that update unpredictably when the component happens to re-render. (https://react.dev/reference/rules/components-and-hooks-must-be-pure#components-and-hooks-must-be-idempotent).",
@@ -597,7 +576,7 @@
       "ruleId": "@next/next/no-img-element",
       "severity": 1,
       "message": "Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` or a custom image loader to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element",
-      "count": 3
+      "count": 1
     },
     {
       "filePath": "src/components/chat/session-debug-panel.tsx",
@@ -615,6 +594,13 @@
     },
     {
       "filePath": "src/components/chat/tool-call-bubble.tsx",
+      "ruleId": "@next/next/no-img-element",
+      "severity": 1,
+      "message": "Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` or a custom image loader to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element",
+      "count": 1
+    },
+    {
+      "filePath": "src/components/chatrooms/chatroom-message.tsx",
       "ruleId": "@next/next/no-img-element",
       "severity": 1,
       "message": "Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` or a custom image loader to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element",
@@ -646,34 +632,6 @@
       "ruleId": "react-hooks/exhaustive-deps",
       "severity": 1,
       "message": "React Hook useEffect has missing dependencies: 'loadAgents' and 'loadCredentials'. Either include them or remove the dependency array.",
-      "count": 1
-    },
-    {
-      "filePath": "src/components/connectors/connector-sheet.tsx",
-      "ruleId": "@typescript-eslint/no-explicit-any",
-      "severity": 2,
-      "message": "Unexpected any. Specify a different type.",
-      "count": 9
-    },
-    {
-      "filePath": "src/components/input/chat-input.tsx",
-      "ruleId": "@next/next/no-img-element",
-      "severity": 1,
-      "message": "Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` or a custom image loader to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element",
-      "count": 1
-    },
-    {
-      "filePath": "src/components/input/chat-input.tsx",
-      "ruleId": "react-hooks/exhaustive-deps",
-      "severity": 1,
-      "message": "React Hook useCallback has a missing dependency: 'textareaRef'. Either include it or remove the dependency array.",
-      "count": 1
-    },
-    {
-      "filePath": "src/components/input/chat-input.tsx",
-      "ruleId": "react-hooks/preserve-manual-memoization",
-      "severity": 2,
-      "message": "Compilation Skipped: Existing memoization could not be preserved React Compiler has skipped optimizing this component because the existing manual memoization could not be preserved. The inferred dependencies did not match the manually specified dependencies, which could cause the value to change more or less frequently than expected. The inferred dependency was `textareaRef`, but the source dependencies were [value, streaming, onSend, pendingFiles.length]. Inferred different dependency than source.",
       "count": 1
     },
     {
@@ -730,69 +688,6 @@
       "ruleId": "@next/next/no-img-element",
       "severity": 1,
       "message": "Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` or a custom image loader to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element",
-      "count": 1
-    },
-    {
-      "filePath": "src/components/memory/memory-detail.tsx",
-      "ruleId": "react-hooks/exhaustive-deps",
-      "severity": 1,
-      "message": "React Hook useCallback has a missing dependency: 'triggerRefresh'. Either include it or remove the dependency array.",
-      "count": 1
-    },
-    {
-      "filePath": "src/components/memory/memory-detail.tsx",
-      "ruleId": "react-hooks/exhaustive-deps",
-      "severity": 1,
-      "message": "React Hook useCallback has missing dependencies: 'setActiveView' and 'setCurrentSession'. Either include them or remove the dependency array.",
-      "count": 1
-    },
-    {
-      "filePath": "src/components/memory/memory-detail.tsx",
-      "ruleId": "react-hooks/exhaustive-deps",
-      "severity": 1,
-      "message": "React Hook useCallback has missing dependencies: 'setSelectedId' and 'triggerRefresh'. Either include them or remove the dependency array.",
-      "count": 1
-    },
-    {
-      "filePath": "src/components/memory/memory-detail.tsx",
-      "ruleId": "react-hooks/preserve-manual-memoization",
-      "severity": 2,
-      "message": "Compilation Skipped: Existing memoization could not be preserved React Compiler has skipped optimizing this component because the existing manual memoization could not be preserved. The inferred dependencies did not match the manually specified dependencies, which could cause the value to change more or less frequently than expected. The inferred dependency was `setActiveView`, but the source dependencies were [entry]. Inferred different dependency than source.",
-      "count": 1
-    },
-    {
-      "filePath": "src/components/memory/memory-detail.tsx",
-      "ruleId": "react-hooks/preserve-manual-memoization",
-      "severity": 2,
-      "message": "Compilation Skipped: Existing memoization could not be preserved React Compiler has skipped optimizing this component because the existing manual memoization could not be preserved. The inferred dependencies did not match the manually specified dependencies, which could cause the value to change more or less frequently than expected. The inferred dependency was `setCurrentSession`, but the source dependencies were [entry]. Inferred different dependency than source.",
-      "count": 1
-    },
-    {
-      "filePath": "src/components/memory/memory-detail.tsx",
-      "ruleId": "react-hooks/preserve-manual-memoization",
-      "severity": 2,
-      "message": "Compilation Skipped: Existing memoization could not be preserved React Compiler has skipped optimizing this component because the existing manual memoization could not be preserved. The inferred dependencies did not match the manually specified dependencies, which could cause the value to change more or less frequently than expected. The inferred dependency was `setSelectedId`, but the source dependencies were [entry]. Inferred different dependency than source.",
-      "count": 1
-    },
-    {
-      "filePath": "src/components/memory/memory-detail.tsx",
-      "ruleId": "react-hooks/preserve-manual-memoization",
-      "severity": 2,
-      "message": "Compilation Skipped: Existing memoization could not be preserved React Compiler has skipped optimizing this component because the existing manual memoization could not be preserved. The inferred dependencies did not match the manually specified dependencies, which could cause the value to change more or less frequently than expected. The inferred dependency was `triggerRefresh`, but the source dependencies were [entry, title, content, category, dirty]. Inferred different dependency than source.",
-      "count": 1
-    },
-    {
-      "filePath": "src/components/memory/memory-detail.tsx",
-      "ruleId": "react-hooks/preserve-manual-memoization",
-      "severity": 2,
-      "message": "Compilation Skipped: Existing memoization could not be preserved React Compiler has skipped optimizing this component because the existing manual memoization could not be preserved. The inferred dependencies did not match the manually specified dependencies, which could cause the value to change more or less frequently than expected. The inferred dependency was `triggerRefresh`, but the source dependencies were [entry]. Inferred different dependency than source.",
-      "count": 1
-    },
-    {
-      "filePath": "src/components/memory/memory-detail.tsx",
-      "ruleId": "react-hooks/set-state-in-effect",
-      "severity": 2,
-      "message": "Error: Calling setState synchronously within an effect can trigger cascading renders Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following: * Update external systems with the latest state from React. * Subscribe for updates from some external system, calling setState in a callback function when external state changes. Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).",
       "count": 1
     },
     {
@@ -901,13 +796,6 @@
       "count": 1
     },
     {
-      "filePath": "src/components/secrets/secret-sheet.tsx",
-      "ruleId": "@typescript-eslint/no-explicit-any",
-      "severity": 2,
-      "message": "Unexpected any. Specify a different type.",
-      "count": 2
-    },
-    {
       "filePath": "src/components/secrets/secrets-list.tsx",
       "ruleId": "react-hooks/exhaustive-deps",
       "severity": 1,
@@ -930,16 +818,23 @@
     },
     {
       "filePath": "src/components/sessions/new-session-sheet.tsx",
-      "ruleId": "@typescript-eslint/no-explicit-any",
-      "severity": 2,
-      "message": "Unexpected any. Specify a different type.",
-      "count": 8
-    },
-    {
-      "filePath": "src/components/sessions/new-session-sheet.tsx",
       "ruleId": "react-hooks/set-state-in-effect",
       "severity": 2,
       "message": "Error: Calling setState synchronously within an effect can trigger cascading renders Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following: * Update external systems with the latest state from React. * Subscribe for updates from some external system, calling setState in a callback function when external state changes. Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).",
+      "count": 2
+    },
+    {
+      "filePath": "src/components/sessions/session-list.tsx",
+      "ruleId": "react-hooks/set-state-in-effect",
+      "severity": 2,
+      "message": "Error: Calling setState synchronously within an effect can trigger cascading renders Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following: * Update external systems with the latest state from React. * Subscribe for updates from some external system, calling setState in a callback function when external state changes. Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).",
+      "count": 1
+    },
+    {
+      "filePath": "src/components/shared/attachment-chip.tsx",
+      "ruleId": "@next/next/no-img-element",
+      "severity": 1,
+      "message": "Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` or a custom image loader to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element",
       "count": 2
     },
     {
@@ -947,6 +842,13 @@
       "ruleId": "react-hooks/set-state-in-effect",
       "severity": 2,
       "message": "Error: Calling setState synchronously within an effect can trigger cascading renders Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following: * Update external systems with the latest state from React. * Subscribe for updates from some external system, calling setState in a callback function when external state changes. Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).",
+      "count": 1
+    },
+    {
+      "filePath": "src/components/shared/file-preview.tsx",
+      "ruleId": "@next/next/no-img-element",
+      "severity": 1,
+      "message": "Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` or a custom image loader to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element",
       "count": 1
     },
     {
@@ -999,20 +901,6 @@
       "count": 1
     },
     {
-      "filePath": "src/components/shared/settings/settings-sheet.tsx",
-      "ruleId": "react-hooks/exhaustive-deps",
-      "severity": 1,
-      "message": "React Hook useEffect has missing dependencies: 'loadAgents', 'loadCredentials', 'loadProviders', 'loadSecrets', and 'loadSettings'. Either include them or remove the dependency array.",
-      "count": 1
-    },
-    {
-      "filePath": "src/components/skills/skill-list.tsx",
-      "ruleId": "react-hooks/exhaustive-deps",
-      "severity": 1,
-      "message": "React Hook useEffect has a missing dependency: 'loadSkills'. Either include it or remove the dependency array.",
-      "count": 1
-    },
-    {
       "filePath": "src/components/skills/skill-sheet.tsx",
       "ruleId": "react-hooks/exhaustive-deps",
       "severity": 1,
@@ -1023,7 +911,7 @@
       "filePath": "src/components/tasks/task-board.tsx",
       "ruleId": "react-hooks/exhaustive-deps",
       "severity": 1,
-      "message": "React Hook useEffect has missing dependencies: 'loadAgents' and 'loadTasks'. Either include them or remove the dependency array.",
+      "message": "React Hook useEffect has missing dependencies: 'loadAgents', 'loadProjects', and 'loadTasks'. Either include them or remove the dependency array.",
       "count": 1
     },
     {
@@ -1314,13 +1202,6 @@
       "count": 1
     },
     {
-      "filePath": "src/lib/server/context-manager.ts",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "message": "'ProviderType' is defined but never used.",
-      "count": 1
-    },
-    {
       "filePath": "src/lib/server/embeddings.ts",
       "ruleId": "@typescript-eslint/no-explicit-any",
       "severity": 2,
@@ -1333,6 +1214,13 @@
       "severity": 2,
       "message": "Unexpected any. Specify a different type.",
       "count": 18
+    },
+    {
+      "filePath": "src/lib/server/heartbeat-wake.ts",
+      "ruleId": "@typescript-eslint/no-unused-vars",
+      "severity": 1,
+      "message": "'_key' is assigned a value but never used.",
+      "count": 1
     },
     {
       "filePath": "src/lib/server/langgraph-checkpoint.ts",
@@ -1402,7 +1290,7 @@
       "ruleId": "@typescript-eslint/no-explicit-any",
       "severity": 2,
       "message": "Unexpected any. Specify a different type.",
-      "count": 11
+      "count": 13
     },
     {
       "filePath": "src/lib/server/openclaw-gateway.ts",
@@ -1489,13 +1377,6 @@
       "count": 1
     },
     {
-      "filePath": "src/lib/server/session-tools/context-mgmt.ts",
-      "ruleId": "@typescript-eslint/no-explicit-any",
-      "severity": 2,
-      "message": "Unexpected any. Specify a different type.",
-      "count": 2
-    },
-    {
       "filePath": "src/lib/server/session-tools/context.ts",
       "ruleId": "@typescript-eslint/no-explicit-any",
       "severity": 2,
@@ -1549,7 +1430,7 @@
       "ruleId": "@typescript-eslint/no-explicit-any",
       "severity": 2,
       "message": "Unexpected any. Specify a different type.",
-      "count": 10
+      "count": 11
     },
     {
       "filePath": "src/lib/server/session-tools/session-info.ts",
@@ -1591,7 +1472,7 @@
       "ruleId": "@typescript-eslint/no-explicit-any",
       "severity": 2,
       "message": "Unexpected any. Specify a different type.",
-      "count": 48
+      "count": 50
     },
     {
       "filePath": "src/lib/server/stream-agent-chat.ts",
@@ -1605,7 +1486,7 @@
       "ruleId": "@typescript-eslint/no-explicit-any",
       "severity": 2,
       "message": "Unexpected any. Specify a different type.",
-      "count": 6
+      "count": 4
     },
     {
       "filePath": "src/lib/server/ws-hub.ts",

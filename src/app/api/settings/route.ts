@@ -56,5 +56,14 @@ export async function PUT(req: Request) {
   settings.maxLinkedMemoriesExpanded = nextLinked
 
   saveSettings(settings)
+
+  // Restart heartbeat service when heartbeat-related settings change
+  const heartbeatKeys = ['heartbeatIntervalSec', 'heartbeatInterval', 'heartbeatPrompt', 'heartbeatEnabled', 'heartbeatActiveStart', 'heartbeatActiveEnd']
+  if (heartbeatKeys.some((k) => k in body)) {
+    import('@/lib/server/heartbeat-service').then(({ restartHeartbeatService }) => {
+      restartHeartbeatService()
+    }).catch(() => { /* heartbeat service may not be initialized yet */ })
+  }
+
   return NextResponse.json(settings)
 }

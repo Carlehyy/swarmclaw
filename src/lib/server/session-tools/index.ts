@@ -16,6 +16,7 @@ import { buildConnectorTools } from './connector'
 import { buildContextTools } from './context-mgmt'
 import { buildSandboxTools } from './sandbox'
 import { buildOpenClawNodeTools } from './openclaw-nodes'
+import { buildChatroomTools } from './chatroom'
 
 export type { ToolContext, SessionToolsResult }
 export { sweepOrphanedBrowsers, cleanupSessionBrowser, getActiveBrowserCount, hasActiveBrowser }
@@ -97,6 +98,7 @@ export async function buildSessionTools(cwd: string, enabledTools: string[], ctx
     ...buildContextTools(bctx),
     ...buildSandboxTools(bctx),
     ...buildOpenClawNodeTools(bctx),
+    ...buildChatroomTools(bctx),
   )
 
   // ---------------------------------------------------------------------------

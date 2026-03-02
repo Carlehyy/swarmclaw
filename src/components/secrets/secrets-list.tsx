@@ -2,6 +2,7 @@
 
 import { useEffect } from 'react'
 import { useAppStore } from '@/stores/use-app-store'
+import { AgentAvatar } from '@/components/agents/agent-avatar'
 import { api } from '@/lib/api-client'
 
 interface Props {
@@ -37,7 +38,7 @@ export function SecretsList({ inSidebar }: Props) {
           </svg>
         </div>
         <p className="text-[13px] text-text-3 mb-1 font-600">No secrets yet</p>
-        <p className="text-[12px] text-text-3/60">Add API keys & credentials for orchestrators</p>
+        <p className="text-[12px] text-text-3/60">Add API keys & credentials for your agents</p>
         <button
           onClick={() => { setEditingSecretId(null); setSecretSheetOpen(true) }}
           className="mt-3 px-4 py-2 rounded-[10px] bg-transparent text-accent-bright text-[13px] font-600 cursor-pointer border border-accent-bright/20 hover:bg-accent-soft transition-all"
@@ -54,11 +55,11 @@ export function SecretsList({ inSidebar }: Props) {
       <div className={inSidebar ? 'space-y-2' : 'grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3'}>
         {secretList.map((secret) => {
           const scopeLabel = secret.scope === 'global'
-            ? 'All orchestrators'
-            : `${secret.agentIds.length} orchestrator(s)`
-          const scopedNames = secret.scope === 'agent'
-            ? secret.agentIds.map((id) => agents[id]?.name).filter(Boolean).join(', ')
-            : null
+            ? 'Global'
+            : `${secret.agentIds.length} agent(s)`
+          const scopedAgents = secret.scope === 'agent'
+            ? secret.agentIds.map((id) => agents[id]).filter(Boolean)
+            : []
           return (
             <button
               key={secret.id}
@@ -97,8 +98,17 @@ export function SecretsList({ inSidebar }: Props) {
                   {scopeLabel}
                 </span>
               </div>
-              {scopedNames && (
-                <div className="text-[10px] text-text-3/50 mt-1 pl-[22px] truncate">{scopedNames}</div>
+              {scopedAgents.length > 0 && (
+                <div className="flex items-center gap-1.5 mt-1.5 pl-[22px]">
+                  <div className="flex items-center -space-x-1.5">
+                    {scopedAgents.slice(0, 5).map((agent) => (
+                      <AgentAvatar key={agent.id} seed={agent.avatarSeed} name={agent.name} size={16} className="ring-1 ring-surface" />
+                    ))}
+                  </div>
+                  {scopedAgents.length > 5 && (
+                    <span className="text-[10px] font-600 text-text-3/60 ml-0.5">+{scopedAgents.length - 5}</span>
+                  )}
+                </div>
               )}
             </button>
           )

@@ -1,0 +1,84 @@
+import { NextResponse } from 'next/server'
+import { loadChatrooms, saveChatrooms, loadAgents } from '@/lib/server/storage'
+import { notify } from '@/lib/server/ws-hub'
+import { notFound } from '@/lib/server/collection-helpers'
+import { genId } from '@/lib/id'
+
+export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params
+  const chatrooms = loadChatrooms()
+  const chatroom = chatrooms[id]
+  if (!chatroom) return notFound()
+  return NextResponse.json(chatroom)
+}
+
+export async function PUT(req: Request, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params
+  const body = await req.json()
+  const chatrooms = loadChatrooms()
+  const chatroom = chatrooms[id]
+  if (!chatroom) return notFound()
+
+  if (body.name !== undefined) chatroom.name = body.name
+  if (body.description !== undefined) chatroom.description = body.description
+
+  // Diff agentIds and inject join/leave system messages
+  if (Array.isArray(body.agentIds)) {
+    const oldIds = new Set(chatroom.agentIds)
+    const newIds = new Set(body.agentIds as string[])
+    const added = (body.agentIds as string[]).filter((aid: string) => !oldIds.has(aid))
+    const removed = chatroom.agentIds.filter((aid: string) => !newIds.has(aid))
+
+    if (added.length > 0 || removed.length > 0) {
+      const agents = loadAgents()
+      if (!Array.isArray(chatroom.messages)) chatroom.messages = []
+      const now = Date.now()
+      let offset = 0
+      for (const aid of added) {
+        chatroom.messages.push({
+          id: genId(),
+          senderId: 'system',
+          senderName: 'System',
+          role: 'assistant',
+          text: `${agents[aid]?.name || 'Unknown agent'} has joined the chat`,
+          mentions: [],
+          reactions: [],
+          time: now + offset++,
+        })
+      }
+      for (const aid of removed) {
+        chatroom.messages.push({
+          id: genId(),
+          senderId: 'system',
+          senderName: 'System',
+          role: 'assistant',
+          text: `${agents[aid]?.name || 'Unknown agent'} has left the chat`,
+          mentions: [],
+          reactions: [],
+          time: now + offset++,
+        })
+      }
+    }
+
+    chatroom.agentIds = body.agentIds
+  }
+
+  chatroom.updatedAt = Date.now()
+
+  chatrooms[id] = chatroom
+  saveChatrooms(chatrooms)
+  notify('chatrooms')
+  notify(`chatroom:${id}`)
+  return NextResponse.json(chatroom)
+}
+
+export async function DELETE(_req: Request, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params
+  const chatrooms = loadChatrooms()
+  if (!chatrooms[id]) return notFound()
+
+  delete chatrooms[id]
+  saveChatrooms(chatrooms)
+  notify('chatrooms')
+  return NextResponse.json({ ok: true })
+}

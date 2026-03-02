@@ -5,6 +5,7 @@ import { useAppStore } from '@/stores/use-app-store'
 import { useWs } from '@/hooks/use-ws'
 import { api } from '@/lib/api-client'
 import type { BoardTaskStatus } from '@/types'
+import { EmptyState } from '@/components/shared/empty-state'
 
 const STATUS_DOT: Record<BoardTaskStatus, string> = {
   backlog: 'bg-white/20',
@@ -88,9 +89,16 @@ export function TaskList({ inSidebar }: { inSidebar?: boolean }) {
       )}
 
       {filtered.length === 0 && (
-        <div className="text-center text-text-3 text-[13px] py-12 px-6">
-          {sorted.length === 0 ? 'No tasks yet' : 'No matching tasks'}
-        </div>
+        <EmptyState
+          icon={
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" className="text-accent-bright">
+              <rect x="3" y="3" width="18" height="18" rx="2" fill="currentColor" opacity="0.2" />
+              <path d="M9 11l3 3 5-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          }
+          title={sorted.length === 0 ? 'No tasks yet' : 'No matching tasks'}
+          subtitle={sorted.length === 0 ? 'Create tasks and assign agents to run them' : 'Try adjusting your search'}
+        />
       )}
       {filtered.map((task) => {
         const agent = agents[task.agentId]
@@ -101,7 +109,7 @@ export function TaskList({ inSidebar }: { inSidebar?: boolean }) {
               setEditingTaskId(task.id)
               setTaskSheetOpen(true)
             }}
-            className="w-full text-left px-5 py-3.5 border-none bg-transparent cursor-pointer hover:bg-white/[0.03] transition-all"
+            className="w-full text-left py-3.5 px-4 rounded-[14px] border border-transparent bg-transparent cursor-pointer hover:bg-white/[0.03] transition-all"
             style={{ fontFamily: 'inherit' }}
           >
             <div className="flex items-center gap-2.5">

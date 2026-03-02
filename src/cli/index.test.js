@@ -81,6 +81,36 @@ test('CLI command map covers all API route method/path pairs', () => {
   assert.deepEqual(missing, [])
 })
 
+test('Binary CLI router reaches every mapped API command pair', async () => {
+  const { shouldUseLegacyTsCli, TS_CLI_ACTIONS } = await import('../../bin/swarmclaw.js')
+
+  for (const command of COMMANDS) {
+    if (command.virtual) continue
+
+    const pathArgs = extractPathParams(command.route).map((name, index) => `${name}-${index + 1}`)
+    const routedToLegacyTs = shouldUseLegacyTsCli([command.group, command.action, ...pathArgs])
+
+    if (routedToLegacyTs) {
+      assert.ok(
+        TS_CLI_ACTIONS[command.group]?.has(command.action),
+        `legacy TS router should only claim known actions (${command.group} ${command.action})`,
+      )
+    }
+  }
+
+  // Spot-check known API commands that are map-only today.
+  assert.equal(shouldUseLegacyTsCli(['chatrooms', 'list']), false)
+  assert.equal(shouldUseLegacyTsCli(['tasks', 'approve', 'task-1']), false)
+
+  // Help paths should route to mapped CLI for full command discoverability.
+  assert.equal(shouldUseLegacyTsCli([]), false)
+  assert.equal(shouldUseLegacyTsCli(['--help']), false)
+  assert.equal(shouldUseLegacyTsCli(['tasks', '--help']), false)
+
+  // And a legacy command that should remain on the richer TS path.
+  assert.equal(shouldUseLegacyTsCli(['tasks', 'create']), true)
+})
+
 test('parseArgv parses group/action/options', () => {
   const parsed = parseArgv([
     'runs',

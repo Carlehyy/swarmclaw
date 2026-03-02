@@ -49,9 +49,9 @@ export async function POST(req: Request) {
     fs.writeFileSync(dest, code, 'utf8')
 
     return NextResponse.json({ ok: true, filename: sanitized })
-  } catch (err: any) {
+  } catch (err: unknown) {
     return NextResponse.json(
-      { error: 'Failed to install plugin', message: err.message },
+      { error: 'Failed to install plugin', message: err instanceof Error ? err.message : String(err) },
       { status: 500 },
     )
   }

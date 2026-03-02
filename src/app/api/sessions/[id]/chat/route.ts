@@ -17,6 +17,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const attachedFiles = Array.isArray(body.attachedFiles) ? body.attachedFiles.filter((f: unknown) => typeof f === 'string') as string[] : undefined
   const internal = body.internal === true
   const queueMode = normalizeQueueMode(body.queueMode, internal)
+  const replyToId = typeof body.replyToId === 'string' ? body.replyToId : undefined
 
   const hasFiles = !!(imagePath || imageUrl || (attachedFiles && attachedFiles.length > 0))
   if (!message.trim() && !hasFiles) {
@@ -46,6 +47,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         source: internal ? 'heartbeat' : 'chat',
         mode: queueMode,
         onEvent: (ev) => writeEvent(ev as unknown as Record<string, unknown>),
+        replyToId,
       })
 
       log.info('chat', `Enqueued session run ${run.runId}`, {

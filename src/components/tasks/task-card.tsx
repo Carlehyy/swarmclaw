@@ -14,8 +14,16 @@ function timeAgo(ts: number) {
   return `${Math.floor(diff / 86400_000)}d ago`
 }
 
-export function TaskCard({ task }: { task: BoardTask }) {
+interface TaskCardProps {
+  task: BoardTask
+  selectionMode?: boolean
+  selected?: boolean
+  onToggleSelect?: (id: string) => void
+}
+
+export function TaskCard({ task, selectionMode, selected, onToggleSelect }: TaskCardProps) {
   const agents = useAppStore((s) => s.agents)
+  const projects = useAppStore((s) => s.projects)
   const setEditingTaskId = useAppStore((s) => s.setEditingTaskId)
   const setTaskSheetOpen = useAppStore((s) => s.setTaskSheetOpen)
   const loadTasks = useAppStore((s) => s.loadTasks)
@@ -24,6 +32,7 @@ export function TaskCard({ task }: { task: BoardTask }) {
   const [dragging, setDragging] = useState(false)
 
   const agent = agents[task.agentId]
+  const project = task.projectId ? projects[task.projectId] : null
 
   const isBlocked = Array.isArray(task.blockedBy) && task.blockedBy.length > 0
   const isOverdue = task.dueAt && task.dueAt < Date.now() && task.status !== 'completed' && task.status !== 'archived'
@@ -65,17 +74,39 @@ export function TaskCard({ task }: { task: BoardTask }) {
 
   return (
     <div
-      draggable
-      onDragStart={handleDragStart}
-      onDragEnd={handleDragEnd}
-      onClick={() => {
-        setEditingTaskId(task.id)
-        setTaskSheetOpen(true)
+      draggable={!selectionMode}
+      onDragStart={selectionMode ? undefined : handleDragStart}
+      onDragEnd={selectionMode ? undefined : handleDragEnd}
+      onClick={(e) => {
+        if (selectionMode && onToggleSelect) {
+          e.stopPropagation()
+          onToggleSelect(task.id)
+        } else {
+          setEditingTaskId(task.id)
+          setTaskSheetOpen(true)
+        }
       }}
-      className={`p-4 rounded-[14px] border border-white/[0.06] border-l-[3px] ${borderColor} bg-surface hover:bg-surface-2 cursor-grab active:cursor-grabbing
-        transition-all group ${dragging ? 'opacity-40 scale-[0.97]' : ''}`}
+      className={`p-4 rounded-[14px] border border-l-[3px] ${borderColor} bg-surface hover:bg-surface-2 transition-all group
+        ${selectionMode ? 'cursor-pointer' : 'cursor-grab active:cursor-grabbing'}
+        ${dragging ? 'opacity-40 scale-[0.97]' : ''}
+        ${selected ? 'border-accent-bright/40 bg-accent-bright/[0.04] ring-1 ring-accent-bright/20' : 'border-white/[0.06]'}`}
     >
       <div className="flex items-start gap-3 mb-3">
+        {/* Selection checkbox */}
+        {(selectionMode || selected) && (
+          <button
+            onClick={(e) => { e.stopPropagation(); onToggleSelect?.(task.id) }}
+            className={`w-5 h-5 rounded-[6px] border-2 flex items-center justify-center shrink-0 mt-0.5 cursor-pointer transition-all
+              ${selected
+                ? 'bg-accent-bright border-accent-bright'
+                : 'bg-transparent border-white/[0.2] hover:border-white/[0.4]'}`}
+            style={{ padding: 0, fontFamily: 'inherit' }}
+          >
+            {selected && (
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round"><path d="M20 6L9 17l-5-5" /></svg>
+            )}
+          </button>
+        )}
         {isBlocked && (
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="text-rose-400 shrink-0 mt-0.5">
             <title>{`Blocked by ${task.blockedBy?.length} task(s)`}</title>
@@ -150,6 +181,12 @@ export function TaskCard({ task }: { task: BoardTask }) {
         {agent && (
           <span className="px-2 py-1 rounded-[6px] bg-accent-soft text-accent-bright text-[11px] font-600">
             {agent.name}
+          </span>
+        )}
+        {project && (
+          <span className="inline-flex items-center gap-1 px-2 py-1 rounded-[6px] bg-white/[0.04] text-text-2 text-[11px] font-600">
+            <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: project.color || '#6366F1' }} />
+            {project.name}
           </span>
         )}
         <span className="text-[11px] text-text-3">{timeAgo(task.updatedAt)}</span>

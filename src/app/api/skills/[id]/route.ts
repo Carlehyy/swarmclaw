@@ -18,6 +18,10 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
   const body = await req.json()
   const result = mutateItem(ops, id, (skill) => {
     const normalized = normalizeSkillPayload({ ...skill, ...body })
+    const updatedScope = body.scope === 'agent' ? 'agent' as const : body.scope === 'global' ? 'global' as const : skill.scope
+    const updatedAgentIds = updatedScope === 'agent' && Array.isArray(body.agentIds)
+      ? (body.agentIds as unknown[]).filter((aid): aid is string => typeof aid === 'string')
+      : updatedScope === 'agent' ? (skill.agentIds || []) : []
     return {
       ...skill,
       ...body,
@@ -27,6 +31,8 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
       content: normalized.content,
       sourceUrl: normalized.sourceUrl,
       sourceFormat: normalized.sourceFormat,
+      scope: updatedScope,
+      agentIds: updatedAgentIds,
       id,
       updatedAt: Date.now(),
     }

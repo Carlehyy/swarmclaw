@@ -26,7 +26,13 @@ export async function GET(req: Request) {
   const requestedLimit = parseOptionalInt(searchParams.get('limit'))
   const requestedLinkedLimit = parseOptionalInt(searchParams.get('linkedLimit'))
 
+  const counts = searchParams.get('counts') === 'true'
   const db = getMemoryDb()
+
+  if (counts) {
+    return NextResponse.json(db.countsByAgent())
+  }
+
   const defaults = getMemoryLookupLimits()
   const limits = resolveLookupRequest(defaults, {
     depth: requestedDepth,
@@ -106,6 +112,8 @@ export async function POST(req: Request) {
     image: image as MemoryImage | null | undefined,
     imagePath: image && typeof image === 'object' && 'path' in image ? String((image as { path: string }).path) : null,
     linkedMemoryIds: body.linkedMemoryIds as string[] | undefined,
+    pinned: body.pinned === true,
+    sharedWith: Array.isArray(body.sharedWith) ? body.sharedWith as string[] : undefined,
   })
   return NextResponse.json(entry)
 }

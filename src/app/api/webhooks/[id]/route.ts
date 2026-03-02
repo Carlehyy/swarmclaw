@@ -1,8 +1,11 @@
 import { genId } from '@/lib/id'
+import { timingSafeEqual } from 'node:crypto'
 import { NextResponse } from 'next/server'
 import { loadAgents, loadSessions, loadWebhooks, saveSessions, saveWebhooks, appendWebhookLog, upsertWebhookRetry } from '@/lib/server/storage'
 import { WORKSPACE_DIR } from '@/lib/server/data-dir'
 import { enqueueSessionRun } from '@/lib/server/session-run-manager'
+import { enqueueSystemEvent } from '@/lib/server/system-events'
+import { requestHeartbeatNow } from '@/lib/server/heartbeat-wake'
 import { mutateItem, deleteItem, notFound, type CollectionOps } from '@/lib/server/collection-helpers'
 import type { WebhookRetryEntry } from '@/types'
 
@@ -71,7 +74,12 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   if (secret) {
     const url = new URL(req.url)
     const provided = req.headers.get('x-webhook-secret') || url.searchParams.get('secret') || ''
-    if (provided !== secret) {
+    const secretBuf = Buffer.from(secret)
+    const providedBuf = Buffer.from(provided)
+    // timingSafeEqual requires equal lengths; compare against secretBuf if lengths differ
+    const compareBuf = providedBuf.length === secretBuf.length ? providedBuf : secretBuf
+    const isInvalid = providedBuf.length !== secretBuf.length || !timingSafeEqual(secretBuf, compareBuf)
+    if (isInvalid) {
       appendWebhookLog(genId(8), {
         id: genId(8), webhookId: id, event: 'unknown',
         payload: '', status: 'error', error: 'Invalid webhook secret', timestamp: Date.now(),
@@ -192,6 +200,12 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       internal: false,
       mode: 'followup',
     })
+
+    // Enqueue system event + heartbeat wake
+    enqueueSystemEvent(sid, `Webhook received: ${webhook.name || id} (${incomingEvent})`)
+    if (webhook.agentId) {
+      requestHeartbeatNow({ agentId: webhook.agentId, reason: 'webhook' })
+    }
 
     appendWebhookLog(genId(8), {
       id: genId(8), webhookId: id, event: incomingEvent,

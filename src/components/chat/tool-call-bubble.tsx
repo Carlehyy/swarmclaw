@@ -308,7 +308,6 @@ function TimeoutQuickFix({ event }: { event: ToolEvent }) {
 }
 
 export function ToolCallBubble({ event }: { event: ToolEvent }) {
-  const [expanded, setExpanded] = useState(false)
   const [imgExpanded, setImgExpanded] = useState(false)
   const isError = event.status === 'error'
   const color = isError ? '#F43F5E' : (TOOL_COLORS[event.name] || '#6366F1')
@@ -367,84 +366,81 @@ export function ToolCallBubble({ event }: { event: ToolEvent }) {
 
   return (
     <div className="w-full text-left">
-      <button
-        onClick={() => isError && setExpanded(!expanded)}
-        className={`w-full text-left rounded-[12px] border bg-surface/80 backdrop-blur-sm transition-all duration-200 ${isError ? 'hover:bg-surface-2 cursor-pointer' : ''}`}
-        style={{ borderLeft: `3px solid ${color}`, borderColor: `${color}33` }}
-      >
-        <div className="flex items-center gap-2.5 px-3.5 py-2.5">
-          {isRunning ? (
-            <span className="w-3.5 h-3.5 shrink-0 rounded-full border-2 border-current animate-spin" style={{ color, borderTopColor: 'transparent' }} />
-          ) : isError ? (
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2.5" strokeLinecap="round" className="shrink-0">
-              <line x1="18" y1="6" x2="6" y2="18" />
-              <line x1="6" y1="6" x2="18" y2="18" />
-            </svg>
-          ) : (
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2.5" strokeLinecap="round" className="shrink-0">
-              <polyline points="20 6 9 17 4 12" />
-            </svg>
-          )}
-          <span className="text-[12px] font-700 uppercase tracking-wider shrink-0" style={{ color }}>
-            {label}
-          </span>
-          {delegationInfo ? (
-            <span className="text-[12px] text-text-2 font-mono truncate flex-1">
-              <span
-                role="link"
-                tabIndex={0}
-                onClick={handleAgentClick}
-                onKeyDown={(e) => e.key === 'Enter' && handleAgentClick(e as unknown as React.MouseEvent)}
-                className="text-accent-bright hover:underline cursor-pointer font-600"
-              >
-                {delegationInfo.agentName}
+      <details open={isError || isRunning || undefined} className="group/tool">
+        <summary
+          className="w-full text-left rounded-[12px] border bg-surface/80 backdrop-blur-sm transition-all duration-200 hover:bg-surface-2 cursor-pointer list-none [&::-webkit-details-marker]:hidden"
+          style={{ borderLeft: `3px solid ${color}`, borderColor: `${color}33` }}
+        >
+          <div className="flex items-center gap-2.5 px-3.5 py-2.5">
+            {isRunning ? (
+              <span className="w-3.5 h-3.5 shrink-0 rounded-full border-2 border-current animate-spin" style={{ color, borderTopColor: 'transparent' }} />
+            ) : isError ? (
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2.5" strokeLinecap="round" className="shrink-0">
+                <line x1="18" y1="6" x2="6" y2="18" />
+                <line x1="6" y1="6" x2="18" y2="18" />
+              </svg>
+            ) : (
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2.5" strokeLinecap="round" className="shrink-0">
+                <polyline points="20 6 9 17 4 12" />
+              </svg>
+            )}
+            <span className="label-mono shrink-0" style={{ color }}>
+              {label}
+            </span>
+            {delegationInfo ? (
+              <span className="text-[12px] text-text-2 font-mono truncate flex-1">
+                <span
+                  role="link"
+                  tabIndex={0}
+                  onClick={handleAgentClick}
+                  onKeyDown={(e) => e.key === 'Enter' && handleAgentClick(e as unknown as React.MouseEvent)}
+                  className="text-accent-bright hover:underline cursor-pointer font-600"
+                >
+                  {delegationInfo.agentName}
+                </span>
+                {delegationInfo.task && <span className="text-text-3">: {delegationInfo.task.slice(0, 80)}</span>}
               </span>
-              {delegationInfo.task && <span className="text-text-3">: {delegationInfo.task.slice(0, 80)}</span>}
-            </span>
-          ) : (
-            <span className="text-[12px] text-text-2 font-mono truncate flex-1">
-              {inputPreview}
-            </span>
-          )}
-          {hasMedia && !expanded && (
-            <span className="text-[10px] text-text-3/50 font-500 shrink-0">
-              {media.images.length > 0 && `${media.images.length} image${media.images.length > 1 ? 's' : ''}`}
-              {media.videos.length > 0 && `${(media.images.length > 0) ? ' · ' : ''}${media.videos.length} video${media.videos.length > 1 ? 's' : ''}`}
-              {media.pdfs.length > 0 && `${(media.images.length > 0 || media.videos.length > 0) ? ' · ' : ''}${media.pdfs.length} PDF${media.pdfs.length > 1 ? 's' : ''}`}
-              {media.files.length > 0 && `${(media.images.length > 0 || media.videos.length > 0 || media.pdfs.length > 0) ? ' · ' : ''}${media.files.length} file${media.files.length > 1 ? 's' : ''}`}
-            </span>
-          )}
-          {isError && (
+            ) : (
+              <span className="text-[12px] text-text-2 font-mono truncate flex-1">
+                {inputPreview}
+              </span>
+            )}
+            {hasMedia && (
+              <span className="text-[10px] text-text-3/50 font-500 shrink-0 group-open/tool:hidden">
+                {media.images.length > 0 && `${media.images.length} image${media.images.length > 1 ? 's' : ''}`}
+                {media.videos.length > 0 && `${(media.images.length > 0) ? ' · ' : ''}${media.videos.length} video${media.videos.length > 1 ? 's' : ''}`}
+                {media.pdfs.length > 0 && `${(media.images.length > 0 || media.videos.length > 0) ? ' · ' : ''}${media.pdfs.length} PDF${media.pdfs.length > 1 ? 's' : ''}`}
+                {media.files.length > 0 && `${(media.images.length > 0 || media.videos.length > 0 || media.pdfs.length > 0) ? ' · ' : ''}${media.files.length} file${media.files.length > 1 ? 's' : ''}`}
+              </span>
+            )}
             <svg
               width="12" height="12" viewBox="0 0 24 24" fill="none"
               stroke="currentColor" strokeWidth="2" strokeLinecap="round"
-              className={`shrink-0 text-text-3/70 transition-transform duration-200 ${expanded ? 'rotate-180' : ''}`}
+              className="shrink-0 text-text-3/70 transition-transform duration-200 group-open/tool:rotate-180"
             >
               <polyline points="6 9 12 15 18 9" />
             </svg>
+          </div>
+        </summary>
+
+        <div className="px-3.5 pb-3 pt-1 space-y-2 border-t border-white/[0.04] mt-0" onClick={(e) => e.stopPropagation()}>
+          <div className="label-mono">Input</div>
+          <pre className="text-[12px] text-text-2 font-mono whitespace-pre-wrap break-all bg-bg/50 rounded-[8px] px-3 py-2 max-h-[200px] overflow-y-auto">
+            {formattedInput}
+          </pre>
+          {event.output && (
+            <>
+              <div className="label-mono mt-2">{isError ? 'Error' : 'Output'}</div>
+              {formattedCleanOutput && (
+                <pre className="text-[12px] text-text-2 font-mono whitespace-pre-wrap break-all bg-bg/50 rounded-[8px] px-3 py-2 max-h-[300px] overflow-y-auto">
+                  {formattedCleanOutput}
+                </pre>
+              )}
+              {isError && <TimeoutQuickFix event={event} />}
+            </>
           )}
         </div>
-
-        {expanded && isError && (
-          <div className="px-3.5 pb-3 space-y-2" onClick={(e) => e.stopPropagation()}>
-            <div className="text-[11px] text-text-3/60 uppercase tracking-wider font-600">Input</div>
-            <pre className="text-[12px] text-text-2 font-mono whitespace-pre-wrap break-all bg-bg/50 rounded-[8px] px-3 py-2 max-h-[200px] overflow-y-auto">
-              {formattedInput}
-            </pre>
-            {event.output && (
-              <>
-                <div className="text-[11px] text-text-3/60 uppercase tracking-wider font-600 mt-2">Error</div>
-                {formattedCleanOutput && (
-                  <pre className="text-[12px] text-text-2 font-mono whitespace-pre-wrap break-all bg-bg/50 rounded-[8px] px-3 py-2 max-h-[300px] overflow-y-auto">
-                    {formattedCleanOutput}
-                  </pre>
-                )}
-                <TimeoutQuickFix event={event} />
-              </>
-            )}
-          </div>
-        )}
-      </button>
+      </details>
 
       {/* Render images below the tool call bubble (always visible when present) */}
       {media.images.length > 0 && (

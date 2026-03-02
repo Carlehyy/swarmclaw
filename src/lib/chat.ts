@@ -4,6 +4,7 @@ import { getStoredAccessKey } from './api-client'
 interface StreamChatOptions {
   internal?: boolean
   queueMode?: 'followup' | 'steer' | 'collect'
+  replyToId?: string
 }
 
 export async function streamChat(
@@ -39,6 +40,7 @@ export async function streamChat(
       attachedFiles,
       internal: !!opts?.internal,
       queueMode: opts?.queueMode,
+      ...(opts?.replyToId ? { replyToId: opts.replyToId } : {}),
     }),
   })
 

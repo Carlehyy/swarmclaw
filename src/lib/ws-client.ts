@@ -9,10 +9,20 @@ const listeners = new Map<string, Set<WsCallback>>()
 let connected = false
 
 function getWsUrl(key: string): string {
-  const host = typeof window !== 'undefined' ? window.location.hostname : 'localhost'
-  const port = process.env.NEXT_PUBLIC_WS_PORT || '3457'
-  const protocol = typeof window !== 'undefined' && window.location.protocol === 'https:' ? 'wss' : 'ws'
-  return `${protocol}://${host}:${port}/ws?key=${encodeURIComponent(key)}`
+  if (typeof window === 'undefined') return `ws://localhost:3457/ws?key=${encodeURIComponent(key)}`
+
+  const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws'
+  const pagePort = window.location.port
+  const buildPort = process.env.NEXT_PUBLIC_WS_PORT || '3457'
+
+  // If the page was loaded on a standard HTTP port (80/443/empty) or a port
+  // that doesn't match the expected app port, we're likely behind a reverse
+  // proxy. Use the page's host directly so the proxy can route /ws traffic.
+  const appPort = String((Number(buildPort) || 3457) - 1) // e.g. 3456
+  const behindProxy = !pagePort || pagePort === '80' || pagePort === '443' || pagePort !== appPort
+  const wsHost = behindProxy ? window.location.host : `${window.location.hostname}:${buildPort}`
+
+  return `${protocol}://${wsHost}/ws?key=${encodeURIComponent(key)}`
 }
 
 function handleMessage(event: MessageEvent) {

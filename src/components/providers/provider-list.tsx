@@ -86,7 +86,7 @@ export function ProviderList({ inSidebar }: { inSidebar?: boolean }) {
               <span className="font-display text-[14px] font-600 text-text truncate">{item.name}</span>
               <div className="flex items-center gap-2 shrink-0">
                 <span className={`text-[10px] font-600 px-2 py-0.5 rounded-[5px] uppercase tracking-wider
-                  ${item.type === 'builtin' ? 'bg-white/[0.04] text-text-3' : 'bg-[#6366F1]/10 text-[#6366F1]'}`}>
+                  ${item.type === 'builtin' ? 'bg-white/[0.04] text-text-3' : 'bg-accent-bright/10 text-[#6366F1]'}`}>
                   {item.type === 'builtin' ? 'Built-in' : 'Custom'}
                 </span>
                 {!inSidebar && item.type === 'custom' && (
@@ -94,7 +94,7 @@ export function ProviderList({ inSidebar }: { inSidebar?: boolean }) {
                     <div
                       onClick={(e) => handleToggle(e, item.id, item.isEnabled)}
                       className={`w-9 h-5 rounded-full transition-all relative cursor-pointer shrink-0
-                        ${item.isEnabled ? 'bg-[#6366F1]' : 'bg-white/[0.08]'}`}
+                        ${item.isEnabled ? 'bg-accent-bright' : 'bg-white/[0.08]'}`}
                     >
                       <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-all
                         ${item.isEnabled ? 'left-[18px]' : 'left-0.5'}`} />

@@ -8,6 +8,9 @@ import { useWs } from '@/hooks/use-ws'
 import { toast } from 'sonner'
 import type { Connector, ConnectorPlatform } from '@/types'
 import { ConnectorPlatformBadge } from '@/components/shared/connector-platform-icon'
+import { AgentPickerList } from '@/components/shared/agent-picker-list'
+import { SheetFooter } from '@/components/shared/sheet-footer'
+import { SectionLabel } from '@/components/shared/section-label'
 
 /** Auto-detect URLs in text and make them clickable links that open in a new tab */
 function linkify(text: string) {
@@ -283,10 +286,10 @@ export function ConnectorSheet() {
   const pollWaStatus = useCallback(async () => {
     if (!editing) return
     try {
-      const data = await api<any>('GET', `/connectors/${editing.id}`)
-      setQrDataUrl(data.qrDataUrl || null)
-      setWaAuthenticated(data.authenticated ?? false)
-      setWaHasCreds(data.hasCredentials ?? false)
+      const data = await api<Record<string, unknown>>('GET', `/connectors/${editing.id}`)
+      setQrDataUrl((data.qrDataUrl as string | null) || null)
+      setWaAuthenticated((data.authenticated as boolean) ?? false)
+      setWaHasCreds((data.hasCredentials as boolean) ?? false)
       if (data.status === 'running' && editing.status !== 'running') {
         const store = useAppStore.getState()
         const updated = { ...store.connectors }
@@ -316,8 +319,8 @@ export function ConnectorSheet() {
       await loadConnectors()
       setOpen(false)
       setEditingId(null)
-    } catch (err: any) {
-      toast.error(err.message)
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : String(err))
     } finally {
       setSaving(false)
     }
@@ -340,9 +343,9 @@ export function ConnectorSheet() {
         setQrDataUrl(null)
       }
       await loadConnectors()
-    } catch (err: any) {
+    } catch (err: unknown) {
       setWaConnecting(false)
-      toast.error(`Failed to ${action}: ${err.message}`)
+      toast.error(`Failed to ${action}: ${err instanceof Error ? err.message : String(err)}`)
     } finally {
       setActionLoading(false)
     }
@@ -357,7 +360,7 @@ export function ConnectorSheet() {
   }
 
   const platformConfig = PLATFORMS.find((p) => p.id === platform)!
-  const agentList = Object.values(agents)
+  const agentList = Object.values(agents).sort((a, b) => a.name.localeCompare(b.name))
   const credList = Object.values(credentials)
 
   const inputClass = "w-full px-4 py-3 rounded-[12px] border border-white/[0.08] bg-surface text-text text-[14px] outline-none transition-all placeholder:text-text-3/50 focus:border-white/[0.15]"
@@ -374,7 +377,7 @@ export function ConnectorSheet() {
       {/* Platform selector (only for new) */}
       {!editing && (
         <div className="mb-8">
-          <label className="block font-display text-[12px] font-600 text-text-2 uppercase tracking-[0.08em] mb-3">Platform</label>
+          <SectionLabel>Platform</SectionLabel>
           <div className="grid grid-cols-2 gap-3">
             {PLATFORMS.map((p) => (
               <button
@@ -460,17 +463,12 @@ export function ConnectorSheet() {
       <div className="mb-6">
         <label className="block font-display text-[12px] font-600 text-text-2 uppercase tracking-[0.08em] mb-2">Route to Agent</label>
         <p className="text-[12px] text-text-3/60 mb-2">Incoming messages will be handled by this agent</p>
-        <select
-          value={agentId || ''}
-          onChange={(e) => setAgentId(e.target.value)}
-          className={`${inputClass} appearance-none cursor-pointer`}
-          style={{ fontFamily: 'inherit' }}
-        >
-          <option value="">Select a agent...</option>
-          {agentList.map((p: any) => (
-            <option key={p.id} value={p.id}>{p.name}{p.isOrchestrator ? ' (Orchestrator)' : ''}</option>
-          ))}
-        </select>
+        <AgentPickerList
+          agents={agentList}
+          selected={agentId}
+          onSelect={(id) => setAgentId(id)}
+          showOrchBadge={true}
+        />
       </div>
 
       {/* Bot token credential */}
@@ -495,7 +493,7 @@ export function ConnectorSheet() {
               style={{ fontFamily: 'inherit' }}
             >
               <option value="">Select credential...</option>
-              {credList.map((c: any) => (
+              {credList.map((c) => (
                 <option key={c.id} value={c.id}>{c.name} ({c.provider})</option>
               ))}
               <option value="__new__">+ Add new key...</option>
@@ -547,7 +545,7 @@ export function ConnectorSheet() {
                   onClick={async () => {
                     setSavingCred(true)
                     try {
-                      const cred = await api<any>('POST', '/credentials', {
+                      const cred = await api<{ id: string }>('POST', '/credentials', {
                         provider: platform,
                         name: newCredName.trim() || `${platformConfig.label} Bot Token`,
                         apiKey: newCredValue.trim(),
@@ -557,8 +555,8 @@ export function ConnectorSheet() {
                       setShowNewCred(false)
                       setNewCredName('')
                       setNewCredValue('')
-                    } catch (err: any) {
-                      toast.error(`Failed to save: ${err.message}`)
+                    } catch (err: unknown) {
+                      toast.error(`Failed to save: ${err instanceof Error ? err.message : String(err)}`)
                     } finally {
                       setSavingCred(false)
                     }
@@ -730,8 +728,8 @@ export function ConnectorSheet() {
                 setQrDataUrl(null)
                 setWaConnecting(true)
                 await loadConnectors()
-              } catch (err: any) {
-                toast.error(`Failed to unlink: ${err.message}`)
+              } catch (err: unknown) {
+                toast.error(`Failed to unlink: ${err instanceof Error ? err.message : String(err)}`)
               } finally {
                 setActionLoading(false)
               }
@@ -771,8 +769,8 @@ export function ConnectorSheet() {
                   setQrDataUrl(null)
                   setWaConnecting(true)
                   await loadConnectors()
-                } catch (err: any) {
-                  toast.error(`Failed to re-pair: ${err.message}`)
+                } catch (err: unknown) {
+                  toast.error(`Failed to re-pair: ${err instanceof Error ? err.message : String(err)}`)
                 } finally {
                   setActionLoading(false)
                 }
@@ -796,28 +794,17 @@ export function ConnectorSheet() {
       )}
 
       {/* Actions */}
-      <div className="flex gap-3 pt-4 border-t border-white/[0.04]">
-        {editing && (
+      <SheetFooter
+        onCancel={() => { setOpen(false); setEditingId(null) }}
+        onSave={handleSave}
+        saveLabel={saving ? 'Saving...' : editing ? 'Save' : 'Create Connector'}
+        saveDisabled={saving || !agentId}
+        left={editing && (
           <button onClick={handleDelete} className="py-3.5 px-6 rounded-[14px] border border-red-500/20 bg-transparent text-red-400 text-[15px] font-600 cursor-pointer hover:bg-red-500/10 transition-all" style={{ fontFamily: 'inherit' }}>
             Delete
           </button>
         )}
-        <button
-          onClick={() => { setOpen(false); setEditingId(null) }}
-          className="flex-1 py-3.5 rounded-[14px] border border-white/[0.08] bg-transparent text-text-2 text-[15px] font-600 cursor-pointer hover:bg-surface-2 transition-all"
-          style={{ fontFamily: 'inherit' }}
-        >
-          Cancel
-        </button>
-        <button
-          onClick={handleSave}
-          disabled={saving || !agentId}
-          className="flex-1 py-3.5 rounded-[14px] border-none bg-[#6366F1] text-white text-[15px] font-600 cursor-pointer active:scale-[0.97] disabled:opacity-30 transition-all shadow-[0_4px_20px_rgba(99,102,241,0.25)] hover:brightness-110"
-          style={{ fontFamily: 'inherit' }}
-        >
-          {saving ? 'Saving...' : editing ? 'Save' : 'Create Connector'}
-        </button>
-      </div>
+      />
     </BottomSheet>
   )
 }

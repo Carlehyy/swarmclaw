@@ -7,6 +7,7 @@ WORKDIR /app
 
 # Install dependencies
 COPY package.json package-lock.json ./
+COPY scripts/postinstall.mjs ./scripts/postinstall.mjs
 RUN npm ci
 
 # Copy source

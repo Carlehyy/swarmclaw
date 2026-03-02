@@ -34,7 +34,25 @@ const TYPE_ICON_COLORS: Record<AppNotification['type'], string> = {
   error: 'text-red-400',
 }
 
-export function NotificationCenter() {
+function resolveHttpUrl(raw: string | undefined): string | null {
+  if (!raw) return null
+  try {
+    const parsed = new URL(raw)
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:' ? parsed.toString() : null
+  } catch {
+    return null
+  }
+}
+
+export function NotificationCenter({
+  variant = 'icon',
+  align = 'right',
+  direction = 'down',
+}: {
+  variant?: 'icon' | 'row'
+  align?: 'left' | 'right'
+  direction?: 'up' | 'down'
+}) {
   const [open, setOpen] = useState(false)
   const panelRef = useRef<HTMLDivElement>(null)
   const buttonRef = useRef<HTMLButtonElement>(null)
@@ -76,27 +94,42 @@ export function NotificationCenter() {
     if (!n.read) {
       markRead(n.id)
     }
-    // If there's an entity, we could navigate - for now just mark as read
+    const actionUrl = resolveHttpUrl(n.actionUrl)
+    if (actionUrl) {
+      window.open(actionUrl, '_blank', 'noopener,noreferrer')
+    }
     setOpen(false)
   }
+
+  const isRow = variant === 'row'
+  const panelAlignClass = align === 'left' ? 'left-0' : 'right-0'
+  const panelDirectionClass = direction === 'up' ? 'bottom-full mb-2' : 'top-full mt-2'
 
   return (
     <div className="relative">
       <button
         ref={buttonRef}
         onClick={() => setOpen((v) => !v)}
-        className="relative flex items-center justify-center w-8 h-8 rounded-[8px] bg-transparent hover:bg-white/[0.05] transition-colors cursor-pointer border-none"
+        className={
+          isRow
+            ? 'relative w-full flex items-center gap-2.5 px-3 py-2 rounded-[10px] text-[13px] font-500 cursor-pointer transition-all bg-transparent text-text-3 hover:text-text hover:bg-white/[0.04] border-none'
+            : 'relative flex items-center justify-center w-8 h-8 rounded-[8px] bg-transparent hover:bg-white/[0.05] transition-colors cursor-pointer border-none'
+        }
         aria-label="Notifications"
         title={unreadCount > 0 ? `${unreadCount} unread notifications` : 'Notifications'}
       >
         {/* Bell icon */}
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-text-2">
+        <svg width={isRow ? '16' : '16'} height={isRow ? '16' : '16'} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={isRow ? 'text-text-3 shrink-0' : 'text-text-2'}>
           <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
           <path d="M13.73 21a2 2 0 0 1-3.46 0" />
         </svg>
+        {isRow && <span className="text-[13px] font-500">Notifications</span>}
         {/* Badge */}
         {unreadCount > 0 && (
-          <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 flex items-center justify-center rounded-full bg-red-500 text-[10px] font-700 text-white px-1 leading-none">
+          <span className={isRow
+            ? 'ml-auto min-w-[18px] h-[18px] flex items-center justify-center rounded-full bg-red-500 text-[10px] font-700 text-white px-1 leading-none'
+            : 'absolute -top-0.5 -right-0.5 min-w-[16px] h-4 flex items-center justify-center rounded-full bg-red-500 text-[10px] font-700 text-white px-1 leading-none'}
+          >
             {unreadCount > 99 ? '99+' : unreadCount}
           </span>
         )}
@@ -105,7 +138,7 @@ export function NotificationCenter() {
       {open && (
         <div
           ref={panelRef}
-          className="absolute right-0 top-full mt-2 w-[340px] max-h-[460px] bg-raised border border-white/[0.06] rounded-[14px] shadow-[0_16px_64px_rgba(0,0,0,0.6)] backdrop-blur-xl z-90 flex flex-col overflow-hidden"
+          className={`absolute ${panelAlignClass} ${panelDirectionClass} w-[340px] max-h-[460px] bg-raised border border-white/[0.06] rounded-[14px] shadow-[0_16px_64px_rgba(0,0,0,0.6)] backdrop-blur-xl z-90 flex flex-col overflow-hidden`}
           style={{ animation: 'fade-in 0.15s cubic-bezier(0.16, 1, 0.3, 1)' }}
         >
           {/* Header */}
@@ -163,6 +196,11 @@ export function NotificationCenter() {
                         <p className="text-[11px] text-text-3 mt-0.5 leading-relaxed line-clamp-2 m-0">
                           {n.message}
                         </p>
+                      )}
+                      {resolveHttpUrl(n.actionUrl) && (
+                        <span className="inline-block mt-1 text-[11px] text-accent-bright/90">
+                          {n.actionLabel || 'Open link'}
+                        </span>
                       )}
                       {n.entityType && (
                         <span className="inline-block mt-1 text-[10px] text-text-3/40 font-mono">

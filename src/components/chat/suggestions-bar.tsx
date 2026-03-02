@@ -53,7 +53,7 @@ export function SuggestionsBar({ lastMessage, onSend }: Props) {
 
   return (
     <div
-      className="flex flex-wrap gap-2 px-1 pt-2"
+      className="flex flex-wrap gap-2 px-1 pt-2 ml-10"
       style={{ animation: 'fade-in 0.3s cubic-bezier(0.16, 1, 0.3, 1)' }}
     >
       {suggestions.map((text) => (

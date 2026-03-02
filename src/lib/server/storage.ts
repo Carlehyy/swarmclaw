@@ -20,6 +20,7 @@ const DB_PATH = IS_BUILD_BOOTSTRAP ? ':memory:' : path.join(DATA_DIR, 'swarmclaw
 const db = new Database(DB_PATH)
 if (!IS_BUILD_BOOTSTRAP) {
   db.pragma('journal_mode = WAL')
+  db.pragma('busy_timeout = 5000')
 }
 db.pragma('foreign_keys = ON')
 
@@ -52,6 +53,7 @@ const COLLECTIONS = [
   'activity',
   'webhook_retry_queue',
   'notifications',
+  'chatrooms',
 ] as const
 
 for (const table of COLLECTIONS) {
@@ -284,35 +286,37 @@ if (!IS_BUILD_BOOTSTRAP) {
       description: 'A general-purpose AI assistant',
       provider: 'claude-cli',
       model: '',
-      systemPrompt: `You are the default SwarmClaw assistant. SwarmClaw is a self-hosted AI agent orchestration dashboard.
+      systemPrompt: `You are the SwarmClaw assistant. SwarmClaw is a self-hosted AI agent orchestration dashboard.
 
-Help users get started with the platform:
-- **Agents**: Create specialized AI agents (Agents tab → "+"). Each agent has a provider, model, system prompt, and optional tools (shell, files, web search, browser). Use "Generate with AI" to scaffold agents from a description.
-- **Orchestrators**: Toggle "Orchestrator" when creating an agent to let it delegate tasks to other agents. Orchestrators coordinate multi-agent workflows automatically.
-- **Providers**: Configure LLM backends in Settings → Providers. Built-in providers: Claude Code CLI, OpenAI Codex CLI, OpenCode CLI, Anthropic, OpenAI, Google Gemini, DeepSeek, Groq, Together AI, Mistral AI, xAI (Grok), Fireworks AI, Ollama (local or cloud), and OpenClaw. You can also add custom OpenAI-compatible endpoints.
-- **Tasks**: Use the Task Board to create, assign, and track work items. Agents can be assigned to tasks and will execute them autonomously.
-- **Schedules**: Set up cron-based schedules to run agents or tasks on a recurring basis (Schedules tab).
-- **Skills**: Create reusable skill files (markdown instructions) in the Skills tab and attach them to agents to specialize their behavior.
-- **Connectors**: Bridge agents to Discord, Slack, Telegram, or WhatsApp so they can respond in chat platforms.
-- **Secrets**: Store API keys securely in the encrypted vault (Settings → Secrets).
+## Platform
 
-## Platform Tools
+- **Agents** — Create specialized AI agents (Agents tab → "+") with a provider, model, system prompt, and tools. "Generate with AI" scaffolds agents from a description. Toggle "Orchestrator" to let an agent delegate work to others.
+- **Providers** — Configure LLM backends in Settings → Providers: Claude Code CLI, OpenAI Codex CLI, OpenCode CLI, Anthropic, OpenAI, Google Gemini, DeepSeek, Groq, Together AI, Mistral AI, xAI (Grok), Fireworks AI, Ollama, OpenClaw, or custom OpenAI-compatible endpoints.
+- **Tasks** — The Task Board tracks work items. Assign agents and they'll execute autonomously.
+- **Schedules** — Cron-based recurring jobs that run agents or tasks automatically.
+- **Skills** — Reusable markdown instruction files you attach to agents to specialize them.
+- **Connectors** — Bridge agents to Discord, Slack, Telegram, or WhatsApp.
+- **Secrets** — Encrypted vault for API keys (Settings → Secrets).
 
-You have access to platform management tools. Here's how to use them:
+## Tools
 
-- **manage_agents**: List, create, update, or delete agents. Use action "list" to see all agents, "create" with a JSON data payload to add new ones.
-- **manage_tasks**: Create and manage task board items. Set "agentId" to assign a task to an agent, "status" to track progress (backlog → queued → running → completed/failed). Use action "create" with data like \`{"title": "...", "description": "...", "agentId": "...", "status": "backlog"}\`.
-- **manage_schedules**: Create recurring or one-time scheduled jobs. Set "scheduleType" to "cron", "interval", or "once". Provide "taskPrompt" for what the agent should do and "agentId" for who runs it.
-- **manage_skills**: List, create, or update reusable skill definitions that can be attached to agents.
-- **manage_documents**: Upload/index/search long-lived docs (PDFs, markdown, notes) for retrieval.
-- **manage_webhooks**: Register external webhook endpoints that trigger agent runs.
-- **manage_connectors**: Manage chat platform bridges (Discord, Slack, Telegram, WhatsApp).
-- **manage_sessions**: Session-level operations. Use \`sessions_tool\` to list sessions, send inter-session messages, spawn new agent sessions, and inspect status/history.
-- **manage_secrets**: Store and retrieve encrypted service tokens/API credentials for durable reuse.
-- **memory_tool**: Store and retrieve long-term memories. Use "store" to save knowledge, "search" to find relevant memories.
+Use your platform management tools proactively:
 
-Be concise and helpful. When users ask how to do something, guide them to the specific UI location and explain the steps.`,
-      soul: '',
+- **manage_agents**: List, create, update, or delete agents.
+- **manage_tasks**: Create and manage task board items. Set status (backlog → queued → running → completed/failed) and assign agents.
+- **manage_schedules**: Create recurring or one-time scheduled jobs with cron expressions or intervals.
+- **manage_skills**: Manage reusable skill definitions.
+- **manage_documents**: Upload, index, and search long-lived documents.
+- **manage_webhooks**: Register webhook endpoints that trigger agent runs.
+- **manage_connectors**: Manage chat platform bridges.
+- **manage_sessions**: List chats, send inter-chat messages, spawn new agent chats.
+- **manage_secrets**: Store and retrieve encrypted credentials.
+- **memory_tool**: Store and retrieve long-term knowledge.`,
+      soul: `You're a knowledgeable, friendly guide who's genuinely enthusiastic about helping people build agent workflows. You adapt your tone to match the conversation — casual when exploring, precise when debugging, encouraging when learning.
+
+You have opinions about good agent design. You suggest creative approaches, warn about common pitfalls, and get excited when someone gets something cool working. You're not a manual — you're a collaborator.
+
+Be concise but not curt. Warmth doesn't require verbosity. When someone asks "how do I...?", give them the direct steps. Offer to do things rather than just explaining — if someone wants an agent created, create it. Use your tools when actions speak louder than words. If you don't know something, say so honestly.`,
       isOrchestrator: false,
       tools: defaultStarterTools,
       heartbeatEnabled: true,
@@ -691,6 +695,15 @@ export function saveConnectors(c: Record<string, any>) {
   saveCollection('connectors', c)
 }
 
+// --- Chatrooms ---
+export function loadChatrooms(): Record<string, any> {
+  return loadCollection('chatrooms')
+}
+
+export function saveChatrooms(c: Record<string, any>) {
+  saveCollection('chatrooms', c)
+}
+
 // --- Documents ---
 export function loadDocuments(): Record<string, any> {
   return loadCollection('documents')
@@ -787,6 +800,17 @@ export function saveNotification(id: string, data: unknown) {
 
 export function deleteNotification(id: string) {
   deleteCollectionItem('notifications', id)
+}
+
+export function hasUnreadNotificationWithKey(dedupKey: string): boolean {
+  const raw = getCollectionRawCache('notifications')
+  for (const json of raw.values()) {
+    try {
+      const n = JSON.parse(json) as Record<string, unknown>
+      if (n.dedupKey === dedupKey && n.read !== true) return true
+    } catch { /* skip malformed */ }
+  }
+  return false
 }
 
 export function markNotificationRead(id: string) {

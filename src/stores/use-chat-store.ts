@@ -68,6 +68,10 @@ interface ChatState {
   pendingImage: PendingFile | null
   setPendingImage: (img: PendingFile | null) => void
 
+  // Reply-to
+  replyingTo: { message: Message; index: number } | null
+  setReplyingTo: (reply: { message: Message; index: number } | null) => void
+
   devServer: DevServerStatus | null
   setDevServer: (ds: DevServerStatus | null) => void
 
@@ -83,12 +87,22 @@ interface ChatState {
   sendHeartbeat: (sessionId: string) => Promise<void>
   stopStreaming: () => void
 
+  // Thinking/reasoning text during streaming
+  thinkingText: string
+  thinkingStartTime: number
+
   // Rich trace blocks during streaming (F13)
   streamTraces: ChatTraceBlock[]
 
   // Voice conversation
   voiceConversationActive: boolean
   onStreamEvent: ((event: { t: string; text?: string }) => void) | null
+
+  // Message queue (send while streaming)
+  queuedMessages: string[]
+  addQueuedMessage: (text: string) => void
+  removeQueuedMessage: (index: number) => void
+  shiftQueuedMessage: () => string | undefined
 }
 
 // Module-level cadence interval (not in state to avoid re-renders)
@@ -128,9 +142,21 @@ export const useChatStore = create<ChatState>((set, get) => ({
     setSoundEnabled(next)
     set({ soundEnabled: next })
   },
+  thinkingText: '',
+  thinkingStartTime: 0,
   streamTraces: [],
   voiceConversationActive: false,
   onStreamEvent: null,
+  queuedMessages: [],
+  addQueuedMessage: (text) => set((s) => ({ queuedMessages: [...s.queuedMessages, text] })),
+  removeQueuedMessage: (index) => set((s) => ({ queuedMessages: s.queuedMessages.filter((_, i) => i !== index) })),
+  shiftQueuedMessage: () => {
+    const q = get().queuedMessages
+    if (!q.length) return undefined
+    const next = q[0]
+    set({ queuedMessages: q.slice(1) })
+    return next
+  },
 
   pendingFiles: [],
   addPendingFile: (f) => set((s) => ({ pendingFiles: [...s.pendingFiles, f] })),
@@ -141,6 +167,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
   get pendingImage() { const files = get().pendingFiles; return files.length ? files[0] : null },
   setPendingImage: (img) => set({ pendingFiles: img ? [img] : [] }),
 
+  // Reply-to
+  replyingTo: null,
+  setReplyingTo: (reply) => set({ replyingTo: reply }),
+
   previewContent: null,
   setPreviewContent: (content) => set({ previewContent: content }),
 
@@ -150,7 +180,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   setDebugOpen: (open) => set({ debugOpen: open }),
 
   sendMessage: async (text: string) => {
-    const { pendingFiles } = get()
+    const { pendingFiles, replyingTo } = get()
     if ((!text.trim() && !pendingFiles.length) || get().streaming) return
     const sessionId = useAppStore.getState().currentSessionId
     if (!sessionId) return
@@ -162,6 +192,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     const attachedFiles = pendingFiles.length > 1
       ? pendingFiles.map((f) => f.path)
       : undefined
+    const replyToId = replyingTo?.message?.replyToId ? undefined : replyingTo?.message ? `msg-${replyingTo.index}` : undefined
 
     const userMsg: Message = {
       role: 'user',
@@ -170,6 +201,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       imagePath,
       imageUrl,
       attachedFiles,
+      ...(replyToId ? { replyToId } : {}),
     }
     clearCadence()
     set((s) => ({
@@ -180,8 +212,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
       streamToolName: '',
       displayText: '',
       agentStatus: null,
+      thinkingText: '',
+      thinkingStartTime: Date.now(),
       messages: [...s.messages, userMsg],
       pendingFiles: [],
+      replyingTo: null,
       toolEvents: [],
       lastUsage: null,
     }))
@@ -296,6 +331,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
           set({ streamText: fullText })
           if (get().soundEnabled) playError()
         }
+      } else if (event.t === 'thinking') {
+        set((s) => ({ thinkingText: s.thinkingText + (event.text || '') }))
       } else if (event.t === 'status') {
         try {
           const parsed = JSON.parse(event.text || '{}')
@@ -306,7 +343,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       } else if (event.t === 'done') {
         // done
       }
-    }, attachedFiles)
+    }, attachedFiles, { replyToId })
 
     clearCadence()
     if (get().soundEnabled && soundFiredStart) playStreamEnd()
@@ -333,13 +370,21 @@ export const useChatStore = create<ChatState>((set, get) => ({
         displayText: '',
         streamPhase: 'thinking' as const,
         streamToolName: '',
+        thinkingText: '',
+        thinkingStartTime: 0,
       }))
       if (get().ttsEnabled && !get().voiceConversationActive) speak(fullText)
     } else {
-      set({ streaming: false, streamingSessionId: null, streamText: '', displayText: '', streamPhase: 'thinking' as const, streamToolName: '' })
+      set({ streaming: false, streamingSessionId: null, streamText: '', displayText: '', streamPhase: 'thinking' as const, streamToolName: '', thinkingText: '', thinkingStartTime: 0 })
     }
 
     useAppStore.getState().loadSessions()
+
+    // Auto-dequeue: if there are queued messages, send the next one
+    const nextQueued = get().shiftQueuedMessage()
+    if (nextQueued) {
+      setTimeout(() => get().sendMessage(nextQueued), 100)
+    }
   },
 
   editAndResend: async (messageIndex: number, newText: string) => {

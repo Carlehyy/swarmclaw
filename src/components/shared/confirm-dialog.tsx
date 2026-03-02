@@ -35,7 +35,7 @@ export function ConfirmDialog({ open, title, message, confirmLabel = 'Confirm', 
             className={`flex-1 py-2.5 rounded-[12px] border-none text-[13px] font-600 cursor-pointer active:scale-[0.97] transition-all duration-200
               ${danger
                 ? 'bg-danger text-white shadow-[0_4px_20px_rgba(244,63,94,0.2)]'
-                : 'bg-[#6366F1] text-white shadow-[0_4px_20px_rgba(99,102,241,0.2)]'}`}
+                : 'bg-accent-bright text-white shadow-[0_4px_20px_rgba(99,102,241,0.2)]'}`}
             style={{ fontFamily: 'inherit' }}
           >
             {confirmLabel}

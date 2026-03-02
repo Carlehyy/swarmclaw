@@ -7,11 +7,12 @@ import { api } from '@/lib/api-client'
 import type { AppView } from '@/types'
 
 interface SearchResult {
-  type: 'task' | 'agent' | 'session' | 'schedule' | 'webhook' | 'skill'
+  type: 'task' | 'agent' | 'session' | 'schedule' | 'webhook' | 'skill' | 'message'
   id: string
   title: string
   description?: string
   status?: string
+  messageIndex?: number
 }
 
 const TYPE_ICONS: Record<SearchResult['type'], string> = {
@@ -21,11 +22,13 @@ const TYPE_ICONS: Record<SearchResult['type'], string> = {
   schedule: 'M12 6v6l4 2',
   webhook: 'M22 12h-4l-3 7L9 5l-3 7H2',
   skill: 'M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z',
+  message: 'M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z',
 }
 
 const TYPE_EXTRA_PATHS: Partial<Record<SearchResult['type'], string>> = {
   agent: 'M12 7a4 4 0 1 0 0-0.01',
   schedule: 'M12 12a10 10 0 1 0 0-0.01',
+  message: 'M8 10h8',
 }
 
 const TYPE_VIEW_MAP: Record<SearchResult['type'], AppView> = {
@@ -35,15 +38,17 @@ const TYPE_VIEW_MAP: Record<SearchResult['type'], AppView> = {
   schedule: 'schedules',
   webhook: 'webhooks',
   skill: 'skills',
+  message: 'agents',
 }
 
 const TYPE_LABELS: Record<SearchResult['type'], string> = {
   agent: 'Agent',
   task: 'Task',
-  session: 'Session',
+  session: 'Chat',
   schedule: 'Schedule',
   webhook: 'Webhook',
   skill: 'Skill',
+  message: 'Message',
 }
 
 export function SearchDialog() {
@@ -68,7 +73,7 @@ export function SearchDialog() {
   const setWebhookSheetOpen = useAppStore((s) => s.setWebhookSheetOpen)
   const setEditingSkillId = useAppStore((s) => s.setEditingSkillId)
   const setSkillSheetOpen = useAppStore((s) => s.setSkillSheetOpen)
-  const setCurrentAgent = useAppStore((s) => s.setCurrentAgent)
+  const setCurrentSession = useAppStore((s) => s.setCurrentSession)
 
   // Global Cmd+K / Ctrl+K listener
   useEffect(() => {
@@ -141,7 +146,11 @@ export function SearchDialog() {
         setTaskSheetOpen(true)
         break
       case 'session':
-        void setCurrentAgent(null)
+        setCurrentSession(result.id)
+        setActiveView('agents')
+        break
+      case 'message':
+        setCurrentSession(result.id)
         setActiveView('agents')
         break
       case 'schedule':
@@ -235,7 +244,7 @@ export function SearchDialog() {
             >
               {/* Type icon */}
               <div className={`w-8 h-8 rounded-[8px] flex items-center justify-center shrink-0
-                ${idx === selectedIdx ? 'bg-[#6366F1]/20' : 'bg-white/[0.04]'}`}>
+                ${idx === selectedIdx ? 'bg-accent-bright/20' : 'bg-white/[0.04]'}`}>
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"
                   className={idx === selectedIdx ? 'text-[#818CF8]' : 'text-text-3'}>
                   <path d={TYPE_ICONS[result.type]} />

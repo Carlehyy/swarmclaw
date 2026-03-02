@@ -1,6 +1,9 @@
 import { z } from 'zod'
 import { tool, type StructuredToolInterface } from '@langchain/core/tools'
-import { loadSessions, saveSessions } from '../storage'
+import { HumanMessage } from '@langchain/core/messages'
+import { loadSessions, saveSessions, loadCredentials, decryptKey } from '../storage'
+import { buildChatModel } from '../build-llm'
+import { getProvider } from '@/lib/providers'
 import type { ToolBuildContext } from './context'
 
 export function buildContextTools(bctx: ToolBuildContext): StructuredToolInterface[] {
@@ -19,8 +22,8 @@ export function buildContextTools(bctx: ToolBuildContext): StructuredToolInterfa
             const systemPromptTokens = 2000
             const status = getContextStatus(messages, systemPromptTokens, session.provider, session.model)
             return JSON.stringify(status)
-          } catch (err: any) {
-            return `Error: ${err.message || String(err)}`
+          } catch (err: unknown) {
+            return `Error: ${err instanceof Error ? err.message : String(err)}`
           }
         },
         {
@@ -46,20 +49,33 @@ export function buildContextTools(bctx: ToolBuildContext): StructuredToolInterfa
               return JSON.stringify({ status: 'no_action', reason: 'Not enough messages to compact', messageCount: messages.length })
             }
 
-            const generateSummary = async (text: string): Promise<string> => {
-              const lines = text.split('\n\n').filter(Boolean)
-              const keyLines: string[] = []
-              for (const line of lines) {
-                if (line.length > 20) {
-                  keyLines.push(line.slice(0, 200))
-                }
+            // Resolve API key for the session's provider
+            let apiKey: string | null = null
+            const providerInfo = getProvider(session.provider)
+            if ((providerInfo?.requiresApiKey || providerInfo?.optionalApiKey) && session.credentialId) {
+              try {
+                const creds = loadCredentials()
+                const cred = creds[session.credentialId]
+                if (cred) apiKey = decryptKey(cred.encryptedKey)
+              } catch { /* continue without key */ }
+            }
+
+            // Build LLM summarizer using the session's provider/model
+            const generateSummary = async (prompt: string): Promise<string> => {
+              const llm = buildChatModel({
+                provider: session.provider,
+                model: session.model,
+                apiKey,
+                apiEndpoint: session.apiEndpoint,
+              })
+              const response = await llm.invoke([new HumanMessage(prompt)])
+              if (typeof response.content === 'string') return response.content
+              if (Array.isArray(response.content)) {
+                return response.content
+                  .map((b: Record<string, unknown>) => (typeof b.text === 'string' ? b.text : ''))
+                  .join('')
               }
-              let summary = ''
-              for (const line of keyLines) {
-                if (summary.length + line.length > 2000) break
-                summary += line + '\n'
-              }
-              return summary.trim() || 'Previous conversation context was pruned.'
+              return ''
             }
 
             const result = await summarizeAndCompact({
@@ -67,6 +83,8 @@ export function buildContextTools(bctx: ToolBuildContext): StructuredToolInterfa
               keepLastN: keep,
               agentId: ctx?.agentId || session.agentId || null,
               sessionId: ctx.sessionId,
+              provider: session.provider,
+              model: session.model,
               generateSummary,
             })
 
@@ -84,8 +102,8 @@ export function buildContextTools(bctx: ToolBuildContext): StructuredToolInterfa
               summaryAdded: result.summaryAdded,
               remainingMessages: result.messages.length,
             })
-          } catch (err: any) {
-            return `Error: ${err.message || String(err)}`
+          } catch (err: unknown) {
+            return `Error: ${err instanceof Error ? err.message : String(err)}`
           }
         },
         {

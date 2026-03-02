@@ -80,7 +80,7 @@ export function ChatToolToggles({ session }: Props) {
                     <div
                       onClick={() => toggleTool(tool.id)}
                       className={`w-8 h-[18px] rounded-full transition-all duration-200 relative cursor-pointer shrink-0
-                        ${enabled ? 'bg-[#6366F1]' : 'bg-white/[0.12]'}`}
+                        ${enabled ? 'bg-accent-bright' : 'bg-white/[0.12]'}`}
                     >
                       <div className={`absolute top-[2px] w-[14px] h-[14px] rounded-full bg-white transition-all duration-200
                         ${enabled ? 'left-[16px]' : 'left-[2px]'}`} />

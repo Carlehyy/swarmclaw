@@ -67,6 +67,11 @@ Each provider implements a `streamChat` function. Provider registry in `index.ts
 ### Types
 Core type definitions in `src/types/index.ts`: `Agent`, `Session`, `Message`, `ProviderType`, `Connector`, `Schedule`, `MemoryEntry`, `BoardTask`, `Skill`, `Plugin`, `PluginHooks`
 
+### Agent Fields: `systemPrompt` vs `soul`
+- **`systemPrompt`** — Functional instructions: platform knowledge, tool usage, domain rules, capabilities. This is the "what you know and can do" layer.
+- **`soul`** — Personality and communication style: tone, attitude, conversational habits. This is the "who you are" layer. Injected as a state modifier (separate from the system prompt) in `stream-agent-chat.ts`, `chat-execution.ts`, `orchestrator.ts`, and `connectors/manager.ts`.
+- When creating or modifying agents, always put personality/voice in `soul` and keep `systemPrompt` for capabilities/instructions.
+
 ### Data
 - `data/swarmclaw.db` — Main SQLite database (sessions, agents, tasks, usage, etc.)
 - `data/memory.db` — Agent memory with FTS5 + vector search
@@ -129,6 +134,14 @@ SwarmClaw authenticates to OpenClaw gateways using ed25519 device identity, not 
 - CLI talks exclusively to the HTTP REST API — no WebSocket dependency
 - `bin/server-cmd.js` manages the server process: `start`/`stop`/`status`, `--port`, `--ws-port`, `--host`, `--detach`
 - `WS_PORT` env var is passed to the spawned server process
+
+### Product Model: Chats, Not Sessions
+The user-facing concept is **a direct chat with an agent** — a single, linear message thread between the user and one agent. There is no user-facing concept of "sessions." The codebase uses `Session` as the internal storage type, but in UI copy, commit messages, comments, and conversations, always use "chat" (noun) or "chat thread." Never surface the word "session" to the user or use it when discussing product behavior.
+
+- Each chat is a 1:1 thread with a specific agent
+- The sidebar shows the user's **chats**, not "sessions"
+- Forking (branching a chat into a new thread) exists but is experimental — don't assume it's a settled feature
+- When discussing architecture, `Session` (the type) is fine — just don't conflate the internal type with the product concept
 
 ### Key Patterns
 - **Storage**: All entities stored as JSON blobs in SQLite collections, not normalized tables

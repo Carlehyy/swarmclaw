@@ -98,7 +98,7 @@ export function UsageList() {
                   </div>
                   <div className="mt-2 h-1 rounded-full bg-white/[0.04] overflow-hidden">
                     <div
-                      className="h-full rounded-full bg-[#6366F1]/60"
+                      className="h-full rounded-full bg-accent-bright/60"
                       style={{ width: `${Math.max(pct, 1)}%` }}
                     />
                   </div>

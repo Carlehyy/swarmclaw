@@ -162,7 +162,7 @@ export function LogList() {
               <button
                 key={i}
                 onClick={() => { setLevelFilter(f.levels); setSearch(f.search) }}
-                className="group flex items-center gap-1 px-2 py-1 rounded-[6px] text-[10px] font-600 cursor-pointer transition-all border-none bg-accent-soft text-accent-bright hover:bg-[#6366F1]/15"
+                className="group flex items-center gap-1 px-2 py-1 rounded-[6px] text-[10px] font-600 cursor-pointer transition-all border-none bg-accent-soft text-accent-bright hover:bg-accent-bright/15"
               >
                 {f.name}
                 <span
@@ -337,7 +337,7 @@ export function LogList() {
                 <button
                   onClick={handleCreateTask}
                   disabled={creatingTask}
-                  className="px-5 py-3 rounded-[14px] border-none bg-[#6366F1] text-white text-[14px] font-600
+                  className="px-5 py-3 rounded-[14px] border-none bg-accent-bright text-white text-[14px] font-600
                     cursor-pointer active:scale-[0.97] disabled:opacity-40 transition-all
                     shadow-[0_4px_20px_rgba(99,102,241,0.25)] hover:brightness-110 shrink-0"
                   style={{ fontFamily: 'inherit' }}

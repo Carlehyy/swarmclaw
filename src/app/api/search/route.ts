@@ -9,11 +9,12 @@ import {
 } from '@/lib/server/storage'
 
 interface SearchResult {
-  type: 'task' | 'agent' | 'session' | 'schedule' | 'webhook' | 'skill'
+  type: 'task' | 'agent' | 'session' | 'schedule' | 'webhook' | 'skill' | 'message'
   id: string
   title: string
   description?: string
   status?: string
+  messageIndex?: number
 }
 
 const MAX_RESULTS = 20
@@ -49,6 +50,54 @@ function searchCollection(
   return results
 }
 
+function searchMessages(
+  sessions: Record<string, Record<string, unknown>>,
+  agents: Record<string, Record<string, unknown>>,
+  needle: string,
+): SearchResult[] {
+  const results: SearchResult[] = []
+  const MAX_MSG_RESULTS = 10
+  for (const [sessionId, session] of Object.entries(sessions)) {
+    if (results.length >= MAX_MSG_RESULTS) break
+    const messages = session.messages as Array<{ role: string; text: string; time?: number }> | undefined
+    if (!messages?.length) continue
+    const agentId = session.agentId as string | undefined
+    const agentName = agentId && agents[agentId] ? (agents[agentId].name as string) : undefined
+    const sessionName = (session.name as string) || 'Untitled'
+    for (let i = 0; i < messages.length; i++) {
+      if (results.length >= MAX_MSG_RESULTS) break
+      const msg = messages[i]
+      if (!msg?.text) continue
+      const idx = msg.text.toLowerCase().indexOf(needle)
+      if (idx === -1) continue
+      // Build snippet with context around match
+      const start = Math.max(0, idx - 30)
+      const end = Math.min(msg.text.length, idx + needle.length + 50)
+      const snippet = (start > 0 ? '...' : '') + msg.text.slice(start, end).replace(/\n/g, ' ') + (end < msg.text.length ? '...' : '')
+      const timeAgo = msg.time ? formatTimeAgo(msg.time) : ''
+      results.push({
+        type: 'message',
+        id: sessionId,
+        title: snippet,
+        description: [agentName || sessionName, timeAgo].filter(Boolean).join(' · '),
+        messageIndex: i,
+      })
+    }
+  }
+  return results
+}
+
+function formatTimeAgo(ts: number): string {
+  const diff = Date.now() - ts
+  const mins = Math.floor(diff / 60000)
+  if (mins < 1) return 'just now'
+  if (mins < 60) return `${mins}m ago`
+  const hours = Math.floor(mins / 60)
+  if (hours < 24) return `${hours}h ago`
+  const days = Math.floor(hours / 24)
+  return `${days}d ago`
+}
+
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url)
   const q = (searchParams.get('q') || '').trim().toLowerCase()
@@ -71,6 +120,7 @@ export async function GET(req: Request) {
     searchCollection(schedules, 'schedule', q, 'name', 'taskPrompt', 'status'),
     searchCollection(webhooks, 'webhook', q, 'name', 'source'),
     searchCollection(skills, 'skill', q, 'name', 'description'),
+    searchMessages(sessions, agents, q),
   ]
 
   // Proportional allocation across types

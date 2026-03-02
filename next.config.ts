@@ -11,6 +11,11 @@ function getGitSha(): string {
 
 const nextConfig: NextConfig = {
   output: 'standalone',
+  turbopack: {
+    // Pin workspace root to the project directory so a stale lockfile
+    // in a parent folder (e.g. ~/) doesn't confuse native module resolution.
+    root: process.cwd(),
+  },
   experimental: {
     // Disable Turbopack persistent cache — concurrent HMR writes cause
     // "Another write batch or compaction is already active" errors
@@ -36,9 +41,14 @@ const nextConfig: NextConfig = {
     '0.0.0.0',
   ],
   async rewrites() {
+    const views = 'agents|chatrooms|schedules|memory|tasks|secrets|providers|skills|connectors|webhooks|mcp-servers|knowledge|plugins|usage|runs|logs|settings|projects|activity'
     return [
       {
-        source: '/:view(agents|schedules|memory|tasks|secrets|providers|skills|connectors|webhooks|mcp-servers|knowledge|plugins|usage|runs|logs|settings|projects)',
+        source: `/:view(${views})`,
+        destination: '/',
+      },
+      {
+        source: `/:view(${views})/:id`,
         destination: '/',
       },
     ]

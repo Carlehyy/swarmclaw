@@ -41,7 +41,7 @@ export function ScheduleList({ inSidebar }: Props) {
         {!inSidebar && (
           <button
             onClick={() => setScheduleSheetOpen(true)}
-            className="mt-3 px-8 py-3 rounded-[14px] border-none bg-[#6366F1] text-white
+            className="mt-3 px-8 py-3 rounded-[14px] border-none bg-accent-bright text-white
               text-[14px] font-600 cursor-pointer active:scale-95 transition-all duration-200
               shadow-[0_4px_16px_rgba(99,102,241,0.2)]"
             style={{ fontFamily: 'inherit' }}

@@ -14,6 +14,7 @@ import {
   getSessionConnector,
 } from '@/components/shared/connector-platform-icon'
 import { AgentAvatar } from '@/components/agents/agent-avatar'
+import { toast } from 'sonner'
 
 function shortPath(p: string): string {
   return (p || '').replace(/^\/Users\/\w+/, '~')
@@ -196,6 +197,7 @@ export function ChatHeader({ session, streaming, onStop, onMenuToggle, onBack, m
         await api('PUT', `/sessions/${session.id}`, { heartbeatEnabled: next })
         await loadSessions()
       }
+      toast.success(`Heartbeat ${next ? 'enabled' : 'disabled'}`)
     } finally {
       setHeartbeatSaving(false)
     }

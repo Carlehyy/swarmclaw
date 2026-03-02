@@ -4,8 +4,12 @@ import { useEffect, useState } from 'react'
 import { useAppStore } from '@/stores/use-app-store'
 import { createTask, updateTask, archiveTask, unarchiveTask } from '@/lib/tasks'
 import { BottomSheet } from '@/components/shared/bottom-sheet'
+import { AgentPickerList } from '@/components/shared/agent-picker-list'
 import { DirBrowser } from '@/components/shared/dir-browser'
+import { SheetFooter } from '@/components/shared/sheet-footer'
+import { inputClass } from '@/components/shared/form-styles'
 import type { BoardTask, TaskComment } from '@/types'
+import { SectionLabel } from '@/components/shared/section-label'
 
 function fmtTime(ts: number) {
   const d = new Date(ts)
@@ -25,6 +29,10 @@ export function TaskSheet() {
   const agents = useAppStore((s) => s.agents)
   const loadAgents = useAppStore((s) => s.loadAgents)
 
+  const projects = useAppStore((s) => s.projects)
+  const loadProjects = useAppStore((s) => s.loadProjects)
+  const activeProjectFilter = useAppStore((s) => s.activeProjectFilter)
+
   const appSettings = useAppStore((s) => s.appSettings)
   const loadSettings = useAppStore((s) => s.loadSettings)
 
@@ -36,6 +44,7 @@ export function TaskSheet() {
   const [uploading, setUploading] = useState(false)
   const [cwd, setCwd] = useState('')
   const [file, setFile] = useState<string | null>(null)
+  const [projectId, setProjectId] = useState('')
   const [tags, setTags] = useState<string[]>([])
   const [tagInput, setTagInput] = useState('')
   const [blockedBy, setBlockedBy] = useState<string[]>([])
@@ -43,16 +52,18 @@ export function TaskSheet() {
   const [customFields, setCustomFields] = useState<Record<string, string | number | boolean>>({})
 
   const editing = editingId ? tasks[editingId] : null
-  const agentList = Object.values(agents)
+  const agentList = Object.values(agents).sort((a, b) => a.name.localeCompare(b.name))
 
   useEffect(() => {
     if (open) {
       loadAgents()
+      loadProjects()
       loadSettings()
       if (editing) {
         setTitle(editing.title)
         setDescription(editing.description)
         setAgentId(editing.agentId)
+        setProjectId(editing.projectId || '')
         setImages(editing.images || [])
         setCwd(editing.cwd || '')
         setFile(editing.file || null)
@@ -64,6 +75,7 @@ export function TaskSheet() {
         setTitle('')
         setDescription('')
         setAgentId(agentList[0]?.id || '')
+        setProjectId(activeProjectFilter || '')
         setImages([])
         setCwd('')
         setFile(null)
@@ -89,12 +101,14 @@ export function TaskSheet() {
   }
 
   const handleSave = async () => {
-    const payload: Partial<BoardTask> & { title: string; description: string; agentId: string } = {
-      title: title.trim() || 'Untitled Task', description, agentId, images,
+    // projectId uses null (not undefined) so the API can distinguish "clear" from "not sent"
+    // projectId uses null (not undefined) so the API can distinguish "clear" from "not sent"
+    const payload = {
+      title: title.trim() || 'Untitled Task', description, agentId, projectId: projectId || null, images,
       cwd: cwd || undefined, file: file || undefined,
       tags, blockedBy, dueAt: dueAt ? new Date(dueAt).getTime() : null,
       customFields: Object.keys(customFields).length > 0 ? customFields : undefined,
-    }
+    } as Partial<BoardTask> & { title: string; description: string; agentId: string }
     if (editing) {
       await updateTask(editing.id, payload)
     } else {
@@ -159,8 +173,6 @@ export function TaskSheet() {
     setCommentText('')
   }
 
-  const inputClass = "w-full px-4 py-3.5 rounded-[14px] border border-white/[0.08] bg-surface text-text text-[15px] outline-none transition-all duration-200 placeholder:text-text-3/50 focus-glow"
-
   return (
     <BottomSheet open={open} onClose={onClose}>
       <div className="mb-10">
@@ -173,7 +185,7 @@ export function TaskSheet() {
       </div>
 
       <div className="mb-8">
-        <label className="block font-display text-[12px] font-600 text-text-2 uppercase tracking-[0.08em] mb-3">Title</label>
+        <SectionLabel>Title</SectionLabel>
         <input
           type="text"
           value={title}
@@ -185,7 +197,7 @@ export function TaskSheet() {
       </div>
 
       <div className="mb-8">
-        <label className="block font-display text-[12px] font-600 text-text-2 uppercase tracking-[0.08em] mb-3">Description</label>
+        <SectionLabel>Description</SectionLabel>
         <textarea
           value={description}
           onChange={(e) => setDescription(e.target.value)}
@@ -198,9 +210,7 @@ export function TaskSheet() {
 
       {/* Images */}
       <div className="mb-8">
-        <label className="block font-display text-[12px] font-600 text-text-2 uppercase tracking-[0.08em] mb-3">
-          Images <span className="normal-case tracking-normal font-normal text-text-3">(optional — reference designs, mockups, etc.)</span>
-        </label>
+        <SectionLabel>Images <span className="normal-case tracking-normal font-normal text-text-3">(optional — reference designs, mockups, etc.)</span></SectionLabel>
         {images.length > 0 && (
           <div className="flex gap-2 flex-wrap mb-3">
             {images.map((url, i) => (
@@ -229,33 +239,48 @@ export function TaskSheet() {
       </div>
 
       <div className="mb-8">
-        <label className="block font-display text-[12px] font-600 text-text-2 uppercase tracking-[0.08em] mb-3">Agent</label>
-        {agentList.length > 0 ? (
-          <div className="flex flex-wrap gap-2">
-            {agentList.map((p) => (
-              <button
-                key={p.id}
-                onClick={() => setAgentId(p.id)}
-                className={`px-4 py-3 rounded-[12px] text-[14px] font-600 cursor-pointer transition-all border
-                  ${agentId === p.id
-                    ? 'bg-accent-soft border-accent-bright/25 text-accent-bright'
-                    : 'bg-surface border-white/[0.06] text-text-2 hover:bg-surface-2'}`}
-                style={{ fontFamily: 'inherit' }}
-              >
-                {p.name}
-              </button>
-            ))}
-          </div>
-        ) : (
-          <p className="text-[13px] text-text-3">No agents configured. Create one in Agents first.</p>
-        )}
+        <SectionLabel>Agent</SectionLabel>
+        <AgentPickerList
+          agents={agentList}
+          selected={agentId}
+          onSelect={(id) => setAgentId(id)}
+        />
+      </div>
+
+      {/* Project (optional) */}
+      <div className="mb-8">
+        <SectionLabel>Project <span className="normal-case tracking-normal font-normal text-text-3">(optional)</span></SectionLabel>
+        <div className="flex flex-wrap gap-2">
+          <button
+            onClick={() => setProjectId('')}
+            className={`px-4 py-3 rounded-[12px] text-[14px] font-600 cursor-pointer transition-all border
+              ${!projectId
+                ? 'bg-accent-soft border-accent-bright/25 text-accent-bright'
+                : 'bg-surface border-white/[0.06] text-text-2 hover:bg-surface-2'}`}
+            style={{ fontFamily: 'inherit' }}
+          >
+            None
+          </button>
+          {Object.values(projects).map((p) => (
+            <button
+              key={p.id}
+              onClick={() => setProjectId(p.id)}
+              className={`px-4 py-3 rounded-[12px] text-[14px] font-600 cursor-pointer transition-all border flex items-center gap-2
+                ${projectId === p.id
+                  ? 'bg-accent-soft border-accent-bright/25 text-accent-bright'
+                  : 'bg-surface border-white/[0.06] text-text-2 hover:bg-surface-2'}`}
+              style={{ fontFamily: 'inherit' }}
+            >
+              <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: p.color || '#6366F1' }} />
+              {p.name}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* Directory (optional) */}
       <div className="mb-8">
-        <label className="block font-display text-[12px] font-600 text-text-2 uppercase tracking-[0.08em] mb-3">
-          Directory <span className="normal-case tracking-normal font-normal text-text-3">(optional — project to work in)</span>
-        </label>
+        <SectionLabel>Directory <span className="normal-case tracking-normal font-normal text-text-3">(optional — project to work in)</span></SectionLabel>
         <DirBrowser
           value={cwd || null}
           file={file}
@@ -273,9 +298,7 @@ export function TaskSheet() {
 
       {/* Tags */}
       <div className="mb-8">
-        <label className="block font-display text-[12px] font-600 text-text-2 uppercase tracking-[0.08em] mb-3">
-          Tags <span className="normal-case tracking-normal font-normal text-text-3">(optional)</span>
-        </label>
+        <SectionLabel>Tags <span className="normal-case tracking-normal font-normal text-text-3">(optional)</span></SectionLabel>
         {tags.length > 0 && (
           <div className="flex flex-wrap gap-1.5 mb-3">
             {tags.map((tag) => (
@@ -315,9 +338,7 @@ export function TaskSheet() {
 
       {/* Dependencies */}
       <div className="mb-8">
-        <label className="block font-display text-[12px] font-600 text-text-2 uppercase tracking-[0.08em] mb-3">
-          Blocked By <span className="normal-case tracking-normal font-normal text-text-3">(tasks that must complete first)</span>
-        </label>
+        <SectionLabel>Blocked By <span className="normal-case tracking-normal font-normal text-text-3">(tasks that must complete first)</span></SectionLabel>
         <select
           multiple
           value={blockedBy}
@@ -346,9 +367,7 @@ export function TaskSheet() {
 
       {/* Due Date */}
       <div className="mb-8">
-        <label className="block font-display text-[12px] font-600 text-text-2 uppercase tracking-[0.08em] mb-3">
-          Due Date <span className="normal-case tracking-normal font-normal text-text-3">(optional)</span>
-        </label>
+        <SectionLabel>Due Date <span className="normal-case tracking-normal font-normal text-text-3">(optional)</span></SectionLabel>
         <input
           type="date"
           value={dueAt}
@@ -361,7 +380,7 @@ export function TaskSheet() {
       {/* Custom Fields */}
       {appSettings.taskCustomFieldDefs && appSettings.taskCustomFieldDefs.length > 0 && (
         <div className="mb-8">
-          <label className="block font-display text-[12px] font-600 text-text-2 uppercase tracking-[0.08em] mb-3">Custom Fields</label>
+          <SectionLabel>Custom Fields</SectionLabel>
           <div className="space-y-4">
             {appSettings.taskCustomFieldDefs.map((def) => (
               <div key={def.key}>
@@ -396,7 +415,7 @@ export function TaskSheet() {
 
       {editing?.result && (
         <div className="mb-8">
-          <label className="block font-display text-[12px] font-600 text-text-2 uppercase tracking-[0.08em] mb-3">Result</label>
+          <SectionLabel>Result</SectionLabel>
           <div className="p-4 rounded-[14px] border border-white/[0.06] bg-surface text-[13px] text-text-2 whitespace-pre-wrap max-h-[200px] overflow-y-auto">
             {editing.result}
           </div>
@@ -405,7 +424,7 @@ export function TaskSheet() {
 
       {editing && (editing.claudeResumeId || editing.codexResumeId || editing.opencodeResumeId || editing.cliResumeId) && (
         <div className="mb-8">
-          <label className="block font-display text-[12px] font-600 text-text-2 uppercase tracking-[0.08em] mb-3">CLI Sessions</label>
+          <SectionLabel>CLI Sessions</SectionLabel>
           <div className="flex flex-wrap gap-2">
             {editing.claudeResumeId && (
               <div className="flex items-center gap-2 px-3 py-2 rounded-[10px] border border-white/[0.06] bg-surface">
@@ -447,9 +466,7 @@ export function TaskSheet() {
       {/* Comments */}
       {editing && (
         <div className="mb-8">
-          <label className="block font-display text-[12px] font-600 text-text-2 uppercase tracking-[0.08em] mb-3">
-            Comments {editing.comments?.length ? `(${editing.comments.length})` : ''}
-          </label>
+          <SectionLabel>Comments {editing.comments?.length ? `(${editing.comments.length})` : ''}</SectionLabel>
 
           {editing.comments && editing.comments.length > 0 && (
             <div className="space-y-3 mb-4 max-h-[300px] overflow-y-auto">
@@ -489,29 +506,29 @@ export function TaskSheet() {
         </div>
       )}
 
-      <div className="flex gap-3 pt-2 border-t border-white/[0.04]">
-        {editing && editing.status !== 'archived' && (
-          <button onClick={handleArchive} className="py-3.5 px-6 rounded-[14px] border border-white/[0.08] bg-transparent text-text-3 text-[15px] font-600 cursor-pointer hover:bg-white/[0.04] transition-all" style={{ fontFamily: 'inherit' }}>
-            Archive
-          </button>
-        )}
-        {editing && editing.status === 'archived' && (
-          <button onClick={handleUnarchive} className="py-3.5 px-6 rounded-[14px] border border-accent-bright/20 bg-transparent text-accent-bright text-[15px] font-600 cursor-pointer hover:bg-accent-bright/10 transition-all" style={{ fontFamily: 'inherit' }}>
-            Unarchive
-          </button>
-        )}
-        {editing && editing.status === 'backlog' && (
-          <button onClick={handleQueue} className="py-3.5 px-6 rounded-[14px] border border-amber-500/20 bg-transparent text-amber-400 text-[15px] font-600 cursor-pointer hover:bg-amber-500/10 transition-all" style={{ fontFamily: 'inherit' }}>
-            Queue
-          </button>
-        )}
-        <button onClick={onClose} className="flex-1 py-3.5 rounded-[14px] border border-white/[0.08] bg-transparent text-text-2 text-[15px] font-600 cursor-pointer hover:bg-surface-2 transition-all" style={{ fontFamily: 'inherit' }}>
-          Cancel
-        </button>
-        <button onClick={handleSave} disabled={!title.trim() || !agentId} className="flex-1 py-3.5 rounded-[14px] border-none bg-[#6366F1] text-white text-[15px] font-600 cursor-pointer active:scale-[0.97] disabled:opacity-30 transition-all shadow-[0_4px_20px_rgba(99,102,241,0.25)] hover:brightness-110" style={{ fontFamily: 'inherit' }}>
-          {editing ? 'Save' : 'Create'}
-        </button>
-      </div>
+      <SheetFooter
+        onCancel={onClose}
+        onSave={handleSave}
+        saveLabel={editing ? 'Save' : 'Create'}
+        saveDisabled={!title.trim() || !agentId}
+        left={<>
+          {editing && editing.status !== 'archived' && (
+            <button onClick={handleArchive} className="py-3.5 px-6 rounded-[14px] border border-white/[0.08] bg-transparent text-text-3 text-[15px] font-600 cursor-pointer hover:bg-white/[0.04] transition-all" style={{ fontFamily: 'inherit' }}>
+              Archive
+            </button>
+          )}
+          {editing && editing.status === 'archived' && (
+            <button onClick={handleUnarchive} className="py-3.5 px-6 rounded-[14px] border border-accent-bright/20 bg-transparent text-accent-bright text-[15px] font-600 cursor-pointer hover:bg-accent-bright/10 transition-all" style={{ fontFamily: 'inherit' }}>
+              Unarchive
+            </button>
+          )}
+          {editing && editing.status === 'backlog' && (
+            <button onClick={handleQueue} className="py-3.5 px-6 rounded-[14px] border border-amber-500/20 bg-transparent text-amber-400 text-[15px] font-600 cursor-pointer hover:bg-amber-500/10 transition-all" style={{ fontFamily: 'inherit' }}>
+              Queue
+            </button>
+          )}
+        </>}
+      />
     </BottomSheet>
   )
 }

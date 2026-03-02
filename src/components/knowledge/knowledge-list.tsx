@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { api } from '@/lib/api-client'
 import { useAppStore } from '@/stores/use-app-store'
 import { Badge } from '@/components/ui/badge'
+import { AgentAvatar } from '@/components/agents/agent-avatar'
 import type { MemoryEntry } from '@/types'
 
 export function KnowledgeList() {
@@ -13,6 +14,8 @@ export function KnowledgeList() {
   const [error, setError] = useState<string | null>(null)
   const [activeTag, setActiveTag] = useState<string | null>(null)
   const searchRef = useRef(search)
+  const agents = useAppStore((s) => s.agents)
+  const loadAgents = useAppStore((s) => s.loadAgents)
   const setKnowledgeSheetOpen = useAppStore((s) => s.setKnowledgeSheetOpen)
   const setEditingKnowledgeId = useAppStore((s) => s.setEditingKnowledgeId)
 
@@ -40,8 +43,10 @@ export function KnowledgeList() {
 
   // Initial load
   useEffect(() => {
+    loadAgents()
     const timer = setTimeout(() => { void load(searchRef.current, activeTag) }, 0)
     return () => clearTimeout(timer)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [load, activeTag])
 
   // Debounced search
@@ -120,8 +125,14 @@ export function KnowledgeList() {
       {entries.length > 0 ? (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3 px-5 pb-6">
           {entries.map((entry) => {
-            const meta = entry.metadata as { tags?: string[] } | undefined
+            const meta = entry.metadata as { tags?: string[]; scope?: 'global' | 'agent'; agentIds?: string[] } | undefined
             const tags = meta?.tags || []
+            const entryScope = meta?.scope || 'global'
+            const entryAgentIds = meta?.agentIds || []
+            const scopeLabel = entryScope === 'global' ? 'Global' : `${entryAgentIds.length} agent(s)`
+            const scopedAgents = entryScope === 'agent'
+              ? entryAgentIds.map((id) => agents[id]).filter(Boolean)
+              : []
             return (
               <div
                 key={entry.id}
@@ -162,6 +173,25 @@ export function KnowledgeList() {
                     ))}
                   </div>
                 )}
+                <div className="flex items-center gap-2 mt-1.5">
+                  <span className={`text-[10px] font-600 ${
+                    entryScope === 'global' ? 'text-emerald-400' : 'text-amber-400'
+                  }`}>
+                    {scopeLabel}
+                  </span>
+                  {scopedAgents.length > 0 && (
+                    <div className="flex items-center gap-1.5">
+                      <div className="flex items-center -space-x-1.5">
+                        {scopedAgents.slice(0, 5).map((agent) => (
+                          <AgentAvatar key={agent.id} seed={agent.avatarSeed} name={agent.name} size={16} className="ring-1 ring-surface" />
+                        ))}
+                      </div>
+                      {scopedAgents.length > 5 && (
+                        <span className="text-[10px] font-600 text-text-3/60 ml-0.5">+{scopedAgents.length - 5}</span>
+                      )}
+                    </div>
+                  )}
+                </div>
               </div>
             )
           })}

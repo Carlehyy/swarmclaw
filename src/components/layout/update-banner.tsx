@@ -63,7 +63,7 @@ export function UpdateBanner() {
   if (dismissed === version.remoteSha && updateState === 'idle') return null
 
   return (
-    <div className="px-4 py-1.5 border-b border-white/[0.04] text-[10px] flex items-center gap-2 shrink-0 bg-[#6366F1]/[0.04]">
+    <div className="px-4 py-1.5 border-b border-white/[0.04] text-[10px] flex items-center gap-2 shrink-0 bg-accent-bright/[0.04]">
       {updateState === 'idle' && (
         <>
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="text-accent-bright shrink-0">
@@ -74,7 +74,7 @@ export function UpdateBanner() {
           </span>
           <button
             onClick={handleUpdate}
-            className="text-[10px] font-600 text-accent-bright hover:text-white bg-[#6366F1]/20 hover:bg-[#6366F1]/30 px-2 py-0.5 rounded-[6px] border-none cursor-pointer transition-all shrink-0"
+            className="text-[10px] font-600 text-accent-bright hover:text-white bg-accent-bright/20 hover:bg-accent-bright/30 px-2 py-0.5 rounded-[6px] border-none cursor-pointer transition-all shrink-0"
             style={{ fontFamily: 'inherit' }}
           >
             Update

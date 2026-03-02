@@ -224,7 +224,7 @@ export function PluginList({ inSidebar }: { inSidebar?: boolean }) {
                         <div
                           onClick={(e) => handleToggle(e, plugin.filename, plugin.enabled)}
                           className={`w-9 h-5 rounded-full transition-all relative cursor-pointer shrink-0
-                            ${plugin.enabled ? 'bg-[#6366F1]' : 'bg-white/[0.08]'}`}
+                            ${plugin.enabled ? 'bg-accent-bright' : 'bg-white/[0.08]'}`}
                         >
                           <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-all
                             ${plugin.enabled ? 'left-[18px]' : 'left-0.5'}`} />

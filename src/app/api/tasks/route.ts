@@ -70,6 +70,7 @@ export async function POST(req: Request) {
     description: body.description || '',
     status: body.status || 'backlog',
     agentId: body.agentId || '',
+    projectId: typeof body.projectId === 'string' && body.projectId ? body.projectId : null,
     goalContract: body.goalContract || null,
     cwd: typeof body.cwd === 'string' ? body.cwd : null,
     file: typeof body.file === 'string' ? body.file : null,

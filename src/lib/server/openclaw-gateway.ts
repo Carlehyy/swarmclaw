@@ -77,6 +77,7 @@ export class OpenClawGateway {
   private _connected = false
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null
   private reconnectDelay = 800
+  private consecutiveFailures = 0
   private shouldReconnect = false
   private wsUrl = ''
   private token: string | undefined
@@ -104,6 +105,7 @@ export class OpenClawGateway {
       this.ws = result.ws
       this._connected = true
       this.reconnectDelay = 800
+      this.consecutiveFailures = 0
       console.log('[openclaw-gateway] Connected to gateway')
 
       this.ws.on('message', (data) => {
@@ -149,12 +151,18 @@ export class OpenClawGateway {
 
   private scheduleReconnect() {
     if (this.reconnectTimer || !this.shouldReconnect) return
+    this.consecutiveFailures++
+    // After many failures, back off to 10 minutes to avoid hammering a down server
+    const maxDelay = this.consecutiveFailures >= 10 ? 600_000 : 15_000
     this.reconnectTimer = setTimeout(() => {
       this.reconnectTimer = null
       if (!this.shouldReconnect) return
       this.doConnect().catch(() => {})
     }, this.reconnectDelay)
-    this.reconnectDelay = Math.min(this.reconnectDelay * 2, 15_000)
+    this.reconnectDelay = Math.min(this.reconnectDelay * 2, maxDelay)
+    if (this.consecutiveFailures % 5 === 0) {
+      console.log(`[openclaw-gateway] ${this.consecutiveFailures} consecutive failures, next retry in ${Math.round(this.reconnectDelay / 1000)}s`)
+    }
   }
 
   private rejectAllPending(reason: string) {

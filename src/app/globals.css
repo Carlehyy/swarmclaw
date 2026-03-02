@@ -49,16 +49,17 @@
   --radius-4xl: calc(var(--radius) + 16px);
 
   /* ===== Midnight Glass Palette ===== */
-  --color-bg: #08080d;
-  --color-raised: #0d0d14;
-  --color-surface: #13131e;
-  --color-surface-2: #1e1e30;
-  --color-surface-3: #23233a;
+  /* Surfaces derived from --neutral-tint for single-knob theming */
+  --color-bg: color-mix(in srgb, var(--neutral-tint, #1e1e30) 40%, #000);
+  --color-raised: color-mix(in srgb, var(--neutral-tint, #1e1e30) 50%, #000);
+  --color-surface: color-mix(in srgb, var(--neutral-tint, #1e1e30) 65%, #000);
+  --color-surface-2: var(--neutral-tint, #1e1e30);
+  --color-surface-3: color-mix(in srgb, var(--neutral-tint, #1e1e30) 80%, #333);
   --color-border-hi: rgba(255,255,255,0.07);
   --color-border-focus: rgba(99,102,241,0.5);
   --color-text: #e2e2ec;
-  --color-text-2: #8e8ea8;
-  --color-text-3: #5c5c78;
+  --color-text-2: #a0a0ba;
+  --color-text-3: #8282a0;
   --color-accent-soft: rgba(99,102,241,0.08);
   --color-accent-glow: rgba(99,102,241,0.18);
   --color-accent-bright: #818CF8;
@@ -83,25 +84,29 @@
   --font-sora: 'Segoe UI';
   --font-jetbrains-mono: 'SF Mono';
   --radius: 0.625rem;
-  --background: #08080d;
+
+  /* ===== Single-Tint Theming ===== */
+  /* Change this one value to shift the entire palette hue */
+  --neutral-tint: #1e1e30;
+  --background: color-mix(in srgb, var(--neutral-tint) 40%, #000);
   --foreground: #e2e2ec;
-  --card: #0d0d14;
+  --card: color-mix(in srgb, var(--neutral-tint) 50%, #000);
   --card-foreground: #e2e2ec;
-  --popover: #0d0d14;
+  --popover: color-mix(in srgb, var(--neutral-tint) 50%, #000);
   --popover-foreground: #e2e2ec;
   --primary: #6366F1;
   --primary-foreground: #ffffff;
-  --secondary: #13131e;
+  --secondary: color-mix(in srgb, var(--neutral-tint) 65%, #000);
   --secondary-foreground: #e2e2ec;
-  --muted: #13131e;
-  --muted-foreground: #8e8ea8;
+  --muted: color-mix(in srgb, var(--neutral-tint) 65%, #000);
+  --muted-foreground: #a0a0ba;
   --accent: #6366F1;
   --accent-foreground: #ffffff;
   --destructive: #F43F5E;
   --border: rgba(255,255,255,0.04);
   --input: rgba(255,255,255,0.04);
   --ring: rgba(99,102,241,0.4);
-  --sidebar: #0d0d14;
+  --sidebar: color-mix(in srgb, var(--neutral-tint) 50%, #000);
   --sidebar-foreground: #e2e2ec;
   --sidebar-primary: #6366F1;
   --sidebar-primary-foreground: #ffffff;
@@ -113,7 +118,7 @@
   /* ===== Status Badge System ===== */
   --status-idle-bg: rgba(255,255,255,0.04);
   --status-idle-border: rgba(255,255,255,0.06);
-  --status-idle-fg: #8e8ea8;
+  --status-idle-fg: #a0a0ba;
   --status-running-bg: rgba(52,211,153,0.08);
   --status-running-border: rgba(52,211,153,0.15);
   --status-running-fg: #34D399;
@@ -205,6 +210,10 @@ textarea:hover::-webkit-scrollbar { width: 6px; }
   from { opacity: 0; transform: scale(0.97) translateY(6px); }
   to { opacity: 1; transform: scale(1) translateY(0); }
 }
+@keyframes msg-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
 @keyframes spin { to { transform: rotate(360deg); } }
 @keyframes slide-in-left {
   from { transform: translateX(-100%); }
@@ -241,6 +250,30 @@ textarea:hover::-webkit-scrollbar { width: 6px; }
 @keyframes fadeUp {
   from { opacity: 0; transform: translateY(10px); }
   to { opacity: 1; transform: translateY(0); }
+}
+
+/* Heartbeat float animation */
+@keyframes heartbeat-float {
+  0% { opacity: 1; transform: translateY(0) scale(1); }
+  50% { opacity: 0.7; transform: translateY(-14px) scale(1.15); }
+  100% { opacity: 0; transform: translateY(-26px) scale(0.85); }
+}
+
+/* Activity moment animations */
+@keyframes activity-moment-in {
+  from { opacity: 0; transform: translateY(6px) scale(0.92); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes activity-moment-out {
+  from { opacity: 1; transform: translateY(0) scale(1); }
+  to { opacity: 0; transform: translateY(-8px) scale(0.95); }
+}
+
+@keyframes avatar-moment-pulse {
+  0% { transform: scale(1); }
+  30% { transform: scale(1.15); }
+  60% { transform: scale(0.95); }
+  100% { transform: scale(1); }
 }
 
 /* AI avatar mood animations */
@@ -412,6 +445,16 @@ textarea:hover::-webkit-scrollbar { width: 6px; }
 /* Display font utility */
 .font-display {
   font-family: var(--font-sora), 'Sora', system-ui, sans-serif;
+}
+
+/* Monospace micro-label utility */
+.label-mono {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-text-3);
 }
 
 /* ===== Status Badge Classes ===== */

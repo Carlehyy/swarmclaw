@@ -71,6 +71,17 @@ export function initWsServer() {
   console.log(`[ws-hub] WebSocket server listening on port ${port}`)
 }
 
+export function closeWsServer(): Promise<void> {
+  const hub = getHub()
+  if (!hub) return Promise.resolve()
+  return new Promise((resolve) => {
+    for (const client of hub.clients) {
+      client.ws.close(1001, 'Server shutting down')
+    }
+    hub.wss.close(() => resolve())
+  })
+}
+
 export function notify(topic: string, action = 'update', id?: string) {
   const hub = getHub()
   if (!hub) return

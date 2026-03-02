@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { api } from '@/lib/api-client'
 import { useAppStore } from '@/stores/use-app-store'
 import { BottomSheet } from '@/components/shared/bottom-sheet'
+import { AgentAvatar } from '@/components/agents/agent-avatar'
 import type { MemoryEntry } from '@/types'
 
 const ACCEPTED_TYPES = '.txt,.md,.csv,.json,.jsonl,.html,.xml,.yaml,.yml,.toml,.py,.js,.ts,.tsx,.jsx,.go,.rs,.java,.c,.cpp,.h,.rb,.php,.sh,.sql,.log,.pdf'
@@ -21,16 +22,26 @@ export function KnowledgeSheet() {
   const open = useAppStore((s) => s.knowledgeSheetOpen)
   const setOpen = useAppStore((s) => s.setKnowledgeSheetOpen)
   const editingId = useAppStore((s) => s.editingKnowledgeId)
+  const agents = useAppStore((s) => s.agents)
+  const loadAgents = useAppStore((s) => s.loadAgents)
 
   const [title, setTitle] = useState('')
   const [content, setContent] = useState('')
   const [tags, setTags] = useState('')
+  const [scope, setScope] = useState<'global' | 'agent'>('global')
+  const [agentIds, setAgentIds] = useState<string[]>([])
   const [saving, setSaving] = useState(false)
   const [uploadedFile, setUploadedFile] = useState<{ name: string; url: string; size: number } | null>(null)
   const [uploading, setUploading] = useState(false)
   const [isDragging, setIsDragging] = useState(false)
   const dragCounter = useRef(0)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const agentList = Object.values(agents)
+
+  useEffect(() => {
+    if (open) loadAgents()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open])
 
   useEffect(() => {
     if (!open) return
@@ -38,8 +49,10 @@ export function KnowledgeSheet() {
       void api<MemoryEntry>('GET', `/knowledge/${editingId}`).then((entry) => {
         setTitle(entry.title)
         setContent(entry.content)
-        const meta = entry.metadata as { tags?: string[] } | undefined
+        const meta = entry.metadata as { tags?: string[]; scope?: 'global' | 'agent'; agentIds?: string[] } | undefined
         setTags(meta?.tags?.join(', ') || '')
+        setScope(meta?.scope || 'global')
+        setAgentIds(meta?.agentIds || [])
       }).catch(() => {
         setOpen(false)
       })
@@ -47,6 +60,8 @@ export function KnowledgeSheet() {
       setTitle('')
       setContent('')
       setTags('')
+      setScope('global')
+      setAgentIds([])
       setUploadedFile(null)
     }
   }, [open, editingId, setOpen])
@@ -56,6 +71,8 @@ export function KnowledgeSheet() {
     setTitle('')
     setContent('')
     setTags('')
+    setScope('global')
+    setAgentIds([])
     setUploadedFile(null)
     setIsDragging(false)
     dragCounter.current = 0
@@ -128,6 +145,16 @@ export function KnowledgeSheet() {
     if (file) void handleUpload(file)
   }, [handleUpload])
 
+  const toggleAgent = (id: string) => {
+    setAgentIds((prev) => prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id])
+  }
+
+  const scopeHelperText = scope === 'global'
+    ? 'This knowledge will be accessible to all agents'
+    : agentIds.length === 0
+      ? 'Select which agents can access this knowledge'
+      : `${agentIds.length} agent(s) selected`
+
   const handleSave = async () => {
     setSaving(true)
     try {
@@ -135,6 +162,8 @@ export function KnowledgeSheet() {
         title: title.trim() || 'Untitled',
         content,
         tags: parseTags(tags),
+        scope,
+        agentIds: scope === 'agent' ? agentIds : [],
       }
 
       if (editingId) {
@@ -294,6 +323,58 @@ export function KnowledgeSheet() {
         />
       </div>
 
+      <div className="mb-8">
+        <label className="block font-display text-[12px] font-600 text-text-2 uppercase tracking-[0.08em] mb-3">Scope</label>
+        <div className="flex p-1 rounded-[12px] bg-bg border border-white/[0.06]">
+          {(['global', 'agent'] as const).map((s) => (
+            <button
+              key={s}
+              onClick={() => setScope(s)}
+              className={`flex-1 py-2.5 rounded-[10px] text-center cursor-pointer transition-all text-[13px] font-600 border-none ${
+                scope === s ? 'bg-accent-soft text-accent-bright' : 'bg-transparent text-text-3 hover:text-text-2'
+              }`}
+              style={{ fontFamily: 'inherit' }}
+            >
+              {s === 'global' ? 'Global' : 'Specific'}
+            </button>
+          ))}
+        </div>
+        <p className="text-[11px] text-text-3/60 mt-1.5 pl-1">{scopeHelperText}</p>
+      </div>
+
+      {scope === 'agent' && (
+        <div className="mb-8">
+          <label className="block font-display text-[12px] font-600 text-text-2 uppercase tracking-[0.08em] mb-3">Agents</label>
+          <div className="max-h-[240px] overflow-y-auto rounded-[12px] border border-white/[0.06] bg-white/[0.03]">
+            {agentList.length === 0 ? (
+              <p className="p-3 text-[12px] text-text-3">No agents available</p>
+            ) : (
+              agentList.map((agent) => {
+                const selected = agentIds.includes(agent.id)
+                return (
+                  <button
+                    key={agent.id}
+                    onClick={() => toggleAgent(agent.id)}
+                    className={`w-full flex items-center gap-2.5 px-3 py-2 text-left transition-all cursor-pointer ${
+                      selected ? 'bg-accent-soft/40' : 'hover:bg-white/[0.04]'
+                    }`}
+                    style={{ fontFamily: 'inherit' }}
+                  >
+                    <AgentAvatar seed={agent.avatarSeed} name={agent.name} size={24} />
+                    <span className="text-[13px] text-text flex-1 truncate">{agent.name}</span>
+                    {selected && (
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-accent-bright shrink-0">
+                        <polyline points="20 6 9 17 4 12" />
+                      </svg>
+                    )}
+                  </button>
+                )
+              })
+            )}
+          </div>
+        </div>
+      )}
+
       <div className="flex gap-3 pt-2 border-t border-white/[0.04]">
         <button
           onClick={onClose}
@@ -305,7 +386,7 @@ export function KnowledgeSheet() {
         <button
           onClick={() => { void handleSave() }}
           disabled={!title.trim() || saving}
-          className="flex-1 py-3.5 rounded-[14px] border-none bg-[#6366F1] text-white text-[15px] font-600 cursor-pointer active:scale-[0.97] disabled:opacity-30 transition-all shadow-[0_4px_20px_rgba(99,102,241,0.25)] hover:brightness-110"
+          className="flex-1 py-3.5 rounded-[14px] border-none bg-accent-bright text-white text-[15px] font-600 cursor-pointer active:scale-[0.97] disabled:opacity-30 transition-all shadow-[0_4px_20px_rgba(99,102,241,0.25)] hover:brightness-110"
           style={{ fontFamily: 'inherit' }}
         >
           {saving ? 'Saving...' : 'Save'}

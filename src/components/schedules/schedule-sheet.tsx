@@ -4,8 +4,12 @@ import { useEffect, useState, useMemo } from 'react'
 import { useAppStore } from '@/stores/use-app-store'
 import { createSchedule, updateSchedule, deleteSchedule } from '@/lib/schedules'
 import { BottomSheet } from '@/components/shared/bottom-sheet'
+import { AgentPickerList } from '@/components/shared/agent-picker-list'
+import { SheetFooter } from '@/components/shared/sheet-footer'
+import { inputClass } from '@/components/shared/form-styles'
 import type { ScheduleType, ScheduleStatus } from '@/types'
 import cronstrue from 'cronstrue'
+import { SectionLabel } from '@/components/shared/section-label'
 
 const CRON_PRESETS = [
   { label: 'Every hour', cron: '0 * * * *' },
@@ -62,7 +66,7 @@ export function ScheduleSheet() {
   const [customCron, setCustomCron] = useState(false)
 
   const editing = editingId ? schedules[editingId] : null
-  const agentList = Object.values(agents)
+  const agentList = Object.values(agents).sort((a, b) => a.name.localeCompare(b.name))
 
   useEffect(() => {
     if (open) {
@@ -125,8 +129,6 @@ export function ScheduleSheet() {
     }
   }
 
-  const inputClass = "w-full px-4 py-3.5 rounded-[14px] border border-white/[0.08] bg-surface text-text text-[15px] outline-none transition-all duration-200 placeholder:text-text-3/50 focus-glow"
-
   return (
     <BottomSheet open={open} onClose={onClose} wide>
       <div className="mb-10">
@@ -137,22 +139,22 @@ export function ScheduleSheet() {
       </div>
 
       <div className="mb-8">
-        <label className="block font-display text-[12px] font-600 text-text-2 uppercase tracking-[0.08em] mb-3">Name</label>
+        <SectionLabel>Name</SectionLabel>
         <input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Daily keyword research" className={inputClass} style={{ fontFamily: 'inherit' }} />
       </div>
 
       <div className="mb-8">
-        <label className="block font-display text-[12px] font-600 text-text-2 uppercase tracking-[0.08em] mb-3">Agent</label>
-        <select value={agentId || ''} onChange={(e) => setAgentId(e.target.value)} className={`${inputClass} appearance-none cursor-pointer`} style={{ fontFamily: 'inherit' }}>
-          <option value="">Select agent...</option>
-          {agentList.map((p) => (
-            <option key={p.id} value={p.id}>{p.name}{p.isOrchestrator ? ' (Orchestrator)' : ''}</option>
-          ))}
-        </select>
+        <SectionLabel>Agent</SectionLabel>
+        <AgentPickerList
+          agents={agentList}
+          selected={agentId}
+          onSelect={(id) => setAgentId(id)}
+          showOrchBadge={true}
+        />
       </div>
 
       <div className="mb-8">
-        <label className="block font-display text-[12px] font-600 text-text-2 uppercase tracking-[0.08em] mb-3">Task Prompt</label>
+        <SectionLabel>Task Prompt</SectionLabel>
         <textarea
           value={taskPrompt}
           onChange={(e) => setTaskPrompt(e.target.value)}
@@ -164,7 +166,7 @@ export function ScheduleSheet() {
       </div>
 
       <div className="mb-8">
-        <label className="block font-display text-[12px] font-600 text-text-2 uppercase tracking-[0.08em] mb-3">Schedule Type</label>
+        <SectionLabel>Schedule Type</SectionLabel>
         <div className="grid grid-cols-3 gap-3">
           {(['cron', 'interval', 'once'] as ScheduleType[]).map((t) => (
             <button
@@ -185,7 +187,7 @@ export function ScheduleSheet() {
 
       {scheduleType === 'cron' && (
         <div className="mb-8">
-          <label className="block font-display text-[12px] font-600 text-text-2 uppercase tracking-[0.08em] mb-3">Schedule</label>
+          <SectionLabel>Schedule</SectionLabel>
 
           {/* Preset buttons */}
           <div className="flex flex-wrap gap-2 mb-4">
@@ -239,7 +241,7 @@ export function ScheduleSheet() {
 
       {scheduleType === 'interval' && (
         <div className="mb-8">
-          <label className="block font-display text-[12px] font-600 text-text-2 uppercase tracking-[0.08em] mb-3">Interval (minutes)</label>
+          <SectionLabel>Interval (minutes)</SectionLabel>
           <input
             type="number"
             value={Math.round(intervalMs / 60000)}
@@ -252,7 +254,7 @@ export function ScheduleSheet() {
 
       {editing && (
         <div className="mb-8">
-          <label className="block font-display text-[12px] font-600 text-text-2 uppercase tracking-[0.08em] mb-3">Status</label>
+          <SectionLabel>Status</SectionLabel>
           <div className="flex gap-2">
             {(['active', 'paused'] as ScheduleStatus[]).map((s) => (
               <button
@@ -271,19 +273,17 @@ export function ScheduleSheet() {
         </div>
       )}
 
-      <div className="flex gap-3 pt-2 border-t border-white/[0.04]">
-        {editing && (
+      <SheetFooter
+        onCancel={onClose}
+        onSave={handleSave}
+        saveLabel={editing ? 'Save' : 'Create'}
+        saveDisabled={!name.trim() || !agentId}
+        left={editing && (
           <button onClick={handleDelete} className="py-3.5 px-6 rounded-[14px] border border-red-500/20 bg-transparent text-red-400 text-[15px] font-600 cursor-pointer hover:bg-red-500/10 transition-all" style={{ fontFamily: 'inherit' }}>
             Delete
           </button>
         )}
-        <button onClick={onClose} className="flex-1 py-3.5 rounded-[14px] border border-white/[0.08] bg-transparent text-text-2 text-[15px] font-600 cursor-pointer hover:bg-surface-2 transition-all" style={{ fontFamily: 'inherit' }}>
-          Cancel
-        </button>
-        <button onClick={handleSave} disabled={!name.trim() || !agentId} className="flex-1 py-3.5 rounded-[14px] border-none bg-[#6366F1] text-white text-[15px] font-600 cursor-pointer active:scale-[0.97] disabled:opacity-30 transition-all shadow-[0_4px_20px_rgba(99,102,241,0.25)] hover:brightness-110" style={{ fontFamily: 'inherit' }}>
-          {editing ? 'Save' : 'Create'}
-        </button>
-      </div>
+      />
     </BottomSheet>
   )
 }

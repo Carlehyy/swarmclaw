@@ -4,6 +4,8 @@ import { enqueueTask } from './queue'
 import { CronExpressionParser } from 'cron-parser'
 import { pushMainLoopEventToMainSessions } from './main-agent-loop'
 import { getScheduleSignatureKey } from '@/lib/schedule-dedupe'
+import { enqueueSystemEvent } from './system-events'
+import { requestHeartbeatNow } from './heartbeat-wake'
 
 const TICK_INTERVAL = 60_000 // 60 seconds
 let intervalId: ReturnType<typeof setInterval> | null = null
@@ -192,5 +194,11 @@ async function tick() {
       type: 'schedule_fired',
       text: `Schedule fired: "${schedule.name}" (${schedule.id}) run #${schedule.runNumber} — task ${taskId}`,
     })
+
+    // Enqueue system event + heartbeat wake for the schedule's agent
+    if (schedule.createdInSessionId) {
+      enqueueSystemEvent(schedule.createdInSessionId, `Schedule triggered: ${schedule.name}`)
+    }
+    requestHeartbeatNow({ agentId: schedule.agentId, reason: 'schedule' })
   }
 }

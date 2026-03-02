@@ -71,7 +71,7 @@ export function ScheduleCard({ schedule, inSidebar }: Props) {
             <div
               onClick={handleToggle}
               className={`w-9 h-5 rounded-full transition-all relative cursor-pointer shrink-0
-                ${schedule.status === 'active' ? 'bg-[#6366F1]' : 'bg-white/[0.08]'}`}
+                ${schedule.status === 'active' ? 'bg-accent-bright' : 'bg-white/[0.08]'}`}
             >
               <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-all
                 ${schedule.status === 'active' ? 'left-[18px]' : 'left-0.5'}`} />

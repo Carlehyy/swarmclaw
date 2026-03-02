@@ -11,7 +11,9 @@ import { StreamingBubble } from './streaming-bubble'
 import { ThinkingIndicator } from './thinking-indicator'
 import { SuggestionsBar } from './suggestions-bar'
 import { ExecApprovalCard } from './exec-approval-card'
+import { HeartbeatMoment, ActivityMoment, isNotableTool } from './activity-moment'
 import { useApprovalStore } from '@/stores/use-approval-store'
+import { useWs } from '@/hooks/use-ws'
 
 const INTRO_GREETINGS = [
   'What can I help you with?',
@@ -70,6 +72,33 @@ export function MessageList({ messages, streaming }: Props) {
 
   const showOk = appSettings.heartbeatShowOk ?? false
   const showAlerts = appSettings.heartbeatShowAlerts ?? true
+
+  // Moment overlay for last assistant message (heartbeat or tool events)
+  type MomentType = { kind: 'heartbeat' } | { kind: 'tool'; name: string; input: string }
+  const [currentMoment, setCurrentMoment] = useState<MomentType | null>(null)
+
+  const heartbeatTopic = agent?.id ? `heartbeat:agent:${agent.id}` : ''
+  useWs(heartbeatTopic, () => {
+    setCurrentMoment({ kind: 'heartbeat' })
+  })
+
+  // Detect notable tool events on latest assistant message when messages change
+  const prevToolKeyRef = useRef<string | null>(null)
+  useEffect(() => {
+    const last = messages[messages.length - 1]
+    if (!last || last.role !== 'assistant' || !last.toolEvents?.length) return
+    const events = last.toolEvents
+    for (let i = events.length - 1; i >= 0; i--) {
+      if (isNotableTool(events[i].name)) {
+        const key = `${last.time}-${events[i].name}-${i}`
+        if (key !== prevToolKeyRef.current) {
+          prevToolKeyRef.current = key
+          setCurrentMoment({ kind: 'tool', name: events[i].name, input: events[i].input || '' })
+        }
+        return
+      }
+    }
+  }, [messages])
 
   // Unread count tracking
   const unreadRef = useRef(0)
@@ -336,7 +365,9 @@ export function MessageList({ messages, streaming }: Props) {
         onScroll={updateScrollState}
         className="h-full overflow-y-auto px-6 md:px-12 lg:px-16 py-6 fade-up"
       >
-        <div className="flex flex-col gap-6">
+        <div className="flex flex-col gap-6 relative">
+          {/* Chat spine — vertical line for assistant messages */}
+          <div className="absolute left-[15px] top-0 bottom-0 w-px bg-white/[0.06] pointer-events-none" />
           {filteredMessages.length === 0 && !streaming && (
             <div className="flex flex-col items-center justify-center gap-3 py-20 text-center" style={{ animation: 'fadeUp 0.5s cubic-bezier(0.16, 1, 0.3, 1) both' }}>
               <AgentAvatar seed={agent?.avatarSeed || null} name={agent?.name || 'Agent'} size={48} />
@@ -357,6 +388,23 @@ export function MessageList({ messages, streaming }: Props) {
             // Date separator
             const prevMsg = i > 0 ? filteredMessages[i - 1] : null
             const showDateSep = msg.time && (!prevMsg?.time || new Date(msg.time).toDateString() !== new Date(prevMsg.time).toDateString())
+
+            // Moment overlay — only on the last assistant message
+            let momentOverlay: React.ReactNode = null
+            if (isLastAssistant && currentMoment && !streaming) {
+              if (currentMoment.kind === 'heartbeat') {
+                momentOverlay = <HeartbeatMoment onDismiss={() => setCurrentMoment(null)} />
+              } else {
+                momentOverlay = (
+                  <ActivityMoment
+                    key={`${currentMoment.name}-${Date.now()}`}
+                    toolName={currentMoment.name}
+                    toolInput={currentMoment.input}
+                    onDismiss={() => setCurrentMoment(null)}
+                  />
+                )
+              }
+            }
 
             return (
               <div key={`${msg.time}-${i}`}>
@@ -381,6 +429,7 @@ export function MessageList({ messages, streaming }: Props) {
                     onToggleBookmark={toggleBookmark}
                     onEditResend={handleEditResend}
                     onFork={handleFork}
+                    momentOverlay={momentOverlay}
                   />
                 </div>
               </div>

@@ -8,7 +8,11 @@ import { BottomSheet } from '@/components/shared/bottom-sheet'
 import { DirBrowser } from '@/components/shared/dir-browser'
 import { TOOL_LABELS, TOOL_DESCRIPTIONS } from '@/components/chat/tool-call-bubble'
 import { ModelCombobox } from '@/components/shared/model-combobox'
+import { AgentPickerList } from '@/components/shared/agent-picker-list'
+import { SheetFooter } from '@/components/shared/sheet-footer'
+import { inputClass } from '@/components/shared/form-styles'
 import type { ProviderType, SessionTool } from '@/types'
+import { SectionLabel } from '@/components/shared/section-label'
 
 export function NewSessionSheet() {
   const open = useAppStore((s) => s.newSessionOpen)
@@ -61,14 +65,14 @@ export function NewSessionSheet() {
       // Auto-select last used agent, or default agent if no history
       const agentsList = Object.values(agents)
       const lastAgentId = typeof window !== 'undefined' ? localStorage.getItem('swarmclaw-last-agent') : null
-      const lastAgent = lastAgentId ? agentsList.find((a: any) => a.id === lastAgentId) : null
-      const defaultAgent = lastAgent || agentsList.find((a: any) => a.id === 'default') || agentsList[0]
+      const lastAgent = lastAgentId ? agentsList.find((a) => a.id === lastAgentId) : null
+      const defaultAgent = lastAgent || agentsList.find((a) => a.id === 'default') || agentsList[0]
       if (defaultAgent) {
-        setSelectedAgentId((defaultAgent as any).id)
-        setProvider((defaultAgent as any).provider || 'claude-cli')
-        setModel((defaultAgent as any).model || '')
-        setCredentialId((defaultAgent as any).credentialId || null)
-        if ((defaultAgent as any).apiEndpoint) setEndpoint((defaultAgent as any).apiEndpoint)
+        setSelectedAgentId(defaultAgent.id)
+        setProvider(defaultAgent.provider || 'claude-cli')
+        setModel(defaultAgent.model || '')
+        setCredentialId(defaultAgent.credentialId || null)
+        if (defaultAgent.apiEndpoint) setEndpoint(defaultAgent.apiEndpoint)
       } else {
         setSelectedAgentId(null)
       }
@@ -168,8 +172,6 @@ export function NewSessionSheet() {
     return true
   }
 
-  const inputClass = "w-full px-4 py-3.5 rounded-[14px] border border-white/[0.08] bg-surface text-text text-[15px] outline-none transition-all duration-200 placeholder:text-text-3/50 focus-glow"
-
   return (
     <BottomSheet open={open} onClose={onClose} wide>
       {/* Header */}
@@ -180,9 +182,7 @@ export function NewSessionSheet() {
 
       {/* Name */}
       <div className="mb-8">
-        <label className="block font-display text-[12px] font-600 text-text-2 uppercase tracking-[0.08em] mb-3">
-          Chat Name
-        </label>
+        <SectionLabel>Chat Name</SectionLabel>
         <input
           type="text"
           value={name}
@@ -196,20 +196,14 @@ export function NewSessionSheet() {
       {/* Agent (optional) */}
       {Object.keys(agents).length > 0 && (
         <div className="mb-8">
-          <label className="block font-display text-[12px] font-600 text-text-2 uppercase tracking-[0.08em] mb-3">
-            Agent <span className="normal-case tracking-normal font-normal text-text-3">(optional)</span>
-          </label>
-          <select
-            value={selectedAgentId || ''}
-            onChange={(e) => handleSelectAgent(e.target.value || null)}
-            className={`${inputClass} appearance-none cursor-pointer`}
-            style={{ fontFamily: 'inherit' }}
-          >
-            <option value="">None — manual configuration</option>
-            {Object.values(agents).map((p) => (
-              <option key={p.id} value={p.id}>{p.name}{p.isOrchestrator ? ' (Orchestrator)' : ''}</option>
-            ))}
-          </select>
+          <SectionLabel>Agent <span className="normal-case tracking-normal font-normal text-text-3">(optional)</span></SectionLabel>
+          <AgentPickerList
+            agents={Object.values(agents).sort((a, b) => a.name.localeCompare(b.name))}
+            selected={selectedAgentId || ''}
+            onSelect={(id) => handleSelectAgent(id)}
+            noneOption={{ label: 'None — manual config', onSelect: () => handleSelectAgent(null) }}
+            showOrchBadge={true}
+          />
         </div>
       )}
 
@@ -218,9 +212,7 @@ export function NewSessionSheet() {
         <>
           {/* Provider */}
           <div className="mb-8">
-            <label className="block font-display text-[12px] font-600 text-text-2 uppercase tracking-[0.08em] mb-3">
-              Provider
-            </label>
+            <SectionLabel>Provider</SectionLabel>
             <div className="grid grid-cols-3 gap-3">
               {providers.map((p) => (
                 <button
@@ -242,9 +234,7 @@ export function NewSessionSheet() {
           {/* Ollama Mode Toggle */}
           {provider === 'ollama' && (
             <div className="mb-8">
-              <label className="block font-display text-[12px] font-600 text-text-2 uppercase tracking-[0.08em] mb-3">
-                Mode
-              </label>
+              <SectionLabel>Mode</SectionLabel>
               <div className="flex p-1 rounded-[14px] bg-surface border border-white/[0.06]">
                 {(['local', 'cloud'] as const).map((mode) => (
                   <button
@@ -267,9 +257,7 @@ export function NewSessionSheet() {
           {/* Model */}
           {currentProvider && currentProvider.models.length > 0 && (
             <div className="mb-8">
-              <label className="block font-display text-[12px] font-600 text-text-2 uppercase tracking-[0.08em] mb-3">
-                Model
-              </label>
+              <SectionLabel>Model</SectionLabel>
               <ModelCombobox
                 providerId={currentProvider.id}
                 value={model}
@@ -284,9 +272,7 @@ export function NewSessionSheet() {
           {/* API Key */}
           {(currentProvider?.requiresApiKey || (currentProvider?.optionalApiKey && ollamaMode === 'cloud')) && (
             <div className="mb-8">
-              <label className="block font-display text-[12px] font-600 text-text-2 uppercase tracking-[0.08em] mb-3">
-                API Key
-              </label>
+              <SectionLabel>API Key</SectionLabel>
               {providerCredentials.length > 0 && !addingKey ? (
                 <select
                   value={credentialId || ''}
@@ -336,7 +322,7 @@ export function NewSessionSheet() {
                     <button
                       onClick={handleAddKey}
                       disabled={!newKeyValue.trim()}
-                      className="flex-1 py-3 rounded-[14px] border-none bg-[#6366F1] text-white text-[14px] font-600 cursor-pointer disabled:opacity-30 transition-all hover:brightness-110"
+                      className="flex-1 py-3 rounded-[14px] border-none bg-accent-bright text-white text-[14px] font-600 cursor-pointer disabled:opacity-30 transition-all hover:brightness-110"
                       style={{ fontFamily: 'inherit' }}
                     >
                       Save Key
@@ -350,9 +336,7 @@ export function NewSessionSheet() {
           {/* Endpoint — show for providers that require it (Ollama local, OpenClaw) */}
           {currentProvider?.requiresEndpoint && (provider === 'openclaw' || (provider === 'ollama' && ollamaMode === 'local')) && (
             <div className="mb-8">
-              <label className="block font-display text-[12px] font-600 text-text-2 uppercase tracking-[0.08em] mb-3">
-                {provider === 'openclaw' ? 'OpenClaw Endpoint' : 'Endpoint'}
-              </label>
+              <SectionLabel>{provider === 'openclaw' ? 'OpenClaw Endpoint' : 'Endpoint'}</SectionLabel>
               <input
                 type="text"
                 value={endpoint}
@@ -433,9 +417,7 @@ export function NewSessionSheet() {
 
       {/* Project */}
       <div className="mb-10">
-        <label className="block font-display text-[12px] font-600 text-text-2 uppercase tracking-[0.08em] mb-3">
-          Directory {provider !== 'claude-cli' && <span className="normal-case tracking-normal font-normal text-text-3">(optional)</span>}
-        </label>
+        <SectionLabel>Directory {provider !== 'claude-cli' && <span className="normal-case tracking-normal font-normal text-text-3">(optional)</span>}</SectionLabel>
         <DirBrowser
           value={selectedDir}
           file={selectedFile}
@@ -452,26 +434,12 @@ export function NewSessionSheet() {
       </div>
 
       {/* Actions */}
-      <div className="flex gap-3 pt-2 border-t border-white/[0.04]">
-        <button
-          onClick={onClose}
-          className="flex-1 py-3.5 rounded-[14px] border border-white/[0.08] bg-transparent text-text-2 text-[15px] font-600 cursor-pointer
-            hover:bg-surface-2 transition-all duration-200"
-          style={{ fontFamily: 'inherit' }}
-        >
-          Cancel
-        </button>
-        <button
-          onClick={handleCreate}
-          disabled={!canCreate()}
-          className="flex-1 py-3.5 rounded-[14px] border-none bg-[#6366F1] text-white text-[15px] font-600 cursor-pointer
-            active:scale-[0.97] disabled:opacity-30 transition-all duration-200
-            shadow-[0_4px_20px_rgba(99,102,241,0.25)] hover:brightness-110"
-          style={{ fontFamily: 'inherit' }}
-        >
-          Create Chat
-        </button>
-      </div>
+      <SheetFooter
+        onCancel={onClose}
+        onSave={handleCreate}
+        saveLabel="Create Chat"
+        saveDisabled={!canCreate()}
+      />
     </BottomSheet>
   )
 }

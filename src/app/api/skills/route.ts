@@ -14,6 +14,10 @@ export async function POST(req: Request) {
   const skills = loadSkills()
   const id = genId()
   const normalized = normalizeSkillPayload(body)
+  const scope = body.scope === 'agent' ? 'agent' as const : 'global' as const
+  const agentIds = scope === 'agent' && Array.isArray(body.agentIds)
+    ? (body.agentIds as unknown[]).filter((id): id is string => typeof id === 'string')
+    : []
   skills[id] = {
     id,
     name: normalized.name,
@@ -22,6 +26,8 @@ export async function POST(req: Request) {
     description: normalized.description || '',
     sourceUrl: normalized.sourceUrl,
     sourceFormat: normalized.sourceFormat,
+    scope,
+    agentIds,
     createdAt: Date.now(),
     updatedAt: Date.now(),
   }

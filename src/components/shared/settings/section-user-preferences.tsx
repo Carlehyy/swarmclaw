@@ -1,8 +1,13 @@
 'use client'
 
+import { useAppStore } from '@/stores/use-app-store'
+import { AgentAvatar } from '@/components/agents/agent-avatar'
 import type { SettingsSectionProps } from './types'
 
 export function UserPreferencesSection({ appSettings, patchSettings, inputClass }: SettingsSectionProps) {
+  const agents = useAppStore((s) => s.agents)
+  const sortedAgents = Object.values(agents).sort((a, b) => a.name.localeCompare(b.name))
+
   return (
     <div className="mb-10">
       <h3 className="font-display text-[12px] font-600 text-text-2 uppercase tracking-[0.08em] mb-2">
@@ -19,6 +24,40 @@ export function UserPreferencesSection({ appSettings, patchSettings, inputClass 
         className={`${inputClass} resize-y min-h-[100px]`}
         style={{ fontFamily: 'inherit' }}
       />
+
+      {/* Default agent */}
+      <div className="mt-6">
+        <label className="text-[12px] font-600 text-text-2 block mb-1.5">Default Agent</label>
+        <p className="text-[11px] text-text-3/60 mb-2">
+          The agent that opens automatically when you start the app or click Main Chat.
+        </p>
+        <div className="flex flex-wrap gap-2">
+          <button
+            onClick={() => patchSettings({ defaultAgentId: null })}
+            className={`flex items-center gap-2 px-3 py-2 rounded-[10px] text-[12px] font-600 cursor-pointer transition-all border
+              ${!appSettings.defaultAgentId
+                ? 'bg-white/[0.06] border-accent-bright/30 text-text'
+                : 'bg-transparent border-white/[0.06] text-text-3 hover:bg-white/[0.03]'}`}
+            style={{ fontFamily: 'inherit' }}
+          >
+            Auto (first agent)
+          </button>
+          {sortedAgents.map((agent) => (
+            <button
+              key={agent.id}
+              onClick={() => patchSettings({ defaultAgentId: agent.id })}
+              className={`flex items-center gap-2 px-3 py-2 rounded-[10px] text-[12px] font-600 cursor-pointer transition-all border
+                ${appSettings.defaultAgentId === agent.id
+                  ? 'bg-white/[0.06] border-accent-bright/30 text-text'
+                  : 'bg-transparent border-white/[0.06] text-text-3 hover:bg-white/[0.03]'}`}
+              style={{ fontFamily: 'inherit' }}
+            >
+              <AgentAvatar seed={agent.avatarSeed || null} name={agent.name} size={18} />
+              {agent.name}
+            </button>
+          ))}
+        </div>
+      </div>
     </div>
   )
 }

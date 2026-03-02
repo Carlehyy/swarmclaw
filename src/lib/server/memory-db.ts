@@ -329,6 +329,7 @@ function normalizeImage(rawImage: unknown, legacyImagePath?: string | null): Mem
 function initDb() {
   const db = new Database(DB_PATH)
   db.pragma('journal_mode = WAL')
+  db.pragma('busy_timeout = 5000')
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS memories (
@@ -354,9 +355,14 @@ function initDb() {
     'linkedMemoryIds TEXT',
     '"references" TEXT',
     'image TEXT',
+    'pinned INTEGER DEFAULT 0',
+    'sharedWith TEXT',
   ]) {
     try { db.exec(`ALTER TABLE memories ADD COLUMN ${col}`) } catch { /* already exists */ }
   }
+
+  // Partial index for fast pinned-memory lookups
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_memories_pinned ON memories(agentId, updatedAt DESC) WHERE pinned = 1`)
 
   // FTS5 virtual table for full-text search
   db.exec(`
@@ -448,14 +454,14 @@ function initDb() {
     insert: db.prepare(`
       INSERT INTO memories (
         id, agentId, sessionId, category, title, content, metadata, embedding,
-        "references", filePaths, image, imagePath, linkedMemoryIds, createdAt, updatedAt
+        "references", filePaths, image, imagePath, linkedMemoryIds, pinned, sharedWith, createdAt, updatedAt
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `),
     update: db.prepare(`
       UPDATE memories
       SET agentId=?, sessionId=?, category=?, title=?, content=?, metadata=?, embedding=?,
-          "references"=?, filePaths=?, image=?, imagePath=?, linkedMemoryIds=?, updatedAt=?
+          "references"=?, filePaths=?, image=?, imagePath=?, linkedMemoryIds=?, pinned=?, sharedWith=?, updatedAt=?
       WHERE id=?
     `),
     delete: db.prepare(`DELETE FROM memories WHERE id=?`),
@@ -467,6 +473,9 @@ function initDb() {
     },
     listAll: db.prepare(`SELECT * FROM memories ORDER BY updatedAt DESC LIMIT ?`),
     listByAgent: db.prepare(`SELECT * FROM memories WHERE agentId=? ORDER BY updatedAt DESC LIMIT ?`),
+    listByAgentOrShared: db.prepare(`SELECT * FROM memories WHERE agentId=? OR sharedWith LIKE ? ORDER BY updatedAt DESC LIMIT ?`),
+    listPinnedByAgent: db.prepare(`SELECT * FROM memories WHERE pinned = 1 AND agentId = ? ORDER BY updatedAt DESC LIMIT ?`),
+    listPinnedAll: db.prepare(`SELECT * FROM memories WHERE pinned = 1 ORDER BY updatedAt DESC LIMIT ?`),
     search: db.prepare(`
       SELECT m.* FROM memories m
       INNER JOIN memories_fts f ON m.rowid = f.rowid
@@ -479,6 +488,12 @@ function initDb() {
       WHERE memories_fts MATCH ? AND m.agentId = ?
       LIMIT ${MAX_FTS_RESULT_ROWS}
     `),
+    searchByAgentOrShared: db.prepare(`
+      SELECT m.* FROM memories m
+      INNER JOIN memories_fts f ON m.rowid = f.rowid
+      WHERE memories_fts MATCH ? AND (m.agentId = ? OR m.sharedWith LIKE ?)
+      LIMIT ${MAX_FTS_RESULT_ROWS}
+    `),
     // Remove a linked ID from all memories that reference it (cleanup on delete)
     findMemoriesLinkingTo: db.prepare(`SELECT * FROM memories WHERE linkedMemoryIds LIKE ?`),
     updateLinks: db.prepare(`UPDATE memories SET linkedMemoryIds = ?, updatedAt = ? WHERE id = ?`),
@@ -489,6 +504,7 @@ function initDb() {
       LIMIT 1
     `),
     allRowsByUpdated: db.prepare(`SELECT * FROM memories ORDER BY updatedAt DESC`),
+    countsByAgent: db.prepare(`SELECT COALESCE(agentId, '_global') AS agentKey, COUNT(*) AS cnt FROM memories GROUP BY agentKey`),
     exactDuplicateBySessionCategory: db.prepare(`
       SELECT * FROM memories
       WHERE sessionId = ? AND category = ? AND title = ? AND content = ?
@@ -517,6 +533,8 @@ function initDb() {
       image,
       imagePath: image?.path || undefined,
       linkedMemoryIds: linkedMemoryIds.length ? linkedMemoryIds : undefined,
+      pinned: row.pinned === 1,
+      sharedWith: parseJsonSafe<string[]>(row.sharedWith, []).length ? parseJsonSafe<string[]>(row.sharedWith, []) : undefined,
       createdAt: typeof row.createdAt === 'number' ? row.createdAt : Date.now(),
       updatedAt: typeof row.updatedAt === 'number' ? row.updatedAt : Date.now(),
     }
@@ -562,6 +580,8 @@ function initDb() {
         const duplicate = stmts.exactDuplicateBySessionCategory.get(sessionId, category, title, content) as Record<string, unknown> | undefined
         if (duplicate) return rowToEntry(duplicate)
       }
+      const pinned = data.pinned ? 1 : 0
+      const sharedWith = Array.isArray(data.sharedWith) && data.sharedWith.length ? JSON.stringify(data.sharedWith) : null
       stmts.insert.run(
         id, data.agentId || null, sessionId,
         category, title, content,
@@ -572,6 +592,8 @@ function initDb() {
         image ? JSON.stringify(image) : null,
         image?.path || null,
         linkedMemoryIds.length ? JSON.stringify(linkedMemoryIds) : null,
+        pinned,
+        sharedWith,
         now, now,
       )
       // Compute embedding in background (fire-and-forget)
@@ -617,6 +639,8 @@ function initDb() {
       const nextLinked = normalizeLinkedMemoryIds(merged.linkedMemoryIds, id)
       const prevLinked = normalizeLinkedMemoryIds(existingEntry.linkedMemoryIds, id)
       const now = Date.now()
+      const pinnedVal = merged.pinned ? 1 : 0
+      const sharedWithVal = Array.isArray(merged.sharedWith) && merged.sharedWith.length ? JSON.stringify(merged.sharedWith) : null
       stmts.update.run(
         merged.agentId || null, merged.sessionId || null,
         merged.category, merged.title, merged.content,
@@ -627,6 +651,8 @@ function initDb() {
         image ? JSON.stringify(image) : null,
         image?.path || null,
         nextLinked.length ? JSON.stringify(nextLinked) : null,
+        pinnedVal,
+        sharedWithVal,
         now, id,
       )
 
@@ -755,11 +781,11 @@ function initDb() {
     search(query: string, agentId?: string): MemoryEntry[] {
       if (shouldSkipSearchQuery(query)) return []
       const startedAt = Date.now()
-      // FTS keyword search
+      // FTS keyword search (includes memories shared with this agent)
       const ftsQuery = buildFtsQuery(query)
       const ftsResults: MemoryEntry[] = ftsQuery
         ? (agentId
-            ? stmts.searchByAgent.all(ftsQuery, agentId) as any[]
+            ? stmts.searchByAgentOrShared.all(ftsQuery, agentId, `%"${agentId}"%`) as any[]
             : stmts.search.all(ftsQuery) as any[]
           ).map(rowToEntry)
         : []
@@ -838,9 +864,24 @@ function initDb() {
     list(agentId?: string, limit = 200): MemoryEntry[] {
       const safeLimit = Math.max(1, Math.min(500, Math.trunc(limit)))
       const rows = agentId
-        ? stmts.listByAgent.all(agentId, safeLimit) as any[]
+        ? stmts.listByAgentOrShared.all(agentId, `%"${agentId}"%`, safeLimit) as any[]
         : stmts.listAll.all(safeLimit) as any[]
       return rows.map(rowToEntry)
+    },
+
+    listPinned(agentId?: string, limit = 20): MemoryEntry[] {
+      const safeLimit = Math.max(1, Math.min(100, Math.trunc(limit)))
+      const rows = agentId
+        ? stmts.listPinnedByAgent.all(agentId, safeLimit) as any[]
+        : stmts.listPinnedAll.all(safeLimit) as any[]
+      return rows.map(rowToEntry)
+    },
+
+    countsByAgent(): Record<string, number> {
+      const rows = stmts.countsByAgent.all() as { agentKey: string; cnt: number }[]
+      const result: Record<string, number> = {}
+      for (const row of rows) result[row.agentKey] = row.cnt
+      return result
     },
 
     getByAgent(agentId: string, limit = 200): MemoryEntry[] {
@@ -1019,6 +1060,8 @@ export function addKnowledge(params: {
   title: string
   content: string
   tags?: string[]
+  scope?: 'global' | 'agent'
+  agentIds?: string[]
   createdByAgentId?: string | null
   createdBySessionId?: string | null
 }): MemoryEntry {
@@ -1031,6 +1074,8 @@ export function addKnowledge(params: {
     content: params.content,
     metadata: {
       tags: params.tags || [],
+      scope: params.scope || 'global',
+      agentIds: params.scope === 'agent' ? (params.agentIds || []) : [],
       createdByAgentId: params.createdByAgentId || null,
       createdBySessionId: params.createdBySessionId || null,
     },

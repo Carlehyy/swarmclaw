@@ -25,12 +25,16 @@ export async function GET(req: Request) {
 
 export async function POST(req: Request) {
   const body = (await req.json()) as Record<string, unknown>
+  const actionLabel = typeof body.actionLabel === 'string' ? body.actionLabel : undefined
+  const actionUrl = typeof body.actionUrl === 'string' ? body.actionUrl : undefined
   const id = genId()
   const notification: AppNotification = {
     id,
     type: (['info', 'success', 'warning', 'error'].includes(body.type as string) ? body.type : 'info') as AppNotification['type'],
     title: typeof body.title === 'string' ? body.title : 'Notification',
     message: typeof body.message === 'string' ? body.message : undefined,
+    actionLabel,
+    actionUrl,
     entityType: typeof body.entityType === 'string' ? body.entityType : undefined,
     entityId: typeof body.entityId === 'string' ? body.entityId : undefined,
     read: false,

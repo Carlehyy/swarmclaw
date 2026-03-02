@@ -5,6 +5,7 @@ import { api } from '@/lib/api-client'
 import { useAppStore } from '@/stores/use-app-store'
 import { useChatStore } from '@/stores/use-chat-store'
 import { ConnectorPlatformBadge, getSessionConnector } from '@/components/shared/connector-platform-icon'
+import { AgentAvatar } from '@/components/agents/agent-avatar'
 
 function timeAgo(ts: number): string {
   if (!ts) return ''
@@ -38,6 +39,9 @@ export function SessionCard({ session, active, onClick }: Props) {
   const agents = useAppStore((s) => s.agents)
   const connectors = useAppStore((s) => s.connectors)
   const streamingSessionId = useChatStore((s) => s.streamingSessionId)
+  const streamPhase = useChatStore((s) => s.streamPhase)
+  const streamToolName = useChatStore((s) => s.streamToolName)
+  const lastReadTimestamps = useAppStore((s) => s.lastReadTimestamps)
   const isTyping = streamingSessionId === session.id
 
   const handleDelete = async (e: React.MouseEvent) => {
@@ -56,14 +60,16 @@ export function SessionCard({ session, active, onClick }: Props) {
   const agent = session.agentId ? agents[session.agentId] : null
   const connector = getSessionConnector(session, connectors)
   const loopIsOngoing = appSettings.loopMode === 'ongoing'
+  const explicitOptIn = session.heartbeatEnabled === true || agent?.heartbeatEnabled === true
   const intervalRaw = session.heartbeatIntervalSec ?? agent?.heartbeatIntervalSec ?? appSettings.heartbeatIntervalSec ?? 120
   const intervalNum = typeof intervalRaw === 'number' ? intervalRaw : Number.parseInt(String(intervalRaw), 10)
   const intervalEnabled = Number.isFinite(intervalNum) ? intervalNum > 0 : true
   const heartbeatEnabled =
-    loopIsOngoing
+    (loopIsOngoing || explicitOptIn)
     && (session.tools?.length ?? 0) > 0
     && intervalEnabled
-    && (session.heartbeatEnabled === true || (session.heartbeatEnabled !== false && agent?.heartbeatEnabled !== false))
+    && session.heartbeatEnabled !== false
+    && agent?.heartbeatEnabled !== false
 
   return (
     <div
@@ -78,17 +84,13 @@ export function SessionCard({ session, active, onClick }: Props) {
         <div className="absolute left-0 top-3.5 bottom-3.5 w-[2.5px] rounded-full bg-accent-bright" />
       )}
       <div className="flex items-center gap-2.5">
-        {session.active && (
-          <span className="inline-block w-[6px] h-[6px] rounded-full bg-success shrink-0"
-            style={{ animation: 'pulse 2s ease-in-out infinite' }} />
-        )}
-        {heartbeatEnabled && (
-          <span
-            className="inline-flex items-center justify-center w-[10px] h-[10px] rounded-full bg-emerald-400/15 border border-emerald-400/30 shrink-0"
-            title="Heartbeat enabled"
-          >
-            <span className="w-[4px] h-[4px] rounded-full bg-emerald-400" />
-          </span>
+        {agent && (
+          <div className="relative shrink-0">
+            <AgentAvatar seed={agent.avatarSeed} name={agent.name} size={24} />
+            {(heartbeatEnabled || session.active) && (
+              <span className="absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full bg-emerald-400 ring-2 ring-[#0f0f1a]" />
+            )}
+          </div>
         )}
         {connector && (
           <ConnectorPlatformBadge
@@ -100,6 +102,20 @@ export function SessionCard({ session, active, onClick }: Props) {
           />
         )}
         <span className="font-display text-[14px] font-600 truncate flex-1 tracking-[-0.01em]">{session.name}</span>
+        {session.mainLoopState?.status && session.mainLoopState.status !== 'idle' && (
+          <span className={`shrink-0 flex items-center gap-1 text-[9px] font-600 uppercase tracking-wider px-1.5 py-0.5 rounded-[5px] ${
+            session.mainLoopState.status === 'progress' ? 'text-blue-400/90 bg-blue-400/[0.08]'
+            : session.mainLoopState.status === 'blocked' ? 'text-amber-400/90 bg-amber-400/[0.08]'
+            : 'text-emerald-400/90 bg-emerald-400/[0.08]'
+          }`}>
+            <span className={`w-[5px] h-[5px] rounded-full ${
+              session.mainLoopState.status === 'progress' ? 'bg-blue-400'
+              : session.mainLoopState.status === 'blocked' ? 'bg-amber-400'
+              : 'bg-emerald-400'
+            }`} />
+            {session.mainLoopState.status}
+          </span>
+        )}
         {session.sessionType === 'orchestrated' && (
           <span className="shrink-0 text-[10px] font-600 uppercase tracking-wider text-amber-400/80 bg-amber-400/[0.08] px-2 py-0.5 rounded-[6px]">
             AI
@@ -110,6 +126,17 @@ export function SessionCard({ session, active, onClick }: Props) {
             {providerLabel}
           </span>
         )}
+        {(() => {
+          const lastRead = lastReadTimestamps[session.id] || 0
+          const unread = (session.messages || []).filter(
+            (m) => m.role === 'assistant' && (m.time || 0) > lastRead,
+          ).length
+          return unread > 0 ? (
+            <span className="shrink-0 min-w-[18px] h-[18px] flex items-center justify-center rounded-full bg-accent-bright text-white text-[10px] font-600 px-1">
+              {unread > 99 ? '99+' : unread}
+            </span>
+          ) : null
+        })()}
         <span className="text-[11px] text-text-3/70 shrink-0 tabular-nums font-mono">
           {timeAgo(session.lastActiveAt)}
         </span>
@@ -134,7 +161,11 @@ export function SessionCard({ session, active, onClick }: Props) {
             <span className="w-1 h-1 rounded-full bg-accent-bright/70 animate-bounce [animation-delay:150ms]" />
             <span className="w-1 h-1 rounded-full bg-accent-bright/70 animate-bounce [animation-delay:300ms]" />
           </span>
-          Typing...
+          {streamPhase === 'tool' && streamToolName
+            ? `Using ${streamToolName}...`
+            : streamPhase === 'responding'
+              ? 'Responding...'
+              : 'Thinking...'}
         </div>
       ) : (
         <div className="text-[13px] text-text-2/50 truncate mt-1 leading-relaxed">{preview}</div>

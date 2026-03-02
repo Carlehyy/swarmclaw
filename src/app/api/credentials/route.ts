@@ -6,8 +6,8 @@ export const dynamic = 'force-dynamic'
 
 export async function GET(_req: Request) {
   const creds = loadCredentials()
-  const safe: Record<string, any> = {}
-  for (const [id, c] of Object.entries(creds) as [string, any][]) {
+  const safe: Record<string, Record<string, unknown>> = {}
+  for (const [id, c] of Object.entries(creds) as [string, Record<string, unknown>][]) {
     safe[id] = { id: c.id, provider: c.provider, name: c.name, createdAt: c.createdAt }
   }
   return NextResponse.json(safe)
@@ -28,6 +28,5 @@ export async function POST(req: Request) {
     createdAt: Date.now(),
   }
   saveCredentials(creds)
-  console.log(`[credentials] stored ${id} for ${provider}`)
   return NextResponse.json({ id, provider, name: creds[id].name, createdAt: creds[id].createdAt })
 }

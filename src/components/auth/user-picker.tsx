@@ -2,22 +2,25 @@
 
 import { useState } from 'react'
 import { useAppStore } from '@/stores/use-app-store'
+import { AgentAvatar } from '@/components/agents/agent-avatar'
 import { api } from '@/lib/api-client'
 
 export function UserPicker() {
   const setUser = useAppStore((s) => s.setUser)
+  const loadSettings = useAppStore((s) => s.loadSettings)
   const [name, setName] = useState('')
+  const [avatarSeed, setAvatarSeed] = useState(() => Math.random().toString(36).slice(2, 10))
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     const trimmed = name.trim()
     if (!trimmed) return
     const userName = trimmed.toLowerCase()
-    // Save server-side so it persists across devices
     try {
-      await api('PUT', '/settings', { userName })
+      await api('PUT', '/settings', { userName, userAvatarSeed: avatarSeed.trim() || undefined })
     } catch { /* still set locally */ }
     setUser(userName)
+    loadSettings()
   }
 
   return (
@@ -71,10 +74,35 @@ export function UserPicker() {
               focus:border-accent-bright/30 focus:shadow-[0_0_30px_rgba(99,102,241,0.1)]"
             style={{ fontFamily: 'inherit' }}
           />
+
+          {/* Avatar picker */}
+          <div className="flex flex-col items-center gap-3">
+            <AgentAvatar seed={avatarSeed || null} name={name || '?'} size={64} />
+            <div className="flex items-center gap-2">
+              <input
+                type="text"
+                value={avatarSeed}
+                onChange={(e) => setAvatarSeed(e.target.value)}
+                placeholder="Avatar seed"
+                className="w-[160px] px-3 py-2 rounded-[10px] border border-white/[0.08] bg-surface
+                  text-text text-[13px] text-center outline-none transition-all
+                  focus:border-accent-bright/30"
+              />
+              <button
+                type="button"
+                onClick={() => setAvatarSeed(Math.random().toString(36).slice(2, 10))}
+                className="px-3 py-2 rounded-[10px] border border-white/[0.08] bg-transparent text-text-3 text-[12px] font-600
+                  cursor-pointer transition-all hover:bg-white/[0.04] shrink-0"
+              >
+                Randomize
+              </button>
+            </div>
+          </div>
+
           <button
             type="submit"
             disabled={!name.trim()}
-            className="px-12 py-4 rounded-[16px] border-none bg-[#6366F1] text-white text-[16px] font-display font-600
+            className="px-12 py-4 rounded-[16px] border-none bg-accent-bright text-white text-[16px] font-display font-600
               cursor-pointer hover:brightness-110 active:scale-[0.97] transition-all duration-200
               shadow-[0_6px_28px_rgba(99,102,241,0.3)] disabled:opacity-30"
             style={{ fontFamily: 'inherit' }}

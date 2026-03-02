@@ -4,7 +4,7 @@ import { notFound } from '@/lib/server/collection-helpers'
 
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
-  const body = await req.json() as { messageIndex: number; newText: string }
+  const body = await req.json().catch(() => ({})) as { messageIndex: number; newText: string }
   const sessions = loadSessions()
   const session = sessions[id]
   if (!session) return notFound()

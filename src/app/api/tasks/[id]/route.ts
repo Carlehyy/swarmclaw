@@ -8,6 +8,8 @@ import { formatValidationFailure, validateTaskCompletion } from '@/lib/server/ta
 import { pushMainLoopEventToMainSessions } from '@/lib/server/main-agent-loop'
 import { notify } from '@/lib/server/ws-hub'
 import { createNotification } from '@/lib/server/create-notification'
+import { enqueueSystemEvent } from '@/lib/server/system-events'
+import { requestHeartbeatNow } from '@/lib/server/heartbeat-wake'
 
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   // Keep completed queue integrity even if daemon is not running.
@@ -34,6 +36,8 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
     tasks[id].updatedAt = Date.now()
   } else {
     Object.assign(tasks[id], body, { updatedAt: Date.now() })
+    // Explicitly clear nullable fields when sent as null (Object.assign copies null but not undefined)
+    if (body.projectId === null) delete tasks[id].projectId
   }
   tasks[id].id = id // prevent id overwrite
 
@@ -84,6 +88,14 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
       entityType: 'task',
       entityId: id,
     })
+
+    // Enqueue system event + heartbeat wake
+    if (tasks[id].sessionId) {
+      enqueueSystemEvent(tasks[id].sessionId, `Task ${tasks[id].status}: ${tasks[id].title}`)
+    }
+    if (tasks[id].agentId) {
+      requestHeartbeatNow({ agentId: tasks[id].agentId, reason: 'task-completed' })
+    }
   }
 
   // Dependency check: cannot queue a task if any blocker is incomplete

@@ -15,7 +15,8 @@ export function buildMemoryTools(bctx: ToolBuildContext): StructuredToolInterfac
 
     tools.push(
       tool(
-        async ({ action, key, value, category, query, scope, filePaths, references, project, imagePath, linkedMemoryIds, depth, linkedLimit, targetIds, tags }) => {
+        async (input) => {
+          const { action, key, value, category, query, scope, filePaths, references, project, imagePath, linkedMemoryIds, depth, linkedLimit, targetIds, tags, pinned, sharedWith } = input as Record<string, any>
           try {
             const scopeMode = scope || 'auto'
             const currentAgentId = ctx?.agentId || null
@@ -98,6 +99,8 @@ export function buildMemoryTools(bctx: ToolBuildContext): StructuredToolInterfac
                 image: storedImage,
                 imagePath: storedImage?.path || undefined,
                 linkedMemoryIds,
+                pinned: pinned === true,
+                sharedWith: Array.isArray(sharedWith) ? sharedWith : undefined,
               })
               const memoryScope = entry.agentId ? 'agent' : 'shared'
               let result = `Stored ${memoryScope} memory "${key}" (id: ${entry.id})`
@@ -220,6 +223,8 @@ export function buildMemoryTools(bctx: ToolBuildContext): StructuredToolInterfac
             linkedLimit: z.number().optional().describe('Max linked memories expanded during traversal. Respects configured server cap.'),
             targetIds: z.array(z.string()).optional().describe('Memory IDs to link/unlink (for link/unlink actions)'),
             tags: z.array(z.string()).optional().describe('Tags for categorizing knowledge entries'),
+            pinned: z.boolean().optional().describe('Mark memory as pinned (always preloaded in agent context). For store action.'),
+            sharedWith: z.array(z.string()).optional().describe('Agent IDs to share this memory with (for store action). They can read it in their context.'),
           }),
         },
       ),

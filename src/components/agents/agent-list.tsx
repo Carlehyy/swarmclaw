@@ -6,6 +6,8 @@ import { api } from '@/lib/api-client'
 import { AgentCard } from './agent-card'
 import { TrashList } from './trash-list'
 import { useApprovalStore } from '@/stores/use-approval-store'
+import { Skeleton } from '@/components/shared/skeleton'
+import { EmptyState } from '@/components/shared/empty-state'
 
 interface Props {
   inSidebar?: boolean
@@ -49,7 +51,8 @@ export function AgentList({ inSidebar }: Props) {
     } catch { /* ignore */ }
   }, [mainSession, loadSessions])
 
-  useEffect(() => { loadAgents() }, [])
+  const [loaded, setLoaded] = useState(Object.keys(agents).length > 0)
+  useEffect(() => { loadAgents().then(() => setLoaded(true)) }, [])
 
   // Compute which agents are "running" (have active sessions)
   const runningAgentIds = useMemo(() => {
@@ -59,6 +62,27 @@ export function AgentList({ inSidebar }: Props) {
     }
     return ids
   }, [sessions])
+
+  // Re-evaluate online status periodically (Date.now() can't be called in useMemo directly)
+  const [now, setNow] = useState(() => Date.now())
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 60_000)
+    return () => clearInterval(id)
+  }, [])
+
+  // Agents that are "online": heartbeat enabled + tools, or recently active (within 30min)
+  const onlineAgentIds = useMemo(() => {
+    const ids = new Set<string>()
+    const recentThreshold = now - 30 * 60 * 1000
+    for (const a of Object.values(agents)) {
+      if (a.heartbeatEnabled === true && (a.tools?.length ?? 0) > 0) { ids.add(a.id); continue }
+      // Check if any session for this agent was active in the last 30 minutes
+      for (const s of Object.values(sessions)) {
+        if (s.agentId === a.id && (s.lastActiveAt ?? 0) > recentThreshold) { ids.add(a.id); break }
+      }
+    }
+    return ids
+  }, [agents, sessions, now])
 
   // Approval counts per agent
   const approvalsByAgent = useMemo(() => {
@@ -126,28 +150,35 @@ export function AgentList({ inSidebar }: Props) {
   }
 
   if (!filtered.length && !search) {
+    // Show skeleton cards while loading
+    if (!loaded) {
+      return (
+        <div className="flex-1 flex flex-col gap-1 px-2 pt-4">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} className="py-3.5 px-4 rounded-[14px] border border-transparent">
+              <div className="flex items-center gap-2.5">
+                <Skeleton className="rounded-full" width={28} height={28} />
+                <Skeleton className="rounded-[6px]" width={120} height={14} />
+              </div>
+              <Skeleton className="rounded-[6px] mt-2" width="80%" height={12} />
+              <Skeleton className="rounded-[6px] mt-1.5" width={80} height={11} />
+            </div>
+          ))}
+        </div>
+      )
+    }
     return (
-      <div className="flex-1 flex flex-col items-center justify-center gap-4 text-text-3 p-8 text-center">
-        <div className="w-12 h-12 rounded-[14px] bg-accent-soft flex items-center justify-center mb-1">
+      <EmptyState
+        icon={
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="text-accent-bright">
             <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
             <circle cx="12" cy="7" r="4" />
           </svg>
-        </div>
-        <p className="font-display text-[15px] font-600 text-text-2">No agents yet</p>
-        <p className="text-[13px] text-text-3/50">Create AI agents and orchestrators</p>
-        {!inSidebar && (
-          <button
-            onClick={() => setAgentSheetOpen(true)}
-            className="mt-3 px-8 py-3 rounded-[14px] border-none bg-[#6366F1] text-white
-              text-[14px] font-600 cursor-pointer active:scale-95 transition-all duration-200
-              shadow-[0_4px_16px_rgba(99,102,241,0.2)]"
-            style={{ fontFamily: 'inherit' }}
-          >
-            + New Agent
-          </button>
-        )}
-      </div>
+        }
+        title="No agents yet"
+        subtitle="Create AI agents and orchestrators"
+        action={!inSidebar ? { label: '+ New Agent', onClick: () => setAgentSheetOpen(true) } : undefined}
+      />
     )
   }
 
@@ -212,7 +243,7 @@ export function AgentList({ inSidebar }: Props) {
       <div className="flex flex-col gap-1 px-2 pb-4">
         {filtered.map((p) => (
           <div key={p.id} ref={(el) => { if (el) cardRefs.current.set(p.id, el); else cardRefs.current.delete(p.id) }}>
-            <AgentCard agent={p} isDefault={p.id === defaultAgentId} isRunning={runningAgentIds.has(p.id)} isSelected={p.id === selectedAgentId} onSetDefault={handleSetDefault} />
+            <AgentCard agent={p} isDefault={p.id === defaultAgentId} isRunning={runningAgentIds.has(p.id)} isOnline={onlineAgentIds.has(p.id)} isSelected={p.id === selectedAgentId} onSetDefault={handleSetDefault} />
           </div>
         ))}
       </div>

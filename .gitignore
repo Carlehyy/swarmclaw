@@ -69,6 +69,7 @@ next-env.d.ts
 
 # local scratch files
 todo.html
+IMPROVEMENTS.md
 
 # local scratch dir accidentally created by tooling
 /~/

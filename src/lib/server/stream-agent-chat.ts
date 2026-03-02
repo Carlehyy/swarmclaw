@@ -12,6 +12,20 @@ import { logExecution } from './execution-log'
 import type { Session, Message, UsageRecord } from '@/types'
 import { extractSuggestions } from './suggestions'
 
+/** Extract a breadcrumb title from notable tool completions (task/schedule/agent creation). */
+function extractBreadcrumbTitle(toolName: string, input: unknown, output: string | undefined): string | null {
+  if (!input || typeof input !== 'object') return null
+  const inp = input as Record<string, unknown>
+  const action = typeof inp.action === 'string' ? inp.action : ''
+  if (toolName === 'manage_tasks') {
+    if (action === 'create') return `Created task: ${inp.title || 'Untitled'}`
+    if (output && /status.*completed|completed.*successfully/i.test(output)) return `Completed task: ${inp.title || inp.taskId || 'unknown'}`
+  }
+  if (toolName === 'manage_schedules' && action === 'create') return `Created schedule: ${inp.name || 'Untitled'}`
+  if (toolName === 'manage_agents' && action === 'create') return `Created agent: ${inp.name || 'Untitled'}`
+  return null
+}
+
 interface StreamAgentChatOpts {
   session: Session
   message: string
@@ -25,7 +39,7 @@ interface StreamAgentChatOpts {
   signal?: AbortSignal
 }
 
-function buildToolCapabilityLines(enabledTools: string[]): string[] {
+function buildToolCapabilityLines(enabledTools: string[], opts?: { platformAssignScope?: 'self' | 'all' }): string[] {
   const lines: string[] = []
   if (enabledTools.includes('shell')) lines.push('- Shell execution is available (`execute_command`). Use it for running servers, installing deps, running scripts, git commands, build/test steps, and any single or chained shell commands. Supports background mode for long-running processes like dev servers.')
   if (enabledTools.includes('process')) lines.push('- Process control is available (`process_tool`) for long-running commands (poll/log/write/kill).')
@@ -52,9 +66,12 @@ function buildToolCapabilityLines(enabledTools: string[]): string[] {
   // Context tools are available to any session with tools (not just manage_sessions)
   if (enabledTools.length > 0) {
     lines.push('- Context management is available (`context_status`, `context_summarize`). Use `context_status` to check token usage and `context_summarize` to compact conversation history when approaching limits.')
-    lines.push('- Agent delegation is available (`delegate_to_agent`). Use it to assign tasks to other agents based on their capabilities.')
+    if (opts?.platformAssignScope === 'all') {
+      lines.push('- Agent delegation is available (`delegate_to_agent`). Use it to assign tasks to other agents based on their capabilities.')
+    }
   }
   if (enabledTools.includes('manage_secrets')) lines.push('- Secret management is available (`manage_secrets`) for durable encrypted credentials and API tokens.')
+  if (enabledTools.includes('manage_chatrooms')) lines.push('- Chatroom management is available (`manage_chatrooms`) for multi-agent collaborative chatrooms with @mention-based interactions.')
   return lines
 }
 
@@ -63,9 +80,10 @@ function buildAgenticExecutionPolicy(opts: {
   loopMode: 'bounded' | 'ongoing'
   heartbeatPrompt: string
   heartbeatIntervalSec: number
+  platformAssignScope?: 'self' | 'all'
 }) {
   const hasTooling = opts.enabledTools.length > 0
-  const toolLines = buildToolCapabilityLines(opts.enabledTools)
+  const toolLines = buildToolCapabilityLines(opts.enabledTools, { platformAssignScope: opts.platformAssignScope })
   const delegationOrder = [
     opts.enabledTools.includes('claude_code') ? '`delegate_to_claude_code`' : null,
     opts.enabledTools.includes('codex_cli') ? '`delegate_to_codex_cli`' : null,
@@ -260,56 +278,91 @@ export async function streamAgentChat(opts: StreamAgentChatOpts): Promise<Stream
           .map((h) => h.text),
       ].join('\n')
 
-      const relevantLookup = memDb.searchWithLinked(memoryQuerySeed, session.agentId, 1, 10, 14)
-      const relevant = relevantLookup.entries.slice(0, 6)
-      const recent = memDb.list(session.agentId, 12).slice(0, 6)
-
       const seen = new Set<string>()
-      const formatMemoryLine = (m: any) => {
+      const formatMemoryLine = (m: { category?: string; title?: string; content?: string; pinned?: boolean }) => {
         const category = String(m.category || 'note')
         const title = String(m.title || 'Untitled').replace(/\s+/g, ' ').trim()
         const snippet = String(m.content || '').replace(/\s+/g, ' ').trim().slice(0, 220)
-        return `- [${category}] ${title}: ${snippet}`
+        const pin = m.pinned ? ' [pinned]' : ''
+        return `- [${category}]${pin} ${title}: ${snippet}`
       }
 
+      // Pinned memories always appear first
+      const pinned = memDb.listPinned(session.agentId, 5)
+      const pinnedLines = pinned
+        .filter((m) => { if (!m?.id || seen.has(m.id)) return false; seen.add(m.id); return true })
+        .map(formatMemoryLine)
+
+      // Reduce relevant slice by pinned count to keep total context bounded
+      const relevantSlice = Math.max(2, 6 - pinnedLines.length)
+      const relevantLookup = memDb.searchWithLinked(memoryQuerySeed, session.agentId, 1, 10, 14)
+      const relevant = relevantLookup.entries.slice(0, relevantSlice)
+      const recent = memDb.list(session.agentId, 12).slice(0, 6)
+
       const relevantLines = relevant
-        .filter((m) => {
-          if (!m?.id || seen.has(m.id)) return false
-          seen.add(m.id)
-          return true
-        })
+        .filter((m) => { if (!m?.id || seen.has(m.id)) return false; seen.add(m.id); return true })
         .map(formatMemoryLine)
 
       const recentLines = recent
-        .filter((m) => {
-          if (!m?.id || seen.has(m.id)) return false
-          seen.add(m.id)
-          return true
-        })
+        .filter((m) => { if (!m?.id || seen.has(m.id)) return false; seen.add(m.id); return true })
         .map(formatMemoryLine)
 
       const memorySections: string[] = []
+      if (pinnedLines.length) {
+        memorySections.push(
+          ['## Pinned Memories', 'Always-loaded memories marked as important.', ...pinnedLines].join('\n'),
+        )
+      }
       if (relevantLines.length) {
         memorySections.push(
-          [
-            '## Relevant Memory Hits',
-            'These memories were retrieved by relevance for the current objective.',
-            ...relevantLines,
-          ].join('\n'),
+          ['## Relevant Memory Hits', 'These memories were retrieved by relevance for the current objective.', ...relevantLines].join('\n'),
         )
       }
       if (recentLines.length) {
         memorySections.push(
-          [
-            '## Recent Memory Notes',
-            'Recent durable notes that may still apply.',
-            ...recentLines,
-          ].join('\n'),
+          ['## Recent Memory Notes', 'Recent durable notes that may still apply.', ...recentLines].join('\n'),
         )
       }
 
       if (memorySections.length) {
         stateModifierParts.push(memorySections.join('\n\n'))
+      }
+
+      // Memory Policy — always injected when memory tool is available
+      stateModifierParts.push([
+        '## Memory Policy',
+        'You have long-term memory. Use it proactively — do not wait to be asked.',
+        '',
+        '**Store memories for:**',
+        '- User preferences, corrections, or explicit "remember this" requests',
+        '- Key decisions or outcomes from complex tasks',
+        '- Discovered facts about projects, codebases, or environments',
+        '- Errors encountered and their solutions',
+        '- Relationship context (who is who, team dynamics)',
+        '- Important configuration details or environment specifics',
+        '',
+        '**Do NOT store:**',
+        '- Trivial acknowledgments or small talk',
+        '- Temporary in-progress work (use category "working" for ephemeral notes)',
+        '- Information already in your system prompt',
+        '- Exact duplicates of memories you already have',
+        '',
+        '**Best practices:**',
+        '- Use descriptive titles ("User prefers dark mode" not "Note 1")',
+        '- Use categories: preference, fact, learning, project, identity, decision',
+        '- Search memory before storing to avoid duplicates',
+        '- When correcting old knowledge, update or delete the old memory',
+      ].join('\n'))
+
+      // Pre-compaction memory flush: nudge agent to persist learnings when conversation is long
+      const msgCount = history.filter(m => m.role === 'user' || m.role === 'assistant').length
+      if (msgCount > 20) {
+        stateModifierParts.push([
+          '## Memory Flush Reminder',
+          'This conversation is getting long. Before context is trimmed, store any important',
+          'learnings, decisions, or facts as memories now. Only store what is significant and durable —',
+          'skip trivial details. If nothing needs storing, continue normally.',
+        ].join('\n'))
       }
     } catch {
       // If memory context fails to load, continue without blocking the run.
@@ -363,6 +416,7 @@ export async function streamAgentChat(opts: StreamAgentChatOpts): Promise<Stream
       loopMode: runtime.loopMode,
       heartbeatPrompt,
       heartbeatIntervalSec,
+      platformAssignScope: agentPlatformAssignScope,
     }),
   )
 
@@ -463,20 +517,35 @@ export async function streamAgentChat(opts: StreamAgentChatOpts): Promise<Stream
   // Auto-compaction: prune old history if approaching context window limit
   let effectiveHistory = history
   try {
-    const { shouldAutoCompact, consolidateToMemory, slidingWindowCompact, estimateTokens } = await import('./context-manager')
+    const { shouldAutoCompact, llmCompact, estimateTokens } = await import('./context-manager')
     const systemPromptTokens = estimateTokens(stateModifier)
     if (shouldAutoCompact(history, systemPromptTokens, session.provider, session.model)) {
-      // Consolidate important old messages to memory before pruning
-      const oldMessages = history.slice(0, -10)
-      if (oldMessages.length > 0 && session.agentId) {
-        consolidateToMemory(oldMessages, session.agentId, session.id)
+      const summarize = async (prompt: string): Promise<string> => {
+        const response = await llm.invoke([new HumanMessage(prompt)])
+        if (typeof response.content === 'string') return response.content
+        if (Array.isArray(response.content)) {
+          return response.content
+            .map((b: Record<string, unknown>) => (typeof b.text === 'string' ? b.text : ''))
+            .join('')
+        }
+        return ''
       }
-      // Keep last 10 messages via sliding window
-      effectiveHistory = slidingWindowCompact(history, 10)
-      console.log(`[stream-agent-chat] Auto-compacted session ${session.id}: ${history.length} → ${effectiveHistory.length} messages`)
+      const result = await llmCompact({
+        messages: history,
+        provider: session.provider,
+        model: session.model,
+        agentId: session.agentId || null,
+        sessionId: session.id,
+        summarize,
+      })
+      effectiveHistory = result.messages
+      console.log(
+        `[stream-agent-chat] Auto-compacted ${session.id}: ${history.length} → ${effectiveHistory.length} msgs` +
+        (result.summaryAdded ? ' (LLM summary)' : ' (sliding window fallback)'),
+      )
     }
   } catch {
-    // If context manager fails, continue with full history
+    // Context manager failure — continue with full history
   }
 
   const langchainMessages: Array<HumanMessage | AIMessage> = []
@@ -497,6 +566,7 @@ export async function streamAgentChat(opts: StreamAgentChatOpts): Promise<Stream
   let hasToolCalls = false
   let totalInputTokens = 0
   let totalOutputTokens = 0
+  let lastToolInput: unknown = null
 
   // Plugin hooks: beforeAgentStart
   const pluginMgr = getPluginManager()
@@ -529,15 +599,27 @@ export async function streamAgentChat(opts: StreamAgentChatOpts): Promise<Stream
         const chunk = event.data?.chunk
         if (chunk?.content) {
           // content can be string or array of content blocks
-          const text = typeof chunk.content === 'string'
-            ? chunk.content
-            : Array.isArray(chunk.content)
-              ? chunk.content.map((c: any) => c.text || '').join('')
-              : ''
-          if (text) {
-            fullText += text
-            lastSegment += text
-            write(`data: ${JSON.stringify({ t: 'd', text })}\n\n`)
+          if (Array.isArray(chunk.content)) {
+            for (const block of chunk.content) {
+              // Anthropic extended thinking blocks
+              if (block.type === 'thinking' && block.thinking) {
+                write(`data: ${JSON.stringify({ t: 'thinking', text: block.thinking })}\n\n`)
+              // OpenClaw [[thinking]] prefix convention
+              } else if (typeof block.text === 'string' && block.text.startsWith('[[thinking]]')) {
+                write(`data: ${JSON.stringify({ t: 'thinking', text: block.text.slice(12) })}\n\n`)
+              } else if (block.text) {
+                fullText += block.text
+                lastSegment += block.text
+                write(`data: ${JSON.stringify({ t: 'd', text: block.text })}\n\n`)
+              }
+            }
+          } else {
+            const text = typeof chunk.content === 'string' ? chunk.content : ''
+            if (text) {
+              fullText += text
+              lastSegment += text
+              write(`data: ${JSON.stringify({ t: 'd', text })}\n\n`)
+            }
           }
         }
       } else if (kind === 'on_llm_end') {
@@ -554,6 +636,7 @@ export async function streamAgentChat(opts: StreamAgentChatOpts): Promise<Stream
         lastSegment = ''
         const toolName = event.name || 'unknown'
         const input = event.data?.input
+        lastToolInput = input
         // Plugin hooks: beforeToolExec
         await pluginMgr.runHook('beforeToolExec', { toolName, input })
         const inputStr = typeof input === 'string' ? input : JSON.stringify(input)
@@ -576,6 +659,23 @@ export async function streamAgentChat(opts: StreamAgentChatOpts): Promise<Stream
             : JSON.stringify(output)
         // Plugin hooks: afterToolExec
         await pluginMgr.runHook('afterToolExec', { toolName, input: null, output: outputStr })
+        // Event-driven memory breadcrumbs
+        if (session.agentId && (session.tools || []).includes('memory')) {
+          try {
+            const breadcrumbTitle = extractBreadcrumbTitle(toolName, lastToolInput, outputStr)
+            if (breadcrumbTitle) {
+              const memDb = getMemoryDb()
+              memDb.add({
+                agentId: session.agentId,
+                sessionId: session.id,
+                category: 'breadcrumb',
+                title: breadcrumbTitle,
+                content: '',
+              })
+            }
+          } catch { /* breadcrumbs are best-effort */ }
+        }
+        lastToolInput = null
         logExecution(session.id, 'tool_result', `${toolName} returned`, {
           agentId: session.agentId,
           detail: { toolName, output: outputStr?.slice(0, 4000), error: /^(Error:|error:)/i.test((outputStr || '').trim()) || undefined },
@@ -615,6 +715,12 @@ export async function streamAgentChat(opts: StreamAgentChatOpts): Promise<Stream
   } finally {
     if (loopTimer) clearTimeout(loopTimer)
     if (signal) signal.removeEventListener('abort', abortFromSignal)
+  }
+
+  // Skip post-stream work if the client disconnected mid-stream
+  if (signal?.aborted) {
+    await cleanup()
+    return { fullText, finalResponse: fullText }
   }
 
   // Extract LLM-generated suggestions from the response and strip the tag
