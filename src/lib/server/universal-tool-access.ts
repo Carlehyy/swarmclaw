@@ -1,7 +1,7 @@
 import { dedup } from '@/lib/shared-utils'
 import { getExtensionManager } from './extensions'
 
-const UNIVERSAL_CORE_PLUGIN_IDS = [
+const UNIVERSAL_CORE_EXTENSION_IDS = [
   'shell',
   'files',
   'edit_file',
@@ -49,11 +49,11 @@ function normalizeExtensionList(value: string[] | undefined | null): string[] {
 export function listUniversalToolAccessExtensionIds(extraExtensions?: string[] | null): string[] {
   const installedExtensionIds = getExtensionManager()
     .listExtensions()
-    .filter((meta) => meta.isBuiltin || meta.enabled !== false)
+    .filter((meta) => meta.enabled !== false)
     .map((meta) => meta.filename)
 
   return dedup([
-    ...UNIVERSAL_CORE_PLUGIN_IDS,
+    ...UNIVERSAL_CORE_EXTENSION_IDS,
     ...installedExtensionIds,
     ...normalizeExtensionList(extraExtensions),
   ])
