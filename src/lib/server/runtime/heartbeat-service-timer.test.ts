@@ -99,7 +99,6 @@ describe('heartbeat-service scheduling', () => {
 
   it('fires periodic heartbeats only after the service tick window when enabled', () => {
     const output = runWithTempDataDir(`
-      const { setTimeout: delay } = await import('node:timers/promises')
       const storageMod = await import('@/lib/server/storage')
       const heartbeatMod = await import('@/lib/server/runtime/heartbeat-service')
       const runsMod = await import('@/lib/server/runtime/session-run-manager')
@@ -148,26 +147,30 @@ describe('heartbeat-service scheduling', () => {
         },
       })
 
-      const startedAt = Date.now()
-      heartbeat.startHeartbeatService()
-      await delay(2_500)
+      // Call tickHeartbeats directly rather than depending on the 60s setInterval.
+      // First tick during startup grace period — should produce no runs.
+      const hbState = globalThis.__swarmclaw_heartbeat_service__
+      if (hbState) {
+        hbState.running = true
+        hbState.startedAt = Date.now()  // within grace period
+      }
+      await heartbeat.tickHeartbeats()
       const early = runs.listRuns({ sessionId: 'main', limit: 20 })
-      await delay(4_500)
+
+      // Backdate startedAt past the grace period, then tick again
+      if (hbState) hbState.startedAt = Date.now() - 300_000
+      await heartbeat.tickHeartbeats()
       const later = runs.listRuns({ sessionId: 'main', limit: 20 })
-      heartbeat.stopHeartbeatService()
 
       console.log(JSON.stringify({
         earlyCount: early.length,
         laterCount: later.length,
         laterSources: later.map((run) => run.source),
-        firstQueuedDeltaMs: later[0]?.queuedAt ? later[0].queuedAt - startedAt : null,
       }))
     `)
 
-    assert.equal(output.earlyCount, 0, 'no periodic heartbeat before the 5s service tick')
-    assert.ok(output.laterCount >= 1, 'expected at least one periodic heartbeat run after the tick window')
+    assert.equal(output.earlyCount, 0, 'no heartbeat during startup grace period')
+    assert.ok(output.laterCount >= 1, 'expected at least one heartbeat run after grace period')
     assert.ok((output.laterSources || []).includes('heartbeat'))
-    assert.equal(typeof output.firstQueuedDeltaMs, 'number')
-    assert.ok(output.firstQueuedDeltaMs >= 4_500, `expected first heartbeat after timer window, got ${output.firstQueuedDeltaMs}`)
   })
 })

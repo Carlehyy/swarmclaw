@@ -447,7 +447,7 @@ function isBackedOff(sessionId: string, now: number): boolean {
   return now < record.lastFailedAt + backoffMs
 }
 
-async function tickHeartbeats() {
+export async function tickHeartbeats() {
   const settings = loadSettings()
   const globalOngoing = shouldRunHeartbeats(settings)
 

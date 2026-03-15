@@ -400,10 +400,11 @@ describe('Category normalization (comprehensive)', () => {
     assert.equal(norm('working'), 'working/scratch')
   })
 
-  it('infers category from content when explicit is "note"', () => {
-    assert.equal(norm('note', 'user prefers dark mode', ''), 'identity/preferences')
-    assert.equal(norm('note', 'decided to ship Docker', ''), 'projects/decisions')
-    assert.equal(norm('note', 'root cause was a null pointer', ''), 'projects/learnings')
+  it('falls through to knowledge/facts when explicit is "note"', () => {
+    // normalizeMemoryCategory no longer content-sniffs — "note" maps to the default
+    assert.equal(norm('note', 'user prefers dark mode', ''), 'knowledge/facts')
+    assert.equal(norm('note', 'decided to ship Docker', ''), 'knowledge/facts')
+    assert.equal(norm('note', 'root cause was a null pointer', ''), 'knowledge/facts')
   })
 
   it('passes through already-hierarchical categories', () => {
@@ -502,24 +503,20 @@ describe('Auto-capture policy', () => {
 // ─── inferAutomaticMemoryCategory ───────────────────────────────────
 
 describe('inferAutomaticMemoryCategory', () => {
-  it('infers identity/preferences from preference-like content', () => {
+  it('returns knowledge/facts since content-sniffing was removed', () => {
+    // inferAutomaticMemoryCategory delegates to normalizeMemoryCategory('note', ...),
+    // which no longer infers category from content — agents pick categories explicitly
     assert.equal(
       memoryPolicy.inferAutomaticMemoryCategory('user prefers dark mode', 'noted'),
-      'identity/preferences',
+      'knowledge/facts',
     )
-  })
-
-  it('infers projects/decisions from decision-like content', () => {
     assert.equal(
       memoryPolicy.inferAutomaticMemoryCategory('decided to ship Docker first', 'locked in'),
-      'projects/decisions',
+      'knowledge/facts',
     )
-  })
-
-  it('infers projects/learnings from learning-like content', () => {
     assert.equal(
       memoryPolicy.inferAutomaticMemoryCategory('root cause was a null pointer bug', 'fixed now'),
-      'projects/learnings',
+      'knowledge/facts',
     )
   })
 })
