@@ -1593,6 +1593,8 @@ export type ProtocolPhaseKind =
   | 'summarize'
   | 'emit_tasks'
   | 'wait'
+  | 'dispatch_task'
+  | 'dispatch_delegation'
 
 export interface ProtocolPhaseDefinition {
   id: string
@@ -1601,6 +1603,8 @@ export interface ProtocolPhaseDefinition {
   instructions?: string | null
   turnLimit?: number | null
   completionCriteria?: string | null
+  taskConfig?: { agentId?: string; title: string; description: string } | null
+  delegationConfig?: { agentId: string; message: string } | null
 }
 
 export type ProtocolConditionDefinition =
@@ -1660,6 +1664,8 @@ export interface ProtocolStepDefinition {
   instructions?: string | null
   turnLimit?: number | null
   completionCriteria?: string | null
+  taskConfig?: { agentId?: string; title: string; description: string } | null
+  delegationConfig?: { agentId: string; message: string } | null
   nextStepId?: string | null
   branchCases?: ProtocolBranchCase[]
   defaultNextStepId?: string | null
@@ -1715,6 +1721,7 @@ export interface ProtocolRunPhaseState {
   responses?: ProtocolRunPhaseStateResponse[]
   appendedToTranscript?: boolean
   artifactId?: string | null
+  dispatchedTaskId?: string | null
 }
 
 export interface ProtocolRunLoopState {
@@ -1839,6 +1846,8 @@ export interface ProtocolRunEvent {
     | 'failed'
     | 'warning'
     | 'cancelled'
+    | 'task_dispatched'
+    | 'delegation_dispatched'
     | 'archived'
     | 'summary_posted'
   summary: string
@@ -2821,6 +2830,7 @@ export interface BoardTask {
   status: BoardTaskStatus
   agentId: string
   missionId?: string | null
+  protocolRunId?: string | null
   missionSummary?: MissionSummary | null
   projectId?: string
   goalContract?: GoalContract | null
@@ -2908,6 +2918,19 @@ export interface BoardTask {
   // Dedup fingerprint
   fingerprint?: string
   qualityGate?: TaskQualityGateConfig | null
+  // Competitive task claiming (pool mode)
+  assignmentMode?: 'direct' | 'pool'
+  poolCandidateAgentIds?: string[]
+  claimedByAgentId?: string | null
+  claimedAt?: number | null
+  requiredCapabilities?: string[]
+  // Upstream task results (populated by cascadeUnblock when dependencies complete)
+  upstreamResults?: Array<{
+    taskId: string
+    taskTitle: string
+    agentId: string | null
+    resultPreview: string | null
+  }>
 }
 
 // --- MCP Servers ---

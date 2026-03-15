@@ -149,6 +149,31 @@ describe('dequeueNextRunnableTask', () => {
     assert.equal(result, 'free')
     assert.deepEqual(q, ['b1', 'b2'])
   })
+
+  it('skips unclaimed pool-mode tasks until they are claimed', () => {
+    const pooled = makeTask({
+      id: 'pool-task',
+      status: 'queued',
+      assignmentMode: 'pool',
+      poolCandidateAgentIds: ['agent-2'],
+      claimedByAgentId: null,
+    })
+    const direct = makeTask({ id: 'direct-task', status: 'queued' })
+    const tasks = { 'pool-task': pooled, 'direct-task': direct }
+    const q = ['pool-task', 'direct-task']
+
+    const first = queue.dequeueNextRunnableTask(q, tasks)
+    assert.equal(first, 'direct-task')
+    assert.deepEqual(q, ['pool-task'])
+
+    pooled.claimedByAgentId = 'agent-2'
+    pooled.agentId = 'agent-2'
+    pooled.claimedAt = Date.now()
+
+    const second = queue.dequeueNextRunnableTask(q, tasks)
+    assert.equal(second, 'pool-task')
+    assert.deepEqual(q, [])
+  })
 })
 
 // ---------------------------------------------------------------------------

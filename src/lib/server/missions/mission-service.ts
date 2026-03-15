@@ -25,6 +25,7 @@ import {
   loadMissions,
   loadSettings,
   loadSession,
+  loadTask,
   loadTasks,
   patchMission,
   patchSession,
@@ -690,7 +691,37 @@ function plannerDecisionSummary(
   return 'Mission replanned.'
 }
 
+function areMissionDependenciesSatisfied(mission: Mission): { satisfied: boolean; blockerSummary: string | null } {
+  const depMissionIds = Array.isArray(mission.dependencyMissionIds) ? mission.dependencyMissionIds : []
+  for (const depId of depMissionIds) {
+    const dep = loadMissionById(depId)
+    if (!dep || !isMissionTerminal(dep.status) || dep.status !== 'completed') {
+      return { satisfied: false, blockerSummary: `Blocked by mission: ${dep?.objective || depId} (${dep?.status || 'not found'})` }
+    }
+  }
+  const depTaskIds = Array.isArray(mission.dependencyTaskIds) ? mission.dependencyTaskIds : []
+  for (const depId of depTaskIds) {
+    const dep = loadTask(depId)
+    if (!dep || dep.status !== 'completed') {
+      return { satisfied: false, blockerSummary: `Blocked by task: ${dep?.title || depId} (${dep?.status || 'not found'})` }
+    }
+  }
+  return { satisfied: true, blockerSummary: null }
+}
+
 function deterministicPlannerDecision(mission: Mission): MissionPlannerDecisionResult | null {
+  // Check external dependencies (dependencyMissionIds / dependencyTaskIds)
+  const depCheck = areMissionDependenciesSatisfied(mission)
+  if (!depCheck.satisfied) {
+    return {
+      decision: 'wait',
+      confidence: 1,
+      summary: depCheck.blockerSummary || 'Blocked by unsatisfied dependency.',
+      waitKind: 'blocked_mission',
+      waitReason: depCheck.blockerSummary || 'Blocked by unsatisfied dependency.',
+    }
+  }
+
   const tasks = listTaskSummaries(mission.taskIds)
   const failedTask = tasks.find((task) => task.status === 'failed')
   if (failedTask) {
@@ -1776,6 +1807,20 @@ function noteParentMissionChildOutcome(childMission: Mission): void {
     childMissionId: childMission.id,
     childStatus: childMission.status,
   })
+  wakeDependentMissions(childMission.id, 'mission')
+}
+
+function wakeDependentMissions(completedId: string, kind: 'mission' | 'task'): void {
+  const allMissions = Object.values(loadMissions()).map(normalizeMissionRecord)
+  for (const candidate of allMissions) {
+    if (isMissionTerminal(candidate.status)) continue
+    const deps = kind === 'mission'
+      ? Array.isArray(candidate.dependencyMissionIds) ? candidate.dependencyMissionIds : []
+      : Array.isArray(candidate.dependencyTaskIds) ? candidate.dependencyTaskIds : []
+    if (deps.includes(completedId)) {
+      requestMissionTick(candidate.id, `dependency_${kind}_completed`, { [`completed${kind === 'mission' ? 'Mission' : 'Task'}Id`]: completedId })
+    }
+  }
 }
 
 export function performMissionAction(params: {
@@ -2149,6 +2194,7 @@ export function noteMissionTaskFinished(task: BoardTask, status: 'completed' | '
       taskStatus: status,
     })
   }
+  wakeDependentMissions(task.id, 'task')
   return updated
 }
 
@@ -2160,7 +2206,13 @@ export function buildMissionContextBlock(mission: Mission | null | undefined): s
   const taskBlock = linkedTasks.length > 0
     ? linkedTasks
       .slice(0, 6)
-      .map((task) => `- [${task.status}] ${task.title}`)
+      .map((task) => {
+        const base = `- [${task.status}] ${task.title}`
+        if (task.status === 'completed' && task.result) {
+          return `${base}: ${task.result.slice(0, 120)}`
+        }
+        return base
+      })
       .join('\n')
     : ''
   const childBlock = childMissions.length > 0

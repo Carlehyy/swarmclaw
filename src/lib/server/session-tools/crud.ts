@@ -933,7 +933,14 @@ export function buildCrudTools(bctx: ToolBuildContext): StructuredToolInterface[
                 deletedIds,
               })
             }
-            return `Unknown action "${action}". Valid: list, get, create, update, delete`
+            if (action === 'claim_task' && toolKey === 'manage_tasks') {
+              if (!id) return 'Error: "id" is required for claim_task action.'
+              const { claimPoolTask } = await import('@/lib/server/runtime/queue')
+              const result = claimPoolTask(id, ctx?.agentId || '')
+              if (!result.success) return `Error: ${result.error}`
+              return JSON.stringify({ ok: true, taskId: id, claimedByAgentId: ctx?.agentId })
+            }
+            return `Unknown action "${action}". Valid: list, get, create, update, delete, claim_task`
           } catch (err: any) {
             return `Error: ${err.message}`
           }
@@ -967,7 +974,7 @@ export function buildCrudTools(bctx: ToolBuildContext): StructuredToolInterface[
                 data: z.string().optional().describe('JSON string of fields for create/update'),
               }).passthrough()
             : z.object({
-                action: z.enum(['list', 'get', 'create', 'update', 'delete']).describe('The CRUD action to perform'),
+                action: z.enum(['list', 'get', 'create', 'update', 'delete', 'claim_task']).describe('The CRUD action to perform'),
                 id: z.string().optional().describe('Resource ID (required for get, update, delete)'),
                 data: z.string().optional().describe('JSON string of fields for create/update'),
               }).passthrough(),

@@ -104,6 +104,16 @@ export function cascadeUnblock(
     })
 
     if (allDone) {
+      // Populate upstream results from completed blockers
+      blocked.upstreamResults = deps.map((depId) => {
+        const dep = tasks[depId]
+        return {
+          taskId: depId,
+          taskTitle: dep?.title || depId,
+          agentId: dep?.agentId || null,
+          resultPreview: dep?.result ? dep.result.slice(0, 800) : null,
+        }
+      })
       blocked.status = 'queued'
       blocked.queuedAt = Date.now()
       blocked.updatedAt = Date.now()

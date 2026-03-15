@@ -22,6 +22,7 @@ import type {
   ProtocolRunLoopState,
   ProtocolRunParallelBranchState,
   ProtocolRunParallelStepState,
+  ProtocolRunPhaseState,
   ProtocolRunStatus,
   ProtocolSourceRef,
   ProtocolStepDefinition,
@@ -67,6 +68,7 @@ import {
 } from '@/lib/server/storage'
 import { notify } from '@/lib/server/ws-hub'
 import { ensureMissionForTask, requestMissionTick } from '@/lib/server/missions/mission-service'
+import { enqueueTask } from '@/lib/server/runtime/queue'
 import { errorMessage, hmrSingleton } from '@/lib/shared-utils'
 
 const PROTOCOL_LOCK_TTL_MS = 120_000
@@ -200,6 +202,8 @@ function isDiscussionStepKind(kind: ProtocolStepDefinition['kind'] | ProtocolPha
     'summarize',
     'emit_tasks',
     'wait',
+    'dispatch_task',
+    'dispatch_delegation',
   ].includes(kind)
 }
 
@@ -1145,6 +1149,43 @@ export function requestProtocolRunExecution(runId: string, deps?: ProtocolRunDep
   return true
 }
 
+export function wakeProtocolRunFromTaskCompletion(taskId: string, deps?: ProtocolRunDeps): void {
+  const task = loadTask(taskId)
+  if (!task?.protocolRunId) return
+  const runId = task.protocolRunId
+  const run = loadProtocolRunById(runId)
+  if (!run || run.status !== 'waiting') return
+  if (run.phaseState?.dispatchedTaskId !== taskId) return
+  const terminalStatuses = ['completed', 'failed', 'cancelled']
+  if (!terminalStatuses.includes(task.status)) return
+  const phase = run.phaseState?.phaseId ? findRunStep(run, run.phaseState.phaseId) : null
+  if (!phase || !isDiscussionStepKind(phase.kind)) return
+  const phaseDefinition = phaseFromStep(phase)
+  const taskResult = task.status === 'completed' ? 'completed' : task.status
+  appendProtocolEvent(runId, {
+    type: 'phase_completed',
+    phaseId: phaseDefinition.id,
+    stepId: phaseDefinition.id,
+    summary: `Dispatched task ${taskResult}: ${task.title}`,
+    taskId,
+  }, deps)
+  const step = findRunStep(run, phaseDefinition.id)
+  const nextStepId = cleanText(step?.nextStepId, 64) || null
+  const nextIndex = nextStepId && Array.isArray(run.steps)
+    ? Math.max(0, run.steps.findIndex((entry) => entry.id === nextStepId))
+    : Array.isArray(run.steps) ? run.steps.length : run.currentPhaseIndex + 1
+  persistRun({
+    ...run,
+    status: 'running',
+    waitingReason: null,
+    currentStepId: nextStepId,
+    currentPhaseIndex: nextIndex,
+    phaseState: null,
+    updatedAt: now(deps),
+  })
+  requestProtocolRunExecution(runId, deps)
+}
+
 export function ensureProtocolEngineRecovered(deps?: ProtocolRunDeps): void {
   if (protocolRecoveryState.completed) return
   protocolRecoveryState.completed = true
@@ -1165,12 +1206,22 @@ export function ensureProtocolEngineRecovered(deps?: ProtocolRunDeps): void {
     }
     if (run.status !== 'waiting') continue
     const hasReadyJoin = Object.values(run.parallelState || {}).some((state) => state.joinReady === true && !state.joinCompletedAt)
-    if (!hasReadyJoin) continue
-    appendProtocolEvent(run.id, {
-      type: 'recovered',
-      summary: 'Recovered a structured session join that was ready to continue after restart.',
-    }, deps)
-    requestProtocolRunExecution(run.id, deps)
+    if (hasReadyJoin) {
+      appendProtocolEvent(run.id, {
+        type: 'recovered',
+        summary: 'Recovered a structured session join that was ready to continue after restart.',
+      }, deps)
+      requestProtocolRunExecution(run.id, deps)
+      continue
+    }
+    // Recover dispatch-waiting runs where the dispatched task has already completed
+    const dispatchedTaskId = run.phaseState?.dispatchedTaskId
+    if (dispatchedTaskId) {
+      const dispatchedTask = loadTask(dispatchedTaskId)
+      if (dispatchedTask && ['completed', 'failed', 'cancelled'].includes(dispatchedTask.status)) {
+        wakeProtocolRunFromTaskCompletion(dispatchedTaskId, deps)
+      }
+    }
   }
 }
 
@@ -1189,6 +1240,8 @@ function phaseFromStep(step: ProtocolStepDefinition): ProtocolPhaseDefinition {
     instructions: step.instructions || null,
     turnLimit: step.turnLimit ?? null,
     completionCriteria: step.completionCriteria || null,
+    taskConfig: step.taskConfig || null,
+    delegationConfig: step.delegationConfig || null,
   }
 }
 
@@ -2072,6 +2125,120 @@ async function processJoinStep(run: ProtocolRun, step: ProtocolStepDefinition, d
   return finishStep(updated, step, cleanText(step.nextStepId, 64) || null, deps)
 }
 
+function processDispatchTaskPhase(run: ProtocolRun, phase: ProtocolPhaseDefinition, deps?: ProtocolRunDeps): ProtocolRun {
+  const config = phase.taskConfig
+  if (!config?.title) {
+    appendProtocolEvent(run.id, {
+      type: 'failed',
+      phaseId: phase.id,
+      summary: `dispatch_task phase "${phase.label}" has no taskConfig.title`,
+    }, deps)
+    return persistRun({
+      ...run,
+      status: 'failed',
+      lastError: `dispatch_task phase "${phase.label}" has no taskConfig.title`,
+      endedAt: run.endedAt || now(deps),
+      updatedAt: now(deps),
+    })
+  }
+  const agentId = config.agentId || run.facilitatorAgentId || run.participantAgentIds[0] || ''
+  if (!agentId) {
+    appendProtocolEvent(run.id, {
+      type: 'failed',
+      phaseId: phase.id,
+      summary: `dispatch_task phase "${phase.label}" has no agentId`,
+    }, deps)
+    return persistRun({
+      ...run,
+      status: 'failed',
+      lastError: `dispatch_task phase "${phase.label}" has no agentId`,
+      endedAt: run.endedAt || now(deps),
+      updatedAt: now(deps),
+    })
+  }
+  const taskId = genId()
+  const taskData: BoardTask = {
+    id: taskId,
+    title: config.title,
+    description: config.description || '',
+    status: 'queued',
+    agentId,
+    protocolRunId: run.id,
+    missionId: run.missionId || null,
+    queuedAt: now(deps),
+    createdAt: now(deps),
+    updatedAt: now(deps),
+  }
+  upsertTask(taskId, taskData)
+  enqueueTask(taskId)
+  const createdTaskIds = [...(run.createdTaskIds || []), taskId]
+  appendProtocolEvent(run.id, {
+    type: 'task_dispatched',
+    summary: `Dispatched task: ${config.title}`,
+    phaseId: phase.id,
+    taskId,
+  }, deps)
+  notify('tasks')
+  return persistRun({
+    ...run,
+    status: 'waiting',
+    waitingReason: `Waiting for task: ${config.title}`,
+    createdTaskIds,
+    phaseState: { ...(run.phaseState || { phaseId: phase.id }), dispatchedTaskId: taskId } as ProtocolRunPhaseState,
+    updatedAt: now(deps),
+  })
+}
+
+function processDispatchDelegationPhase(run: ProtocolRun, phase: ProtocolPhaseDefinition, deps?: ProtocolRunDeps): ProtocolRun {
+  const config = phase.delegationConfig
+  if (!config?.agentId || !config?.message) {
+    appendProtocolEvent(run.id, {
+      type: 'failed',
+      phaseId: phase.id,
+      summary: `dispatch_delegation phase "${phase.label}" missing delegationConfig`,
+    }, deps)
+    return persistRun({
+      ...run,
+      status: 'failed',
+      lastError: `dispatch_delegation phase "${phase.label}" missing delegationConfig`,
+      endedAt: run.endedAt || now(deps),
+      updatedAt: now(deps),
+    })
+  }
+  const taskId = genId()
+  const taskData: BoardTask = {
+    id: taskId,
+    title: `Delegation: ${phase.label}`,
+    description: config.message,
+    status: 'queued',
+    agentId: config.agentId,
+    protocolRunId: run.id,
+    missionId: run.missionId || null,
+    sourceType: 'delegation',
+    queuedAt: now(deps),
+    createdAt: now(deps),
+    updatedAt: now(deps),
+  }
+  upsertTask(taskId, taskData)
+  enqueueTask(taskId)
+  const createdTaskIds = [...(run.createdTaskIds || []), taskId]
+  appendProtocolEvent(run.id, {
+    type: 'delegation_dispatched',
+    summary: `Dispatched delegation to agent: ${config.agentId}`,
+    phaseId: phase.id,
+    taskId,
+  }, deps)
+  notify('tasks')
+  return persistRun({
+    ...run,
+    status: 'waiting',
+    waitingReason: `Waiting for delegation: ${phase.label}`,
+    createdTaskIds,
+    phaseState: { ...(run.phaseState || { phaseId: phase.id }), dispatchedTaskId: taskId } as ProtocolRunPhaseState,
+    updatedAt: now(deps),
+  })
+}
+
 async function stepProtocolRun(run: ProtocolRun, deps?: ProtocolRunDeps): Promise<ProtocolRun> {
   const step = currentStep(run)
   if (!step) {
@@ -2087,6 +2254,8 @@ async function stepProtocolRun(run: ProtocolRun, deps?: ProtocolRunDeps): Promis
     if (phase.kind === 'decide') return processFacilitatorArtifactPhase(started, phase, 'decision', deps)
     if (phase.kind === 'summarize') return processFacilitatorArtifactPhase(started, phase, 'summary', deps)
     if (phase.kind === 'emit_tasks') return processEmitTasksPhase(started, phase, deps)
+    if (phase.kind === 'dispatch_task') return processDispatchTaskPhase(started, phase, deps)
+    if (phase.kind === 'dispatch_delegation') return processDispatchDelegationPhase(started, phase, deps)
     return processWaitPhase(started, phase, deps)
   }
   if (step.kind === 'branch') return processBranchStep(run, step, deps)

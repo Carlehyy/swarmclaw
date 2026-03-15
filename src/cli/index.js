@@ -319,6 +319,22 @@ const COMMAND_GROUPS = [
     ],
   },
   {
+    name: 'protocols',
+    description: 'Manage Structured Session runs and templates',
+    commands: [
+      cmd('list', 'GET', '/protocols/runs', 'List structured session runs'),
+      cmd('get', 'GET', '/protocols/runs/:id', 'Get structured session run detail'),
+      cmd('events', 'GET', '/protocols/runs/:id/events', 'Get structured session run events'),
+      cmd('create', 'POST', '/protocols/runs', 'Create a structured session run', { expectsJsonBody: true }),
+      cmd('action', 'POST', '/protocols/runs/:id/actions', 'Run a structured session action', { expectsJsonBody: true }),
+      cmd('templates', 'GET', '/protocols/templates', 'List structured session templates'),
+      cmd('template-get', 'GET', '/protocols/templates/:id', 'Get structured session template detail'),
+      cmd('template-create', 'POST', '/protocols/templates', 'Create a structured session template', { expectsJsonBody: true }),
+      cmd('template-update', 'PATCH', '/protocols/templates/:id', 'Update a structured session template', { expectsJsonBody: true }),
+      cmd('template-delete', 'DELETE', '/protocols/templates/:id', 'Delete a structured session template'),
+    ],
+  },
+  {
     name: 'mcp-servers',
     description: 'Manage MCP server configurations',
     commands: [
@@ -643,6 +659,7 @@ const COMMAND_GROUPS = [
       cmd('delete', 'DELETE', '/tasks/:id', 'Delete task'),
       cmd('purge', 'DELETE', '/tasks', 'Bulk delete tasks', { expectsJsonBody: true }),
       cmd('approve', 'POST', '/tasks/:id/approve', 'Approve or reject a pending tool execution', { expectsJsonBody: true }),
+      cmd('claim', 'POST', '/tasks/claim', 'Claim a pool-mode task for an agent', { expectsJsonBody: true }),
       cmd('import-github', 'POST', '/tasks/import/github', 'Import GitHub issues into tasks', { expectsJsonBody: true }),
       cmd('metrics', 'GET', '/tasks/metrics', 'Get task board metrics (supports --query range=24h|7d|30d)'),
     ],

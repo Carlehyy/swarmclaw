@@ -1141,7 +1141,10 @@ export function dequeueNextRunnableTask(queue: string[], tasks: Record<string, B
     const retryAt = typeof task.retryScheduledAt === 'number' ? task.retryScheduledAt : null
     if (retryAt && retryAt > now) return false
     const blockers = Array.isArray(task.blockedBy) ? task.blockedBy : []
-    return blockers.every((blockerId) => tasks[blockerId]?.status === 'completed')
+    if (blockers.some((blockerId) => tasks[blockerId]?.status !== 'completed')) return false
+    // Skip pool-mode tasks that haven't been claimed yet
+    if (task.assignmentMode === 'pool' && !task.claimedByAgentId) return false
+    return true
   })
   if (idx === -1) return null
   const [taskId] = queue.splice(idx, 1)
@@ -1346,6 +1349,13 @@ export async function processNext() {
         } else {
           initialText = `Starting task: **${task.title}**\n\n${task.description || ''}\n\nWorking directory: \`${taskCwd}\`${buildTaskContinuationNote(Boolean(reusedExistingSession), resumeContext)}\n\nI'll begin working on this now.`
         }
+        // Inject upstream task results context
+        if (Array.isArray(task.upstreamResults) && task.upstreamResults.length > 0) {
+          const upstreamBlock = task.upstreamResults
+            .map((ur) => `### ${ur.taskTitle}\n${ur.resultPreview || '(no result)'}`)
+            .join('\n\n')
+          initialText += `\n\n## Context from upstream tasks\n\n${upstreamBlock}`
+        }
         sessions[sessionId].messages.push({
           role: 'assistant',
           text: initialText,
@@ -1524,6 +1534,15 @@ export async function processNext() {
               console.log(`[queue] Auto-unblocked task "${latestTasks[uid]?.title}" (${uid})`)
             }
             notify('tasks')
+          }
+          // Wake waiting protocol runs when a linked task completes
+          if (latestTasks[taskId]?.protocolRunId) {
+            try {
+              const { wakeProtocolRunFromTaskCompletion } = await import('@/lib/server/protocols/protocol-service')
+              wakeProtocolRunFromTaskCompletion(taskId)
+            } catch (e) {
+              console.warn(`[queue] Failed to wake protocol run for task ${taskId}:`, e)
+            }
           }
           console.log(`[queue] Task "${task.title}" completed`)
         } else if (doneTask?.status === 'cancelled') {
@@ -1730,6 +1749,37 @@ export function recoverStalledRunningTasks(): { recovered: number; deadLettered:
 }
 
 let _resumeQueueCalled = false
+
+export function claimPoolTask(taskId: string, agentId: string): { success: boolean; error?: string } {
+  const tasks = loadTasks() as Record<string, BoardTask>
+  const task = tasks[taskId]
+  if (!task) return { success: false, error: 'Task not found' }
+  if (task.assignmentMode !== 'pool') return { success: false, error: 'Task is not in pool mode' }
+  if (task.claimedByAgentId) return { success: false, error: `Task already claimed by ${task.claimedByAgentId}` }
+  if (task.status !== 'queued' && task.status !== 'backlog') return { success: false, error: `Task status is ${task.status}, not claimable` }
+  const candidates = Array.isArray(task.poolCandidateAgentIds) ? task.poolCandidateAgentIds : []
+  if (candidates.length > 0 && !candidates.includes(agentId)) {
+    return { success: false, error: 'Agent is not in the candidate pool for this task' }
+  }
+  task.claimedByAgentId = agentId
+  task.claimedAt = Date.now()
+  task.agentId = agentId
+  task.updatedAt = Date.now()
+  saveTasks(tasks)
+  notify('tasks')
+  return { success: true }
+}
+
+export function listClaimableTasks(agentId: string): BoardTask[] {
+  const tasks = loadTasks() as Record<string, BoardTask>
+  return Object.values(tasks).filter((task) => {
+    if (task.assignmentMode !== 'pool') return false
+    if (task.claimedByAgentId) return false
+    if (task.status !== 'queued' && task.status !== 'backlog') return false
+    const candidates = Array.isArray(task.poolCandidateAgentIds) ? task.poolCandidateAgentIds : []
+    return candidates.length === 0 || candidates.includes(agentId)
+  })
+}
 
 /** Resume any queued tasks on server boot */
 export function resumeQueue() {
