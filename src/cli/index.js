@@ -475,9 +475,10 @@ const COMMAND_GROUPS = [
       cmd('install', 'POST', '/extensions/install', 'Install an extension from URL', { expectsJsonBody: true }),
       cmd('install-deps', 'POST', '/extensions/dependencies', 'Install or refresh extension workspace dependencies', { expectsJsonBody: true }),
       cmd('marketplace', 'GET', '/extensions/marketplace', 'Get extension marketplace catalog'),
-      cmd('settings-get', 'GET', '/extensions/settings', 'Get extension settings (use --query pluginId=extension_name)'),
-      cmd('settings-set', 'PUT', '/extensions/settings', 'Set extension settings (use --query pluginId=extension_name and --data JSON)', { expectsJsonBody: true }),
+      cmd('settings-get', 'GET', '/extensions/settings', 'Get extension settings (use --query extensionId=extension_name)'),
+      cmd('settings-set', 'PUT', '/extensions/settings', 'Set extension settings (use --query extensionId=extension_name and --data JSON)', { expectsJsonBody: true }),
       cmd('ui', 'GET', '/extensions/ui', 'List extension UI modules (use --query type=sidebar|header|chat_actions|connectors)'),
+      cmd('builtins', 'GET', '/extensions/builtins', 'List built-in extensions'),
     ],
   },
   {
