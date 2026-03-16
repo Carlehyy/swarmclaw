@@ -72,6 +72,9 @@ IMPROVEMENTS.md
 # local scratch dir accidentally created by tooling
 /~/
 
+# git worktrees
+/.worktrees/
+
 # hidden local workbench for private harnesses, comparisons, and scratch artifacts
 /.workbench/
 /workbench/.tmp-*/
