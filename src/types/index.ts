@@ -3038,6 +3038,7 @@ export interface BoardTask {
     assignee?: string | null
     url?: string | null
   } | null
+  lastActivityAt?: number | null
   deadLetteredAt?: number | null
   cliResumeId?: string | null
   cliProvider?: string | null

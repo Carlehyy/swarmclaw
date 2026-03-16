@@ -1258,6 +1258,7 @@ export async function processNext() {
       applyTaskPolicyDefaults(task)
       task.status = 'running'
       task.startedAt = Date.now()
+      task.lastActivityAt = Date.now()
       task.retryScheduledAt = null
       task.deadLetteredAt = null
       // Clear transient failure fields so validation/error state reflects only this attempt.
@@ -1386,6 +1387,15 @@ export async function processNext() {
         const endTaskRunPerf = perf.start('queue', 'executeTaskRun', { taskId, agentName: agent.name })
         const taskRun = await executeTaskRun(task, agent, sessionId)
         endTaskRunPerf()
+        // Update lastActivityAt after execution completes (idle timeout tracking)
+        {
+          const latestTasks = loadTasks() as Record<string, BoardTask>
+          const updatedTask = latestTasks[taskId]
+          if (updatedTask) {
+            updatedTask.lastActivityAt = Date.now()
+            saveTasks(latestTasks)
+          }
+        }
         const result = taskRun.error
           ? (taskRun.text || `Error: ${taskRun.error}`)
           : taskRun.text
@@ -1733,6 +1743,8 @@ export function recoverStalledRunningTasks(): { recovered: number; deadLettered:
   const settings = loadSettings()
   const stallTimeoutMin = normalizeInt(settings.taskStallTimeoutMin, 45, 5, 24 * 60)
   const staleMs = stallTimeoutMin * 60_000
+  const idleTimeoutMin = normalizeInt((settings as Record<string, unknown>).taskIdleTimeoutMin, 15, 2, 120)
+  const idleMs = idleTimeoutMin * 60_000
   const now = Date.now()
   const tasks = loadTasks()
   const queue = loadQueue()
@@ -1765,10 +1777,20 @@ export function recoverStalledRunningTasks(): { recovered: number; deadLettered:
       })
       continue
     }
+    // Existing stall check (overall timeout based on updatedAt/startedAt)
     const since = Math.max(task.updatedAt || 0, task.startedAt || 0)
-    if (!since || (now - since) < staleMs) continue
+    const isStalled = since > 0 && (now - since) >= staleMs
 
-    const reason = `Detected stalled run after ${stallTimeoutMin}m without progress`
+    // Idle check (no LLM output for idleTimeoutMin)
+    const lastActivity = task.lastActivityAt || task.startedAt || 0
+    const idleDuration = lastActivity > 0 ? now - lastActivity : 0
+    const isIdle = lastActivity > 0 && idleDuration >= idleMs
+
+    if (!isStalled && !isIdle) continue
+
+    const reason = isIdle
+      ? `Idle timeout: no output for ${Math.round(idleDuration / 60_000)}m`
+      : `Detected stalled run after ${stallTimeoutMin}m without progress`
     const state = scheduleRetryOrDeadLetter(task, reason)
     disableSessionHeartbeat(task.sessionId)
     changed = true
