@@ -1840,6 +1840,31 @@ export function resumeQueue() {
       modified = true
     }
   }
+
+  // Orphan reap: all running tasks are orphans on fresh daemon startup
+  let recovered = 0
+  for (const task of Object.values(tasks) as BoardTask[]) {
+    if (task.status !== 'running') continue
+    const reason = 'process_lost: task was running when daemon restarted'
+    applyTaskPolicyDefaults(task)
+    const outcome = scheduleRetryOrDeadLetter(task, reason)
+    if (outcome === 'retry') {
+      pushQueueUnique(queue, task.id)
+    }
+    if (!task.comments) task.comments = []
+    task.comments.push({
+      id: genId(),
+      author: 'System',
+      text: `Orphan recovery: ${reason}`,
+      createdAt: Date.now(),
+    })
+    modified = true
+    recovered++
+  }
+  if (recovered > 0) {
+    console.log(`[queue] Recovered ${recovered} orphaned running task(s) on boot`)
+  }
+
   if (modified) {
     saveQueue(queue)
     saveTasks(tasks)
