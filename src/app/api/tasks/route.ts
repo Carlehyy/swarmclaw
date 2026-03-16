@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { safeParseBody } from '@/lib/server/safe-parse-body'
 import { genId } from '@/lib/id'
 import { perf } from '@/lib/server/runtime/perf'
 import { deleteTask, loadAgents, loadSettings, loadTasks, logActivity, upsertTask } from '@/lib/server/storage'
@@ -69,12 +70,13 @@ export async function DELETE(req: Request) {
 }
 
 export async function POST(req: Request) {
-  const raw = await req.json()
+  const { data: raw, error } = await safeParseBody<Record<string, unknown>>(req)
+  if (error) return error
   const parsed = TaskCreateSchema.safeParse(raw)
   if (!parsed.success) {
     return NextResponse.json(formatZodError(parsed.error as z.ZodError), { status: 400 })
   }
-  const body = { ...raw, ...parsed.data }
+  const body = { ...raw, ...parsed.data } as Record<string, unknown> & typeof parsed.data
   const id = genId()
   const now = Date.now()
   const tasks = loadTasks()
@@ -154,7 +156,7 @@ export async function POST(req: Request) {
       tags: Array.isArray(body.tags) ? body.tags.filter((s: unknown) => typeof s === 'string') : [],
       dueAt: typeof body.dueAt === 'number' ? body.dueAt : null,
       customFields: body.customFields && typeof body.customFields === 'object' ? body.customFields : undefined,
-      priority: ['low', 'medium', 'high', 'critical'].includes(body.priority) ? body.priority : undefined,
+      priority: body.priority && ['low', 'medium', 'high', 'critical'].includes(body.priority) ? body.priority : undefined,
     },
   })
   if (!prepared.ok) {
@@ -173,6 +175,21 @@ export async function POST(req: Request) {
       { taskId: id, result: task.result },
       { enabledIds: agentExtensions },
     )
+  }
+
+  // Parent/child hierarchy
+  const parentTaskId = typeof body.parentTaskId === 'string' && body.parentTaskId.trim() ? body.parentTaskId.trim() : null
+  if (parentTaskId) {
+    task.parentTaskId = parentTaskId
+    const parentTask = tasks[parentTaskId]
+    if (parentTask) {
+      const subtaskIds = Array.isArray(parentTask.subtaskIds) ? parentTask.subtaskIds : []
+      if (!subtaskIds.includes(id)) {
+        parentTask.subtaskIds = [...subtaskIds, id]
+        parentTask.updatedAt = now
+        upsertTask(parentTaskId, parentTask)
+      }
+    }
   }
 
   upsertTask(id, task)

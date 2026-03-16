@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server'
+import { safeParseBody } from '@/lib/server/safe-parse-body'
 import { getExtensionManager, sanitizeExtensionFilename } from '@/lib/server/extensions'
+import { logActivity } from '@/lib/server/storage'
 import { errorMessage } from '@/lib/shared-utils'
 import {
   inferExtensionInstallSourceFromUrl,
@@ -30,7 +32,8 @@ export async function OPTIONS(req: Request) {
 
 export async function POST(req: Request) {
   const origin = resolveExtensionInstallCorsOrigin(req.headers.get('origin'))
-  const body = await req.json()
+  const { data: body, error } = await safeParseBody(req)
+  if (error) return error
   const url = typeof body?.url === 'string' ? body.url : ''
   const filename = typeof body?.filename === 'string' ? body.filename : ''
   const installMethod = body?.installMethod === 'marketplace' ? 'marketplace' : 'manual'
@@ -52,6 +55,7 @@ export async function POST(req: Request) {
       sourceLabel,
       installSource,
     })
+    logActivity({ entityType: 'extension', entityId: installed.filename, action: 'installed', actor: 'user', summary: `Extension "${installed.filename}" installed from ${installSource}` })
     return json({ ok: true, filename: installed.filename, hash: installed.sourceHash }, 200, origin)
   } catch (err: unknown) {
     const msg = errorMessage(err)

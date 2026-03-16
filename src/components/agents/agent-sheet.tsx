@@ -206,6 +206,7 @@ export function AgentSheet() {
   const [preferredGatewayUseCase, setPreferredGatewayUseCase] = useState('')
   const [routingStrategy, setRoutingStrategy] = useState<AgentRoutingStrategy>('single')
   const [routingTargets, setRoutingTargets] = useState<AgentRoutingTarget[]>([])
+  const [role, setRole] = useState<'worker' | 'coordinator'>('worker')
   const [delegationEnabled, setDelegationEnabled] = useState(false)
   const [delegationTargetMode, setDelegationTargetMode] = useState<'all' | 'selected'>('all')
   const [delegationTargetAgentIds, setDelegationTargetAgentIds] = useState<string[]>([])
@@ -413,6 +414,7 @@ export function AgentSheet() {
         setPreferredGatewayUseCase(editing.preferredGatewayUseCase || '')
         setRoutingStrategy(editing.routingStrategy || 'single')
         setRoutingTargets(editing.routingTargets || [])
+        setRole(editing.role === 'coordinator' ? 'coordinator' : 'worker')
         setDelegationEnabled(editing.delegationEnabled === true)
         setDelegationTargetMode(editing.delegationTargetMode === 'selected' ? 'selected' : 'all')
         setDelegationTargetAgentIds(editing.delegationTargetAgentIds || [])
@@ -489,6 +491,7 @@ export function AgentSheet() {
         setPreferredGatewayUseCase('')
         setRoutingStrategy('single')
         setRoutingTargets([])
+        setRole('worker')
         setDelegationEnabled(false)
         setDelegationTargetMode('all')
         setDelegationTargetAgentIds([])
@@ -692,9 +695,10 @@ export function AgentSheet() {
         preferredGatewayUseCase: target.preferredGatewayUseCase || null,
         priority: typeof target.priority === 'number' ? target.priority : index + 1,
       })),
-      delegationEnabled,
-      delegationTargetMode: delegationEnabled ? delegationTargetMode : 'all',
-      delegationTargetAgentIds: delegationEnabled && delegationTargetMode === 'selected' ? delegationTargetAgentIds : [],
+      role,
+      delegationEnabled: role === 'coordinator' ? true : delegationEnabled,
+      delegationTargetMode: delegationEnabled || role === 'coordinator' ? delegationTargetMode : 'all',
+      delegationTargetAgentIds: (delegationEnabled || role === 'coordinator') && delegationTargetMode === 'selected' ? delegationTargetAgentIds : [],
       tools,
       extensions,
       skills,
@@ -904,7 +908,7 @@ export function AgentSheet() {
     setSaving(false)
   }
 
-  const canDelegateToAgents = delegationEnabled
+  const canDelegateToAgents = delegationEnabled || role === 'coordinator'
   const agentOptions = Object.values(agents).filter((p) => p.id !== editingId)
   const defaultAgentToolIds = useMemo(() => getDefaultAgentToolIds(), [])
   const toolsDifferFromDefault = tools.length !== defaultAgentToolIds.length
@@ -2404,19 +2408,49 @@ export function AgentSheet() {
 
       {provider !== 'openclaw' && (
         <div className="mb-8">
+          <div className="flex items-center gap-3 mb-4">
+            <label className="block font-display text-[12px] font-600 text-text-2 uppercase tracking-[0.08em]">Role</label>
+            <HintTip text="Coordinators automatically receive a list of available agents and can decompose complex goals, delegate to specialists, and synthesize results." />
+          </div>
+          <div className="flex gap-2">
+            {(['worker', 'coordinator'] as const).map((r) => (
+              <button
+                key={r}
+                type="button"
+                onClick={() => {
+                  setRole(r)
+                  if (r === 'coordinator') setDelegationEnabled(true)
+                }}
+                className={`px-4 py-1.5 rounded-[8px] text-[13px] font-display font-500 transition-all duration-200
+                  ${role === r
+                    ? 'bg-accent-bright text-white'
+                    : 'bg-white/[0.06] text-text-3 hover:bg-white/[0.10]'}`}
+              >
+                {r === 'worker' ? 'Worker' : 'Coordinator'}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {provider !== 'openclaw' && (
+        <div className="mb-8">
           <label className="flex items-center gap-3 cursor-pointer">
             <div
               onClick={() => {
-                setDelegationEnabled((current) => !current)
+                if (role !== 'coordinator') setDelegationEnabled((current) => !current)
               }}
               className={`w-11 h-6 rounded-full transition-all duration-200 relative cursor-pointer
-                ${canDelegateToAgents ? 'bg-accent-bright' : 'bg-white/[0.08]'}`}
+                ${canDelegateToAgents ? 'bg-accent-bright' : 'bg-white/[0.08]'}
+                ${role === 'coordinator' ? 'opacity-60' : ''}`}
             >
               <div className={`absolute top-0.5 w-5 h-5 rounded-full bg-white transition-all duration-200
                 ${canDelegateToAgents ? 'left-[22px]' : 'left-0.5'}`} />
             </div>
             <span className="font-display text-[14px] font-600 text-text-2">Can Delegate to Other Agents</span>
-            <span className="text-[12px] text-text-3">Route work to specialized agents and coordinate multi-agent tasks</span>
+            <span className="text-[12px] text-text-3">
+              {role === 'coordinator' ? 'Always on for coordinators' : 'Route work to specialized agents and coordinate multi-agent tasks'}
+            </span>
           </label>
         </div>
       )}

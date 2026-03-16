@@ -3,6 +3,7 @@ import { genId } from '@/lib/id'
 import { getProviderList } from '@/lib/providers'
 import { loadProviderConfigs, saveProviderConfigs } from '@/lib/server/storage'
 import { notify } from '@/lib/server/ws-hub'
+import { safeParseBody } from '@/lib/server/safe-parse-body'
 export const dynamic = 'force-dynamic'
 
 
@@ -11,7 +12,8 @@ export async function GET(_req: Request) {
 }
 
 export async function POST(req: Request) {
-  const body = await req.json()
+  const { data: body, error } = await safeParseBody<{ id?: string; name?: string; baseUrl?: string; models?: string[]; requiresApiKey?: boolean; credentialId?: string | null; isEnabled?: boolean }>(req)
+  if (error) return error
   const configs = loadProviderConfigs()
   const id = body.id || `custom-${genId()}`
   configs[id] = {

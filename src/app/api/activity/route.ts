@@ -6,6 +6,7 @@ export async function GET(req: Request) {
   const { searchParams } = new URL(req.url)
   const entityType = searchParams.get('entityType')
   const entityId = searchParams.get('entityId')
+  const actor = searchParams.get('actor')
   const action = searchParams.get('action')
   const since = searchParams.get('since')
   const limit = Math.min(200, Math.max(1, Number(searchParams.get('limit')) || 50))
@@ -15,6 +16,7 @@ export async function GET(req: Request) {
 
   if (entityType) entries = entries.filter((e) => e.entityType === entityType)
   if (entityId) entries = entries.filter((e) => e.entityId === entityId)
+  if (actor) entries = entries.filter((e) => e.actor === actor)
   if (action) entries = entries.filter((e) => e.action === action)
   if (since) {
     const sinceMs = Number(since)

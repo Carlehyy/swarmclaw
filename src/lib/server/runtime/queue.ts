@@ -1,8 +1,9 @@
+import { matchesCapabilities, filterAgentsByCapabilities, capabilityMatchScore } from '@/lib/server/agents/capability-match'
 import { genId } from '@/lib/id'
 import { dedup, hmrSingleton, jitteredBackoff } from '@/lib/shared-utils'
 import fs from 'node:fs'
 import path from 'node:path'
-import { loadTasks, saveTasks, loadQueue, saveQueue, loadAgents, loadSchedules, saveSchedules, loadSessions, saveSessions, loadSettings } from '@/lib/server/storage'
+import { loadTasks, saveTasks, loadQueue, saveQueue, loadAgents, loadSchedules, saveSchedules, loadSessions, saveSessions, loadSettings, logActivity, withTransaction } from '@/lib/server/storage'
 import { notify } from '@/lib/server/ws-hub'
 import { perf } from '@/lib/server/runtime/perf'
 import { WORKSPACE_DIR } from '@/lib/server/data-dir'
@@ -883,12 +884,14 @@ export function reconcileFinishedRunningTasks(): { reconciled: number; deadLette
 
   for (const task of terminalTasks) {
     if (task.status === 'completed') {
+      logActivity({ entityType: 'task', entityId: task.id, action: 'completed', actor: 'system', actorId: task.agentId, summary: `Task completed: "${task.title}"` })
       pushMainLoopEventToMainSessions({
         type: 'task_completed',
         text: `Task completed: "${task.title}" (${task.id})`,
       })
       notifyOrchestrators(`Task completed: "${task.title}"`, `task-complete:${task.id}`)
     } else if (task.status === 'failed') {
+      logActivity({ entityType: 'task', entityId: task.id, action: 'failed', actor: 'system', actorId: task.agentId, summary: `Task failed: "${task.title}"` })
       pushMainLoopEventToMainSessions({
         type: 'task_failed',
         text: `Task failed validation: "${task.title}" (${task.id})`,
@@ -982,6 +985,8 @@ export function enqueueTask(taskId: string) {
   const queue = loadQueue()
   pushQueueUnique(queue, taskId)
   saveQueue(queue)
+
+  logActivity({ entityType: 'task', entityId: taskId, action: 'queued', actor: 'system', summary: `Task queued: "${task.title}"` })
 
   pushMainLoopEventToMainSessions({
     type: 'task_queued',
@@ -1244,7 +1249,7 @@ export async function processNext() {
       }
 
       const agents = loadAgents()
-      const agent = agents[task.agentId]
+      let agent = agents[task.agentId]
       if (!agent) {
         task.status = 'failed'
         task.deadLetteredAt = Date.now()
@@ -1257,6 +1262,38 @@ export async function processNext() {
         })
         return
       }
+
+      // Capability matching — reroute if assigned agent doesn't have required capabilities
+      const reqCaps = Array.isArray(task.requiredCapabilities) ? task.requiredCapabilities as string[] : []
+      if (reqCaps.length > 0 && !matchesCapabilities(agent.capabilities, reqCaps)) {
+        const candidates = filterAgentsByCapabilities(agents, reqCaps)
+          .filter((a) => a.id !== agent!.id && !a.disabled)
+        if (candidates.length > 0) {
+          // Pick best match by capability score, then alphabetically for stability
+          candidates.sort((a, b) => {
+            const scoreA = capabilityMatchScore(a.capabilities, reqCaps)
+            const scoreB = capabilityMatchScore(b.capabilities, reqCaps)
+            if (scoreB !== scoreA) return scoreB - scoreA
+            return a.name.localeCompare(b.name)
+          })
+          const rerouted = candidates[0]
+          console.log(`[queue] Rerouting task "${task.title}" (${taskId}) from agent "${agent.name}" to "${rerouted.name}" — capability match`)
+          task.agentId = rerouted.id
+          agent = rerouted
+        } else {
+          task.status = 'failed'
+          task.deadLetteredAt = Date.now()
+          task.error = `No agent matches required capabilities: [${reqCaps.join(', ')}]`
+          task.updatedAt = Date.now()
+          saveTasks(latestTasks)
+          pushMainLoopEventToMainSessions({
+            type: 'task_failed',
+            text: `Task failed: "${task.title}" (${task.id}) — no agent matches required capabilities [${reqCaps.join(', ')}].`,
+          })
+          return
+        }
+      }
+
       if (isAgentDisabled(agent)) {
         const now = Date.now()
         task.deferredReason = buildAgentDisabledMessage(agent, 'process queued tasks')
@@ -1320,6 +1357,7 @@ export async function processNext() {
       task.error = null
       task.validation = null
       task.updatedAt = Date.now()
+      logActivity({ entityType: 'task', entityId: taskId, action: 'running', actor: 'system', actorId: task.agentId, summary: `Task started: "${task.title}"` })
 
       const sessionsForCwd = loadSessions() as Record<string, SessionLike>
       const taskCwd = resolveTaskExecutionCwd(task as ScheduleTaskMeta, sessionsForCwd)
@@ -1882,27 +1920,36 @@ export function recoverStalledRunningTasks(): { recovered: number; deadLettered:
 let _resumeQueueCalled = false
 
 export function claimPoolTask(taskId: string, agentId: string): { success: boolean; error?: string } {
-  // Atomic read-check-write: reload fresh state to prevent concurrent double-claims
-  const tasks = loadTasks() as Record<string, BoardTask>
-  const task = tasks[taskId]
-  if (!task) return { success: false, error: 'Task not found' }
-  if (task.assignmentMode !== 'pool') return { success: false, error: 'Task is not in pool mode' }
-  if (task.claimedByAgentId) return { success: false, error: `Task already claimed by ${task.claimedByAgentId}` }
-  if (task.status !== 'queued' && task.status !== 'backlog') return { success: false, error: `Task status is ${task.status}, not claimable` }
-  const candidates = Array.isArray(task.poolCandidateAgentIds) ? task.poolCandidateAgentIds : []
-  if (candidates.length > 0 && !candidates.includes(agentId)) {
-    return { success: false, error: 'Agent is not in the candidate pool for this task' }
-  }
-  task.claimedByAgentId = agentId
-  task.claimedAt = Date.now()
-  task.agentId = agentId
-  task.updatedAt = Date.now()
-  saveTasks(tasks)
-  // Re-read to verify our write won — if another agent claimed between our read and write, revert
-  const verify = loadTasks() as Record<string, BoardTask>
-  if (verify[taskId]?.claimedByAgentId !== agentId) {
-    return { success: false, error: `Task was claimed concurrently by ${verify[taskId]?.claimedByAgentId}` }
-  }
+  // Atomic claim inside a SQLite transaction to prevent concurrent double-claims
+  const result = withTransaction(() => {
+    const tasks = loadTasks() as Record<string, BoardTask>
+    const task = tasks[taskId]
+    if (!task) return { success: false as const, error: 'Task not found' }
+    if (task.assignmentMode !== 'pool') return { success: false as const, error: 'Task is not in pool mode' }
+    if (task.claimedByAgentId) return { success: false as const, error: `Task already claimed by ${task.claimedByAgentId}` }
+    if (task.status !== 'queued' && task.status !== 'backlog') return { success: false as const, error: `Task status is ${task.status}, not claimable` }
+    const candidates = Array.isArray(task.poolCandidateAgentIds) ? task.poolCandidateAgentIds : []
+    if (candidates.length > 0 && !candidates.includes(agentId)) {
+      return { success: false as const, error: 'Agent is not in the candidate pool for this task' }
+    }
+    // Capability check — reject claim if agent doesn't have required capabilities
+    const taskReqCaps = Array.isArray(task.requiredCapabilities) ? task.requiredCapabilities as string[] : []
+    if (taskReqCaps.length > 0) {
+      const allAgents = loadAgents()
+      const claimingAgent = allAgents[agentId]
+      if (!claimingAgent || !matchesCapabilities(claimingAgent.capabilities, taskReqCaps)) {
+        return { success: false as const, error: `Agent does not match required capabilities: [${taskReqCaps.join(', ')}]` }
+      }
+    }
+    task.claimedByAgentId = agentId
+    task.claimedAt = Date.now()
+    task.agentId = agentId
+    task.updatedAt = Date.now()
+    saveTasks(tasks)
+    return { success: true as const, title: task.title }
+  })
+  if (!result.success) return result
+  logActivity({ entityType: 'task', entityId: taskId, action: 'claimed', actor: 'agent', actorId: agentId, summary: `Task "${result.title}" claimed by agent ${agentId}` })
   notify('tasks')
   return { success: true }
 }

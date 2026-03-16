@@ -7,6 +7,7 @@ import { clearMainLoopStateForSession } from '@/lib/server/agents/main-agent-loo
 import { getSessionQueueSnapshot, getSessionRunState } from '@/lib/server/runtime/session-run-manager'
 import { normalizeCapabilitySelection } from '@/lib/capability-selection'
 import { enrichSessionWithMissionSummary } from '@/lib/server/missions/mission-service'
+import { safeParseBody } from '@/lib/server/safe-parse-body'
 
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -24,7 +25,8 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
 
 export async function PUT(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
-  const updates = await req.json()
+  const { data: updates, error } = await safeParseBody(req)
+  if (error) return error
   const session = loadSession(id) as Record<string, unknown> | null
   if (!session) return notFound()
 
@@ -102,7 +104,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
   if (updates.apiEndpoint !== undefined) {
     session.apiEndpoint = normalizeProviderEndpoint(
       (updates.provider || session.provider) as string,
-      updates.apiEndpoint,
+      updates.apiEndpoint as string | null | undefined,
     )
   } else if (agentIdUpdateProvided && linkedRoute) {
     session.apiEndpoint = linkedRoute.apiEndpoint ?? null

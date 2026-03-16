@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
-import { loadDocuments, saveDocuments } from '@/lib/server/storage'
+import crypto from 'crypto'
+import { loadDocuments, saveDocuments, upsertDocumentRevision } from '@/lib/server/storage'
 
 function normalizeObject(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return {}
@@ -20,6 +21,21 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
   const docs = loadDocuments()
   const doc = docs[id]
   if (!doc) return NextResponse.json({ error: 'Document not found' }, { status: 404 })
+
+  // Snapshot previous content as a revision before updating
+  if (body.content !== undefined && body.content !== doc.content) {
+    const prevVersion = typeof doc.currentVersion === 'number' ? doc.currentVersion : 0
+    const revisionId = crypto.randomBytes(8).toString('hex')
+    upsertDocumentRevision(revisionId, {
+      id: revisionId,
+      documentId: id,
+      version: prevVersion,
+      content: doc.content,
+      createdAt: Date.now(),
+      createdBy: typeof body.createdBy === 'string' ? body.createdBy : null,
+    })
+    doc.currentVersion = prevVersion + 1
+  }
 
   if (body.title !== undefined) doc.title = body.title
   if (body.fileName !== undefined) doc.fileName = body.fileName

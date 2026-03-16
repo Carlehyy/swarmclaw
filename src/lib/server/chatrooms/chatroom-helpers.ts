@@ -79,12 +79,49 @@ export function parseMentions(
   opts?: { replyTargetAgentId?: string | null; senderId?: string | null; skipImplicit?: boolean },
 ): string[] {
   if (/@all\b/i.test(text)) return [...memberIds]
-  const mentionPattern = /(?:^|[\s(])@([a-zA-Z0-9._-]+)/g
   const mentioned: string[] = []
-  
-  // 1. Explicit @mentions
+
+  // Build lookup: normalized agent name/id -> agentId, sorted longest-first
+  const nameLookup: Array<{ normalized: string; raw: string; agentId: string }> = []
+  for (const id of memberIds) {
+    const agent = agents[id]
+    if (!agent) continue
+    if (agent.name) nameLookup.push({ normalized: normalizeMentionToken(agent.name), raw: agent.name, agentId: id })
+    nameLookup.push({ normalized: normalizeMentionToken(id), raw: id, agentId: id })
+  }
+  // Sort longest raw name first so "Hal2k (OpenAI)" is tried before "Hal2k"
+  nameLookup.sort((a, b) => b.raw.length - a.raw.length)
+
+  // Track which @ positions have been consumed by full-name matching
+  const consumedAtPositions = new Set<number>()
+
+  // Pass 1: Full name matching (longest-first)
+  // For each @ in the text, try to match full agent names
+  const atRegex = /(?:^|[\s(])@/g
+  let atMatch: RegExpExecArray | null
+  while ((atMatch = atRegex.exec(text)) !== null) {
+    const atPos = text.indexOf('@', atMatch.index)
+    const afterAt = text.slice(atPos + 1)
+    for (const entry of nameLookup) {
+      const normalizedSlice = normalizeMentionToken(afterAt.slice(0, entry.raw.length))
+      if (normalizedSlice === entry.normalized) {
+        // Verify the match ends at a word boundary or end-of-string
+        const endPos = atPos + 1 + entry.raw.length
+        if (endPos >= text.length || /[\s,;:.!?)\]]/.test(text[endPos])) {
+          if (!mentioned.includes(entry.agentId)) mentioned.push(entry.agentId)
+          consumedAtPositions.add(atPos)
+          break
+        }
+      }
+    }
+  }
+
+  // Pass 2: Regex fallback for unconsumed @ positions (handles IDs like @agent_analyst)
+  const mentionPattern = /(?:^|[\s(])@([a-zA-Z0-9._-]+)/g
   let match: RegExpExecArray | null
   while ((match = mentionPattern.exec(text)) !== null) {
+    const atPos = text.indexOf('@', match.index)
+    if (consumedAtPositions.has(atPos)) continue
     const token = normalizeMentionToken(match[1] || '')
     if (!token) continue
     for (const id of memberIds) {
@@ -97,18 +134,18 @@ export function parseMentions(
     }
   }
 
+  // Check if the only explicit matches are the sender — if so, treat as "no explicit mentions"
+  const senderId = opts?.senderId
+  const explicitNonSelf = senderId ? mentioned.filter((id) => id !== senderId) : mentioned
+
   // 2. Reply-based implicit mention
-  // Only if no explicit mentions were found.
-  if (mentioned.length === 0) {
+  // Only if no non-self explicit mentions were found.
+  if (explicitNonSelf.length === 0) {
     const replyTargetAgentId = opts?.replyTargetAgentId
     if (replyTargetAgentId && memberIds.includes(replyTargetAgentId)) {
-      mentioned.push(replyTargetAgentId)
+      if (!mentioned.includes(replyTargetAgentId)) mentioned.push(replyTargetAgentId)
     }
   }
-
-  // Filter out self-mentions so agents don't cascade to themselves
-  const senderId = opts?.senderId
-  const explicitNonSelf = senderId ? mentioned.filter((mid) => mid !== senderId) : mentioned
 
   // 3. Implicit mentions (OpenClaw Style - Reading the room)
   // Only if no non-self explicit mentions found AND implicit matching is enabled.

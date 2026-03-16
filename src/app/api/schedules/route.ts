@@ -4,6 +4,7 @@ import { buildAgentDisabledMessage, isAgentDisabled } from '@/lib/server/agents/
 import { WORKSPACE_DIR } from '@/lib/server/data-dir'
 import { prepareScheduleCreate } from '@/lib/server/schedules/schedule-service'
 import { notify } from '@/lib/server/ws-hub'
+import { safeParseBody } from '@/lib/server/safe-parse-body'
 export const dynamic = 'force-dynamic'
 
 export async function GET(req: Request) {
@@ -21,7 +22,8 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
-  const body = await req.json()
+  const { data: body, error } = await safeParseBody(req)
+  if (error) return error
   const now = Date.now()
   const schedules = loadSchedules()
   const agents = loadAgents()

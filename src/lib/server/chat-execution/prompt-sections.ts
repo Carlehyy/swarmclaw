@@ -1,0 +1,354 @@
+/**
+ * Composable Prompt Section Builders
+ *
+ * Each function builds one section of the agent system prompt.
+ * Returns `string | null` (sync) or `Promise<string | null>` (async).
+ * The main prompt assembly in stream-agent-chat.ts composes these declaratively.
+ */
+
+import type { Session, Agent } from '@/types'
+import type { ActiveProjectContext } from '@/lib/server/project-context'
+import { buildIdentityContinuityContext } from '@/lib/server/identity-continuity'
+import { loadSkills, loadAgents } from '@/lib/server/storage'
+import { buildRuntimeSkillPromptBlocks, resolveRuntimeSkills } from '@/lib/server/skills/runtime-skill-resolver'
+
+// ---------------------------------------------------------------------------
+// Identity: agent name, description, continuity, soul, systemPrompt, skills
+// ---------------------------------------------------------------------------
+
+export function buildIdentitySection(
+  agent: Agent | null | undefined,
+  session: Session,
+  sessionExtensions: string[],
+  isMinimalPrompt: boolean,
+): string[] {
+  if (!agent) return []
+  const parts: string[] = []
+
+  if (isMinimalPrompt) {
+    parts.push(`## My Identity\nMy name is ${agent.name || 'Agent'}.`)
+  } else {
+    const identityLines = [`## My Identity`, `My name is ${agent.name || 'Agent'}.`]
+    if (agent.description) identityLines.push(agent.description)
+    identityLines.push('I should always refer to myself by this name. I am not "Assistant" — I have my own name and identity.')
+    parts.push(identityLines.join(' '))
+  }
+
+  // Identity continuity — full mode only
+  if (!isMinimalPrompt) {
+    const continuityBlock = buildIdentityContinuityContext(session, agent)
+    if (continuityBlock) parts.push(continuityBlock)
+  }
+
+  // Soul — truncated to 300 chars in minimal mode
+  if (agent.soul) {
+    parts.push(isMinimalPrompt ? agent.soul.slice(0, 300) : agent.soul)
+  }
+
+  if (agent.systemPrompt) parts.push(agent.systemPrompt)
+
+  // Skills — full mode only
+  if (!isMinimalPrompt) {
+    try {
+      const allSkills = loadSkills()
+      const runtimeSkills = resolveRuntimeSkills({
+        cwd: session.cwd,
+        enabledExtensions: sessionExtensions,
+        agentId: agent.id || null,
+        sessionId: session.id,
+        userId: session.user,
+        agentSkillIds: agent.skillIds || [],
+        storedSkills: allSkills,
+        selectedSkillId: session.skillRuntimeState?.selectedSkillId || null,
+      })
+      parts.push(...buildRuntimeSkillPromptBlocks(runtimeSkills))
+    } catch { /* non-critical */ }
+  }
+
+  return parts
+}
+
+// ---------------------------------------------------------------------------
+// Thinking Level Guidance
+// ---------------------------------------------------------------------------
+
+export function buildThinkingSection(
+  thinkingLevel: string | undefined,
+  isMinimalPrompt: boolean,
+): string | null {
+  if (isMinimalPrompt || !thinkingLevel) return null
+  const guidance: Record<string, string> = {
+    minimal: 'Be direct and concise. Skip extended analysis.',
+    low: 'Keep reasoning brief. Focus on key conclusions.',
+    medium: 'Provide moderate depth of analysis and reasoning.',
+    high: 'Think deeply and thoroughly. Show detailed reasoning.',
+  }
+  const text = guidance[thinkingLevel]
+  return text ? `## Reasoning Depth\n${text}` : null
+}
+
+// ---------------------------------------------------------------------------
+// Workspace Context (async — dynamic import)
+// ---------------------------------------------------------------------------
+
+export async function buildWorkspaceSection(
+  session: Session,
+  isMinimalPrompt: boolean,
+  heartbeatEnabled: boolean,
+): Promise<string | null> {
+  if (isMinimalPrompt || !heartbeatEnabled) return null
+  try {
+    const { buildWorkspaceContext } = await import('@/lib/server/workspace-context')
+    const wsCtx = buildWorkspaceContext({ cwd: session.cwd })
+    return wsCtx.block || null
+  } catch { return null }
+}
+
+// ---------------------------------------------------------------------------
+// Agent Awareness (async — dynamic import)
+// ---------------------------------------------------------------------------
+
+export async function buildAgentAwarenessSection(
+  session: Session,
+  sessionExtensions: string[],
+  isMinimalPrompt: boolean,
+): Promise<string | null> {
+  if (isMinimalPrompt) return null
+  const hasMultiAgentTool = sessionExtensions.some(p =>
+    p === 'delegate' || p === 'spawn_subagent' ||
+    p === 'manage_protocols' || p === 'protocol' ||
+    p === 'manage_chatrooms' || p === 'chatroom'
+  )
+  if (!hasMultiAgentTool || !session.agentId) return null
+  try {
+    const { buildAgentAwarenessBlock } = await import('@/lib/server/agents/agent-registry')
+    return buildAgentAwarenessBlock(session.agentId) || null
+  } catch { return null }
+}
+
+// ---------------------------------------------------------------------------
+// Situational Awareness (async — dynamic import)
+// ---------------------------------------------------------------------------
+
+export async function buildSituationalSection(
+  session: Session,
+  isMinimalPrompt: boolean,
+): Promise<string | null> {
+  if (isMinimalPrompt || !session.agentId) return null
+  try {
+    const { buildSituationalAwarenessBlock } = await import(
+      '@/lib/server/chat-execution/situational-awareness'
+    )
+    return buildSituationalAwarenessBlock({
+      agentId: session.agentId,
+      sessionId: session.id,
+      missionId: session.missionId || null,
+    }) || null
+  } catch { return null }
+}
+
+// ---------------------------------------------------------------------------
+// Project Context
+// ---------------------------------------------------------------------------
+
+export function buildProjectSection(
+  activeProjectContext: ActiveProjectContext,
+  isMinimalPrompt: boolean,
+): string | null {
+  if (isMinimalPrompt || !activeProjectContext.projectId) return null
+
+  const lines = ['## Current Project']
+  if (activeProjectContext.project?.name) {
+    lines.push(`Active project: ${activeProjectContext.project.name}.`)
+  } else {
+    lines.push(`Active project ID: ${activeProjectContext.projectId}.`)
+  }
+  if (activeProjectContext.project?.description) {
+    lines.push(`Project description: ${activeProjectContext.project.description}`)
+    lines.push('Treat the project description above as authoritative context for who the project is for, what it is focused on, and which pilot priorities matter right now. If the user asks about the active project, answer from that description instead of saying the context is unavailable.')
+  }
+  if (activeProjectContext.objective) lines.push(`Project objective: ${activeProjectContext.objective}`)
+  if (activeProjectContext.audience) lines.push(`Who it is for: ${activeProjectContext.audience}`)
+  if (activeProjectContext.priorities.length > 0) lines.push(`Pilot priorities: ${activeProjectContext.priorities.join('; ')}`)
+  if (activeProjectContext.openObjectives.length > 0) lines.push(`Open objectives: ${activeProjectContext.openObjectives.join('; ')}`)
+  if (activeProjectContext.capabilityHints.length > 0) lines.push(`Suggested operating modes: ${activeProjectContext.capabilityHints.join('; ')}`)
+  if (activeProjectContext.credentialRequirements.length > 0) lines.push(`Credential and secret requirements: ${activeProjectContext.credentialRequirements.join('; ')}`)
+  if (activeProjectContext.successMetrics.length > 0) lines.push(`Success metrics: ${activeProjectContext.successMetrics.join('; ')}`)
+  if (activeProjectContext.heartbeatPrompt) lines.push(`Preferred heartbeat prompt: ${activeProjectContext.heartbeatPrompt}`)
+  if (activeProjectContext.heartbeatIntervalSec != null) lines.push(`Preferred heartbeat interval: ${activeProjectContext.heartbeatIntervalSec}s`)
+  if (activeProjectContext.resourceSummary) {
+    const summary = activeProjectContext.resourceSummary
+    const resourceBits = [
+      `open tasks ${summary.openTaskCount}`,
+      `active schedules ${summary.activeScheduleCount}`,
+      `project secrets ${summary.secretCount}`,
+    ]
+    if (summary.topTaskTitles.length > 0) lines.push(`Top open tasks: ${summary.topTaskTitles.join('; ')}`)
+    if (summary.scheduleNames.length > 0) lines.push(`Active schedules: ${summary.scheduleNames.join('; ')}`)
+    if (summary.secretNames.length > 0) lines.push(`Known project secrets: ${summary.secretNames.join('; ')}`)
+    lines.push(`Project resource summary: ${resourceBits.join(', ')}.`)
+  }
+  if (activeProjectContext.projectRoot) lines.push(`Workspace root: ${activeProjectContext.projectRoot}`)
+  lines.push('When creating project tasks, schedules, secrets, memories, or deliverables for this work, default them to the active project unless the user redirects you.')
+  return lines.join('\n')
+}
+
+// ---------------------------------------------------------------------------
+// Tool & Extension Access Audit (async)
+// ---------------------------------------------------------------------------
+
+export async function buildExtensionAccessAuditSection(
+  sessionExtensions: string[],
+  mcpDisabledTools: string[] | undefined,
+  isMinimalPrompt: boolean,
+): Promise<string | null> {
+  if (isMinimalPrompt) return null
+  const { listNativeCapabilities } = await import('@/lib/server/native-capabilities')
+  const { getExtensionManager: getEM } = await import('@/lib/server/extensions')
+  const agentEnabledSet = new Set(sessionExtensions)
+  const allExtensions = [...listNativeCapabilities(), ...getEM().listExtensions()]
+  const mcpDisabled = mcpDisabledTools ?? []
+
+  const globallyDisabled: string[] = []
+  const enabledButNoAccess: string[] = []
+  for (const p of allExtensions) {
+    if (!p.enabled) {
+      globallyDisabled.push(`${p.name} (${p.filename})`)
+    } else if (!agentEnabledSet.has(p.filename)) {
+      enabledButNoAccess.push(`${p.name} (${p.filename})`)
+    }
+  }
+
+  const accessParts: string[] = []
+  if (globallyDisabled.length > 0) {
+    accessParts.push(`**Disabled site-wide:** ${globallyDisabled.join(', ')}`)
+  }
+  if (enabledButNoAccess.length > 0) {
+    accessParts.push(`**Installed but not enabled in this chat:** ${enabledButNoAccess.join(', ')}`)
+  }
+  if (mcpDisabled.length > 0) {
+    accessParts.push(`**MCP tools not available:** ${mcpDisabled.join(', ')}`)
+  }
+  return accessParts.length > 0
+    ? `## Tool & Extension Access\n${accessParts.join('\n')}`
+    : null
+}
+
+// ---------------------------------------------------------------------------
+// Follow-up Suggestions
+// ---------------------------------------------------------------------------
+
+export function buildSuggestionsSection(
+  suggestionsEnabled: boolean | undefined,
+  isMinimalPrompt: boolean,
+): string | null {
+  if (isMinimalPrompt || suggestionsEnabled !== true) return null
+  return [
+    '## Follow-up Suggestions',
+    'At the end of every response, include a <suggestions> block with exactly 3 short',
+    'follow-up prompts the user might want to send next, as a JSON array. Keep each under 60 chars.',
+    'Make them contextual to what you just said. Example:',
+    '<suggestions>["Set up a Discord connector", "Create a research agent", "Show the task board"]</suggestions>',
+  ].join('\n')
+}
+
+// ---------------------------------------------------------------------------
+// Proactive Memory Recall (async)
+// ---------------------------------------------------------------------------
+
+export async function buildProactiveMemorySection(
+  session: Session,
+  agent: Agent | null | undefined,
+  message: string,
+  activeProjectRoot: string | null,
+  isMinimalPrompt: boolean,
+  currentThreadRecallRequest: boolean,
+): Promise<string | null> {
+  if (isMinimalPrompt || !session.agentId || currentThreadRecallRequest || message.length <= 12) return null
+  if (!agent?.proactiveMemory) return null
+  try {
+    const { getMemoryDb } = await import('@/lib/server/memory/memory-db')
+    const { buildSessionMemoryScopeFilter } = await import('@/lib/server/memory/session-memory-scope')
+    const memDb = getMemoryDb()
+    const recalled = memDb.search(message, session.agentId, {
+      scope: buildSessionMemoryScopeFilter(session, agent.memoryScopeMode || null, activeProjectRoot),
+    })
+    const topRecalled = recalled.slice(0, 3)
+    if (topRecalled.length > 0) {
+      const recalledLines = topRecalled.map((entry) => `- ${entry.content.slice(0, 300)}`)
+      return `## Recalled Context\nRelevant memories from previous interactions:\n${recalledLines.join('\n')}`
+    }
+  } catch { /* non-critical */ }
+  return null
+}
+
+// ---------------------------------------------------------------------------
+// Coordinator Section — lists available workers for coordinator agents
+// ---------------------------------------------------------------------------
+
+const COORDINATOR_MAX_WORKERS = 20
+const COORDINATOR_MAX_CHARS = 3000
+
+export function buildCoordinatorSection(
+  agent: Agent | null | undefined,
+  sessionExtensions?: string[],
+): string | null {
+  if (!agent || agent.role !== 'coordinator') return null
+
+  const allAgents = loadAgents()
+  const selfId = agent.id
+
+  // Resolve which agents this coordinator can delegate to
+  const delegateMode = agent.delegationTargetMode || 'all'
+  const delegateIds = new Set(agent.delegationTargetAgentIds || [])
+
+  const workers = Object.values(allAgents).filter((a) => {
+    if (a.id === selfId) return false
+    if (a.disabled) return false
+    if (delegateMode === 'selected' && !delegateIds.has(a.id)) return false
+    return true
+  })
+
+  if (workers.length === 0) return null
+
+  const lines: string[] = [
+    '## Coordinator — Available Workers',
+    'You are a **coordinator agent**. Your role is to decompose complex goals into subtasks and delegate them to the right specialist workers. After all subtasks complete, synthesize their results into a coherent final response.',
+    '',
+    '### Workers',
+  ]
+
+  let charBudget = COORDINATOR_MAX_CHARS - lines.join('\n').length
+  const listed = workers.slice(0, COORDINATOR_MAX_WORKERS)
+
+  for (const w of listed) {
+    const caps = w.capabilities?.length ? ` [${w.capabilities.join(', ')}]` : ''
+    const desc = w.description ? ` — ${w.description.slice(0, 100)}` : ''
+    const line = `- **${w.name}**${caps}${desc}`
+    if (charBudget - line.length < 0) break
+    charBudget -= line.length + 1
+    lines.push(line)
+  }
+
+  if (workers.length > COORDINATOR_MAX_WORKERS) {
+    lines.push(`- ... and ${workers.length - COORDINATOR_MAX_WORKERS} more workers`)
+  }
+
+  lines.push('')
+  lines.push('### Orchestration Tools')
+  lines.push('- **`spawn_subagent`** — Simple fire-and-forget delegation. Best for: single tasks, batch parallel/serial, basic swarm. Use when tasks are independent.')
+
+  const hasProtocols = sessionExtensions?.some((e) => e === 'manage_protocols' || e === 'protocol')
+  if (hasProtocols) {
+    lines.push('- **`manage_protocols`** — Structured orchestration workflows. **Default choice for any work with defined steps, goals, or deliverables.** Best for: sequential pipelines (research → synthesize → review), conditional branching (if/else on results), looping (retry until condition), DAG (tasks with dependencies), forEach (dynamic parallel over a list), subflows (nested workflows), review panels, decision rounds, competitive swarm (work items + claim semantics). Use whenever execution order matters, tasks have dependencies, or you need to track progress through phases.')
+  }
+
+  lines.push('- **`manage_chatrooms`** — Multi-agent conversation. Use **only** for genuinely open-ended discussion with no predetermined structure: brainstorming sessions, debates, real-time Q&A, or collaborative exploration where the conversation direction is unknown in advance. Chatrooms are for talking, not for executing work.')
+  lines.push('')
+  lines.push('**Anti-pattern:** Do NOT use chatrooms as a substitute for protocols when work has defined steps, goals, or deliverables. If you can describe the work as a sequence of phases or tasks, use `manage_protocols`. Chatrooms should be rare — most coordinated work is structured.')
+  lines.push('')
+  lines.push('- Always wait for all delegated work to complete before synthesizing your final response.')
+  lines.push('- Match tasks to workers based on their capabilities and description.')
+
+  return lines.join('\n')
+}

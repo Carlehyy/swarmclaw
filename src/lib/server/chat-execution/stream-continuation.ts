@@ -29,6 +29,7 @@ export type ContinuationType =
   | 'unfinished_tool_followthrough'
   | 'tool_error_followthrough'
   | 'tool_summary'
+  | 'coordinator_synthesis'
   | false
 
 function looksLikeToolErrorOutput(output: string): boolean {
@@ -745,6 +746,13 @@ export function buildContinuationPrompt(params: {
         fullText: params.fullText,
         toolEvents: params.toolEvents,
       })
+
+    case 'coordinator_synthesis':
+      return [
+        'Your delegated subtasks have completed. Synthesize the results from all workers into a single coherent response.',
+        'Address the user\'s original request directly. Do not repeat raw tool outputs — summarize, combine, and present the findings clearly.',
+        params.fullText.trim() ? `Your partial response so far: "${params.fullText.trim().slice(0, 300)}"` : '',
+      ].filter(Boolean).join('\n')
 
     case 'transient':
     case false:

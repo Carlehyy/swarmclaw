@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { safeParseBody } from '@/lib/server/safe-parse-body'
 import { getAccessKey, validateAccessKey, isFirstTimeSetup, markSetupComplete, replaceAccessKey } from '@/lib/server/storage'
 import { AUTH_COOKIE_NAME, getCookieValue } from '@/lib/auth'
 import { isProductionRuntime } from '@/lib/runtime/runtime-env'
@@ -65,9 +66,19 @@ export async function GET(req: Request) {
   })
 }
 
+function pruneExpiredEntries() {
+  const now = Date.now()
+  for (const [ip, entry] of authRateLimitMap) {
+    if (entry.lockedUntil > 0 && entry.lockedUntil < now) {
+      authRateLimitMap.delete(ip)
+    }
+  }
+}
+
 /** POST /api/auth — validate an access key */
 export async function POST(req: Request) {
   const rateLimitEnabled = isRateLimitEnabled()
+  if (rateLimitEnabled) pruneExpiredEntries()
   const clientIp = getClientIp(req)
   const entry = rateLimitEnabled ? authRateLimitMap.get(clientIp) : undefined
   if (rateLimitEnabled && entry && entry.lockedUntil > Date.now()) {
@@ -78,7 +89,9 @@ export async function POST(req: Request) {
     ))
   }
 
-  const { key, override } = await req.json()
+  const { data: body, error } = await safeParseBody<{ key: string; override?: boolean }>(req)
+  if (error) return error
+  const { key, override } = body
 
   // During first-time setup, allow the user to replace the generated key with their own
   if (override && isFirstTimeSetup() && typeof key === 'string' && key.trim().length >= 8) {

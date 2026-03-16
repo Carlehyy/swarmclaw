@@ -109,17 +109,37 @@ export function getAgentSpendWindows(
   now = Date.now(),
   opts?: { sessions?: SessionsMap; usage?: UsageMap },
 ): AgentSpendWindows {
-  const sessions = opts?.sessions ?? (loadSessions() as unknown as SessionsMap)
   const usage = opts?.usage ?? (loadUsage() as UsageMap)
-  const agentSessionIds = getAgentSessionIds(agentId, sessions)
-  if (agentSessionIds.size === 0) {
-    return { hourly: 0, daily: 0, monthly: 0 }
-  }
-
   const { hourStartTs, dayStartTs, monthStartTs } = toDateBoundaries(now)
   const spend: AgentSpendWindows = { hourly: 0, daily: 0, monthly: 0 }
 
+  // Track which sessions have tagged records so we skip them in the legacy pass
+  const sessionsWithTaggedRecords = new Set<string>()
+
+  // First pass: scan for records tagged with agentId directly (new records)
+  for (const records of Object.values(usage)) {
+    if (!Array.isArray(records)) continue
+    for (const record of records) {
+      const r = record as UsageRecord
+      if (r?.agentId !== agentId) continue
+      sessionsWithTaggedRecords.add(r.sessionId)
+      const ts = typeof r.timestamp === 'number' ? r.timestamp : 0
+      if (ts <= 0) continue
+      const cost = typeof r.estimatedCost === 'number' ? r.estimatedCost : 0
+      if (!Number.isFinite(cost) || cost <= 0) continue
+      if (ts >= monthStartTs) spend.monthly += cost
+      if (ts >= dayStartTs) spend.daily += cost
+      if (ts >= hourStartTs) spend.hourly += cost
+    }
+  }
+
+  // Second pass: legacy session-based lookup for untagged records.
+  // Skip sessions already covered by tagged records to avoid double-counting.
+  const sessions = opts?.sessions ?? (loadSessions() as unknown as SessionsMap)
+  const agentSessionIds = getAgentSessionIds(agentId, sessions)
+
   for (const sid of agentSessionIds) {
+    if (sessionsWithTaggedRecords.has(sid)) continue
     const raw = usage[sid]
     if (!Array.isArray(raw)) continue
     for (const record of raw) {
@@ -128,7 +148,6 @@ export function getAgentSpendWindows(
       if (ts <= 0) continue
       const cost = typeof r?.estimatedCost === 'number' ? r.estimatedCost : 0
       if (!Number.isFinite(cost) || cost <= 0) continue
-
       if (ts >= monthStartTs) spend.monthly += cost
       if (ts >= dayStartTs) spend.daily += cost
       if (ts >= hourStartTs) spend.hourly += cost

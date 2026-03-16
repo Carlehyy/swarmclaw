@@ -1,10 +1,12 @@
-const inflightSessionRefreshes = new Map<string, Promise<void>>()
 import { StateCreator } from 'zustand'
 import type { AppState } from '../use-app-store'
 import type { Sessions, Session } from '../../types'
 import { api } from '@/lib/app/api-client'
 import { fetchChat, fetchChats } from '@/lib/chat/chats'
-import { setIfChanged, invalidateFingerprint } from '../set-if-changed'
+import { invalidateFingerprint } from '../set-if-changed'
+import { createLoader, createInflightDeduplicator } from '../store-utils'
+
+const sessionRefreshDedup = createInflightDeduplicator('sessionSlice_inflightRefreshes')
 
 /** Derive the active session ID from the current agent — no stored `currentSessionId`. */
 export function selectActiveSessionId(s: AppState): string | null {
@@ -19,48 +21,26 @@ export interface SessionSlice {
   refreshSession: (id: string) => Promise<void>
   removeSession: (id: string) => void
   clearSessions: (ids: string[]) => Promise<void>
-  togglePinSession: (id: string) => void
+  togglePinSession: (id: string) => Promise<void>
   updateSessionInStore: (session: Session) => void
 }
 
 export const createSessionSlice: StateCreator<AppState, [], [], SessionSlice> = (set, get) => ({
   sessions: {},
-  loadSessions: async () => {
-    try {
-      const sessions = await fetchChats()
-      setIfChanged<AppState>(set, 'sessions', sessions)
-    } catch (err) {
-      console.warn('Store error:', err)
-    }
-  },
+  loadSessions: createLoader<AppState>(set, 'sessions', () => fetchChats()),
   refreshSession: async (id) => {
     if (!id) return
-    const existing = inflightSessionRefreshes.get(id)
-    if (existing) {
-      await existing
-      return
-    }
-
-    const refreshPromise = (async () => {
+    await sessionRefreshDedup.dedup(id, async () => {
       try {
         const session = await fetchChat(id)
         invalidateFingerprint('sessions')
         set({
           sessions: { ...get().sessions, [id]: session },
         })
-      } catch (err) {
-      console.warn('Store error:', err)
-    }
-    })()
-
-    inflightSessionRefreshes.set(id, refreshPromise)
-    try {
-      await refreshPromise
-    } finally {
-      if (inflightSessionRefreshes.get(id) === refreshPromise) {
-        inflightSessionRefreshes.delete(id)
+      } catch (err: unknown) {
+        console.warn('Store error:', err)
       }
-    }
+    })
   },
   removeSession: (id) => {
     const sessions = { ...get().sessions }
@@ -86,14 +66,18 @@ export const createSessionSlice: StateCreator<AppState, [], [], SessionSlice> = 
       set({ sessions })
     }
   },
-  togglePinSession: (id) => {
+  togglePinSession: async (id) => {
     const sessions = { ...get().sessions }
-    if (sessions[id]) {
-      sessions[id] = { ...sessions[id], pinned: !sessions[id].pinned }
-      invalidateFingerprint('sessions')
-      set({ sessions })
-      // Persist to server
-      void api('PUT', `/chats/${id}`, { pinned: sessions[id].pinned })
+    if (!sessions[id]) return
+    const wasPinned = sessions[id].pinned
+    sessions[id] = { ...sessions[id], pinned: !wasPinned }
+    invalidateFingerprint('sessions')
+    set({ sessions })
+    try {
+      await api('PUT', `/chats/${id}`, { pinned: !wasPinned })
+    } catch (err: unknown) {
+      console.warn('Pin toggle failed:', err)
+      await get().loadSessions()
     }
   },
   updateSessionInStore: (session) => {

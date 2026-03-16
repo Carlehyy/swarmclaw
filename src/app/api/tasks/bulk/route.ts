@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { safeParseBody } from '@/lib/server/safe-parse-body'
 import { loadTasks, logActivity, upsertStoredItems } from '@/lib/server/storage'
 import { enqueueTask, disableSessionHeartbeat } from '@/lib/server/runtime/queue'
 import { pushMainLoopEventToMainSessions } from '@/lib/server/agents/main-agent-loop'
@@ -18,7 +19,8 @@ const VALID_STATUSES: BoardTaskStatus[] = ['backlog', 'queued', 'running', 'comp
  *   projectId?: string | null    — reassign project (null to clear)
  */
 export async function POST(req: Request) {
-  const body = await req.json()
+  const { data: body, error } = await safeParseBody<Record<string, unknown>>(req)
+  if (error) return error
   const ids: unknown = body.ids
   if (!Array.isArray(ids) || ids.length === 0) {
     return NextResponse.json({ error: 'ids must be a non-empty array' }, { status: 400 })

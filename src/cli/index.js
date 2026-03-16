@@ -24,6 +24,7 @@ const COMMAND_GROUPS = [
       cmd('purge', 'DELETE', '/agents/trash', 'Permanently delete a trashed agent', { expectsJsonBody: true }),
       cmd('thread', 'POST', '/agents/:id/thread', 'Get or create agent thread session'),
       cmd('clone', 'POST', '/agents/:id/clone', 'Clone an agent'),
+      cmd('bulk-update', 'PATCH', '/agents/bulk', 'Bulk update agents', { expectsJsonBody: true }),
     ],
   },
   {
@@ -169,6 +170,13 @@ const COMMAND_GROUPS = [
     ],
   },
   {
+    name: 'dashboard',
+    description: 'Dashboard summary data',
+    commands: [
+      cmd('get', 'GET', '/dashboard', 'Get dashboard summary'),
+    ],
+  },
+  {
     name: 'dirs',
     description: 'Directory listing and native picker',
     commands: [
@@ -204,6 +212,7 @@ const COMMAND_GROUPS = [
       cmd('create', 'POST', '/documents', 'Create document', { expectsJsonBody: true }),
       cmd('update', 'PUT', '/documents/:id', 'Update document', { expectsJsonBody: true }),
       cmd('delete', 'DELETE', '/documents/:id', 'Delete document'),
+      cmd('revisions', 'GET', '/documents/:id/revisions', 'List document revisions'),
     ],
   },
   {

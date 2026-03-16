@@ -4,6 +4,7 @@ import { notFound } from '@/lib/server/collection-helpers'
 import { materializeStreamingAssistantArtifacts } from '@/lib/chat/chat-streaming-state'
 import { appendSessionNote } from '@/lib/server/session-note'
 import type { Message, Session } from '@/types'
+import { safeParseBody } from '@/lib/server/safe-parse-body'
 
 export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -47,12 +48,13 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
 
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
-  const body = await req.json() as {
+  const { data: body, error } = await safeParseBody<{
     kind?: string
     role?: Message['role']
     text?: string
     messageKind?: Message['kind']
-  }
+  }>(req)
+  if (error) return error
 
   if (body.kind === 'context-clear') {
     const session = loadStoredItem('sessions', id) as Session | null
@@ -88,7 +90,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
 export async function PUT(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
-  const body = await req.json() as { messageIndex: number; bookmarked: boolean }
+  const { data: body, error } = await safeParseBody<{ messageIndex: number; bookmarked: boolean }>(req)
+  if (error) return error
   const session = loadStoredItem('sessions', id) as Session | null
   if (!session) return notFound()
 
@@ -104,7 +107,8 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
 
 export async function DELETE(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
-  const body = await req.json() as { messageIndex: number }
+  const { data: body, error } = await safeParseBody<{ messageIndex: number }>(req)
+  if (error) return error
   const session = loadStoredItem('sessions', id) as Session | null
   if (!session) return notFound()
 

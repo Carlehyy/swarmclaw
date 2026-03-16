@@ -36,6 +36,7 @@ import {
   upsertSchedule,
   upsertMission,
   upsertMissionEvent,
+  logActivity,
 } from '@/lib/server/storage'
 import {
   classifyMissionTurn,
@@ -1702,6 +1703,14 @@ export async function applyMissionOutcomeForTurn(params: {
     return next
   })
   if (!updated) return mission
+
+  logActivity({
+    entityType: 'mission',
+    entityId: updated.id,
+    action: `phase_${updated.phase}`,
+    actor: 'system',
+    summary: `Mission "${updated.objective?.slice(0, 60) || updated.id}" → ${updated.phase} (${decision.verdict})`,
+  })
 
   appendMissionEvent({
     missionId: updated.id,

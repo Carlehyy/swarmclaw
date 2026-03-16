@@ -38,6 +38,7 @@ import { errorMessage } from '@/lib/shared-utils'
 import { AGENT_TURN_TIMEOUT_MS, cleanText, now } from '@/lib/server/protocols/protocol-types'
 import type { ProtocolAgentTurnResult, ProtocolRunDeps } from '@/lib/server/protocols/protocol-types'
 import { normalizeProtocolRun } from '@/lib/server/protocols/protocol-normalization'
+import { persistChatroomInteractionMemory } from '@/lib/server/chatrooms/chatroom-memory-bridge'
 
 // ---- Zod schema ----
 
@@ -249,6 +250,16 @@ export async function defaultExecuteAgentTurn(params: {
       const text = stripHiddenControlTokens(rawText)
       if (text.trim() && !shouldSuppressHiddenControlText(rawText)) {
         appendSyntheticSessionMessage(syntheticSession.id, 'assistant', text)
+        // Persist interaction to agent memory (fire-and-forget)
+        persistChatroomInteractionMemory({
+          agentId: params.agentId,
+          agent,
+          chatroomId: chatroom.id,
+          chatroomName: chatroom.name,
+          senderName: 'Protocol',
+          inboundText: params.prompt,
+          responseText: text,
+        }).catch(() => {})
       }
       return {
         text: cleanText(text, 6_000),

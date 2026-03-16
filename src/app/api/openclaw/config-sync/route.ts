@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { detectConfigIssues, repairConfigIssue } from '@/lib/server/openclaw/config-sync'
 import { errorMessage } from '@/lib/shared-utils'
+import { safeParseBody } from '@/lib/server/safe-parse-body'
 
 /** GET — detect configuration issues */
 export async function GET() {
@@ -15,7 +16,8 @@ export async function GET() {
 
 /** POST { issueId } — repair a specific issue */
 export async function POST(req: Request) {
-  const body = await req.json()
+  const { data: body, error } = await safeParseBody<Record<string, unknown>>(req)
+  if (error) return error
   const { issueId } = body as { issueId?: string }
   if (!issueId) {
     return NextResponse.json({ error: 'Missing issueId' }, { status: 400 })

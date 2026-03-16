@@ -3,6 +3,7 @@ import { genId } from '@/lib/id'
 import { loadChatrooms, saveChatrooms, loadAgents } from '@/lib/server/storage'
 import { notify } from '@/lib/server/ws-hub'
 import { notFound } from '@/lib/server/collection-helpers'
+import { safeParseBody } from '@/lib/server/safe-parse-body'
 import { streamAgentChat } from '@/lib/server/chat-execution/stream-agent-chat'
 import { getProvider } from '@/lib/providers'
 import {
@@ -26,6 +27,7 @@ import { resolvePrimaryAgentRoute } from '@/lib/server/agents/agent-runtime-conf
 import { shouldSuppressHiddenControlText, stripHiddenControlTokens } from '@/lib/server/agents/assistant-control'
 import type { Chatroom, ChatroomMessage, Agent } from '@/types'
 import { errorMessage } from '@/lib/shared-utils'
+import { persistChatroomInteractionMemory } from '@/lib/server/chatrooms/chatroom-memory-bridge'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 300
@@ -34,7 +36,8 @@ const MAX_CHAIN_DEPTH = 5
 
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
-  const body = await req.json()
+  const { data: body, error } = await safeParseBody<Record<string, unknown>>(req)
+  if (error) return error
 
   const chatrooms = loadChatrooms()
   const chatroom = chatrooms[id] as Chatroom | undefined
@@ -57,7 +60,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   // Persist incoming message
   const senderName = senderId === 'user' ? 'You' : (agents[senderId]?.name || senderId)
   const replyTargetAgentId = resolveReplyTargetAgentId(replyToId, chatroom.messages, chatroom.agentIds)
-  let mentions = parseMentions(text, agents, chatroom.agentIds, { replyTargetAgentId })
+  let mentions = parseMentions(text, agents, chatroom.agentIds, { replyTargetAgentId, senderId: senderId !== 'user' ? senderId : null })
   // Routing rules: if no explicit mentions, evaluate keyword/capability rules
   if (mentions.length === 0 && chatroom.routingRules?.length) {
     const agentList = chatroom.agentIds.map((aid) => agents[aid]).filter(Boolean)
@@ -293,6 +296,17 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
               // Extract and apply reactions (e.g. [REACTION]{"emoji":"👍","to":"..."})
               applyAgentReactionsFromText(responseText, id, agent.id)
 
+              // Persist interaction to agent memory (fire-and-forget)
+              persistChatroomInteractionMemory({
+                agentId: agent.id,
+                agent,
+                chatroomId: id,
+                chatroomName: chatroom.name,
+                senderName,
+                inboundText: text,
+                responseText,
+              }).catch(() => {})
+
               markProviderSuccess(agent.provider)
               writeEvent({ t: 'cr_agent_done', agentId: agent.id, agentName: agent.name })
 
@@ -339,7 +353,12 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
             )
             if (lastAgentMsg) {
               const truncated = lastAgentMsg.text.length > 500 ? lastAgentMsg.text.slice(0, 500) + '...' : lastAgentMsg.text
-              item.contextMessage = `${lastAgentMsg.senderName} said: "${truncated}" — They're requesting your help. Review the conversation and respond.`
+              const originalTruncated = text.length > 300 ? text.slice(0, 300) + '...' : text
+              item.contextMessage = [
+                `[Conversation context] The user said: "${originalTruncated}"`,
+                `${lastAgentMsg.senderName} then said: "${truncated}"`,
+                `They mentioned you — respond to the conversation naturally.`,
+              ].join('\n')
             }
           }
 

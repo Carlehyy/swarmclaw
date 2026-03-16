@@ -21,7 +21,7 @@ export const createTaskSlice: StateCreator<AppState, [], [], TaskSlice> = (set, 
       const show = includeArchived ?? get().showArchivedTasks
       const tasks = await fetchTasks(show)
       setIfChanged<AppState>(set, 'tasks', tasks)
-    } catch (err) {
+    } catch (err: unknown) {
       console.warn('Store error:', err)
     }
   },

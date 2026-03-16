@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { loadModelOverrides, saveModelOverrides } from '@/lib/server/storage'
 import { notFound } from '@/lib/server/collection-helpers'
 import { getProviderList } from '@/lib/providers'
+import { safeParseBody } from '@/lib/server/safe-parse-body'
 
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -14,7 +15,8 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
 
 export async function PUT(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
-  const body = await req.json()
+  const { data: body, error } = await safeParseBody<{ models?: string[] }>(req)
+  if (error) return error
   const overrides = loadModelOverrides()
   overrides[id] = body.models || []
   saveModelOverrides(overrides)

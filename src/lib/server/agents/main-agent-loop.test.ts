@@ -79,7 +79,7 @@ describe('main-agent-loop', () => {
           messages: [],
           createdAt: 1,
           lastActiveAt: 1,
-          sessionType: 'orchestrated',
+          sessionType: 'delegated',
           agentId: 'agent-a',
           parentSessionId: 'main',
         },

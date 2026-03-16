@@ -7,6 +7,7 @@ const COMMAND_GROUPS = {
       create: { description: 'Create an agent', method: 'POST', path: '/agents' },
       update: { description: 'Update an agent', method: 'PUT', path: '/agents/:id', params: ['id'] },
       delete: { description: 'Delete an agent', method: 'DELETE', path: '/agents/:id', params: ['id'] },
+      'bulk-update': { description: 'Bulk update agents', method: 'PATCH', path: '/agents/bulk' },
       trash: { description: 'List trashed agents', method: 'GET', path: '/agents/trash' },
       restore: { description: 'Restore a trashed agent', method: 'POST', path: '/agents/trash' },
       purge: { description: 'Permanently delete a trashed agent', method: 'DELETE', path: '/agents/trash' },
@@ -121,6 +122,12 @@ const COMMAND_GROUPS = {
       start: { description: 'Start daemon', method: 'POST', path: '/daemon', staticBody: { action: 'start' } },
       stop: { description: 'Stop daemon', method: 'POST', path: '/daemon', staticBody: { action: 'stop' } },
       'health-check': { description: 'Run daemon health checks immediately', method: 'POST', path: '/daemon/health-check' },
+    },
+  },
+  dashboard: {
+    description: 'Dashboard summary data',
+    commands: {
+      get: { description: 'Get dashboard summary', method: 'GET', path: '/dashboard' },
     },
   },
   dirs: {

@@ -408,8 +408,32 @@ export function normalizeStoredRecord(
     }
     delete agent.platformAssignScope
     delete agent.subAgentIds
-    delete agent.isOrchestrator
     agent.sandboxConfig = normalizeAgentSandboxConfig(agent.sandboxConfig)
+    // Default proactiveMemory to true for existing agents
+    if (agent.proactiveMemory === undefined) agent.proactiveMemory = true
+    if (!Array.isArray(agent.capabilities)) agent.capabilities = []
+    // Role normalization — default to 'worker'
+    if (agent.role !== 'worker' && agent.role !== 'coordinator') {
+      agent.role = 'worker'
+    }
+    // Coordinators always have delegation enabled
+    if (agent.role === 'coordinator') {
+      agent.delegationEnabled = true
+      if (agent.delegationTargetMode !== 'selected') {
+        agent.delegationTargetMode = 'all'
+      }
+    }
+    // Org chart normalization
+    if (agent.orgChart && typeof agent.orgChart === 'object' && !Array.isArray(agent.orgChart)) {
+      const oc = agent.orgChart as Record<string, unknown>
+      oc.parentId ??= null
+      oc.teamLabel ??= null
+      oc.teamColor ??= null
+      oc.x ??= null
+      oc.y ??= null
+    } else {
+      agent.orgChart = null
+    }
     return agent
   }
 
@@ -417,6 +441,7 @@ export function normalizeStoredRecord(
     if (!value || typeof value !== 'object' || Array.isArray(value)) return value
     const task = value as StoredObject
     if ('missionSummary' in task) delete task.missionSummary
+    if (!Array.isArray(task.subtaskIds)) task.subtaskIds = []
     return task
   }
 
@@ -440,7 +465,9 @@ export function normalizeStoredRecord(
   if (!value || typeof value !== 'object' || Array.isArray(value)) return value
 
   const session = value as StoredObject
-  if (session.sessionType !== 'human') session.sessionType = 'human'
+  // Migrate legacy 'orchestrated' → 'delegated'
+  if (session.sessionType === 'orchestrated') session.sessionType = 'delegated'
+  if (session.sessionType !== 'human' && session.sessionType !== 'delegated') session.sessionType = 'human'
   const isLegacyShortcut = (
     (typeof session.id === 'string' && session.id.startsWith('agent-thread-'))
     || (typeof session.name === 'string' && session.name.startsWith('agent-thread:'))

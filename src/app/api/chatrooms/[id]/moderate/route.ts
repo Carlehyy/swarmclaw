@@ -3,6 +3,7 @@ import crypto from 'crypto'
 import { loadChatrooms, saveChatrooms, appendModerationLog } from '@/lib/server/storage'
 import { notify } from '@/lib/server/ws-hub'
 import { notFound } from '@/lib/server/collection-helpers'
+import { safeParseBody } from '@/lib/server/safe-parse-body'
 import { getMembers } from '@/lib/server/chatrooms/chatroom-helpers'
 import type { Chatroom, ChatroomMember } from '@/types'
 
@@ -26,7 +27,8 @@ function isValidRole(role: unknown): role is ChatroomMember['role'] {
 
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
-  const body = await req.json() as Record<string, unknown>
+  const { data: body, error } = await safeParseBody<Record<string, unknown>>(req)
+  if (error) return error
 
   const chatrooms = loadChatrooms()
   const chatroom = chatrooms[id] as Chatroom | undefined

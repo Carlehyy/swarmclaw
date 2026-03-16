@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { safeParseBody } from '@/lib/server/safe-parse-body'
 import type { Connector, ConnectorAccessMutationAction, ConnectorAccessMutationResponse } from '@/types'
 import { notFound } from '@/lib/server/collection-helpers'
 import {
@@ -94,7 +95,8 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
   if (!connector) return notFound()
 
   try {
-    const body = await req.json() as Record<string, unknown>
+    const { data: body, error } = await safeParseBody<Record<string, unknown>>(req)
+    if (error) return error
     const action = typeof body.action === 'string' ? body.action.trim().toLowerCase() as ConnectorAccessMutationAction : null
     if (!action) {
       return NextResponse.json({ error: 'Missing access action' }, { status: 400 })

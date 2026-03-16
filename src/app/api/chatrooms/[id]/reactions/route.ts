@@ -2,18 +2,20 @@ import { NextResponse } from 'next/server'
 import { loadChatrooms, saveChatrooms } from '@/lib/server/storage'
 import { notify } from '@/lib/server/ws-hub'
 import { notFound } from '@/lib/server/collection-helpers'
+import { safeParseBody } from '@/lib/server/safe-parse-body'
 import type { Chatroom, ChatroomMessage, ChatroomReaction } from '@/types'
 
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
-  const body = await req.json()
+  const { data: body, error } = await safeParseBody<Record<string, unknown>>(req)
+  if (error) return error
   const chatrooms = loadChatrooms()
   const chatroom = chatrooms[id] as Chatroom | undefined
   if (!chatroom) return notFound()
 
-  const messageId = body.messageId as string
-  const emoji = body.emoji as string
-  const reactorId = (body.reactorId as string) || 'user'
+  const messageId = typeof body.messageId === 'string' ? body.messageId : ''
+  const emoji = typeof body.emoji === 'string' ? body.emoji : ''
+  const reactorId = typeof body.reactorId === 'string' && body.reactorId ? body.reactorId : 'user'
   if (!messageId || !emoji) {
     return NextResponse.json({ error: 'messageId and emoji are required' }, { status: 400 })
   }

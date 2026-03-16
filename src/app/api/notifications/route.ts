@@ -4,6 +4,7 @@ import { createNotification } from '@/lib/server/create-notification'
 import { loadNotifications, deleteNotification } from '@/lib/server/storage'
 import { notify } from '@/lib/server/ws-hub'
 import type { AppNotification } from '@/types'
+import { safeParseBody } from '@/lib/server/safe-parse-body'
 export const dynamic = 'force-dynamic'
 
 export async function GET(req: Request) {
@@ -28,7 +29,8 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
-  const body = (await req.json()) as Record<string, unknown>
+  const { data: body, error } = await safeParseBody(req)
+  if (error) return error
   const actionLabel = typeof body.actionLabel === 'string' ? body.actionLabel : undefined
   const actionUrl = typeof body.actionUrl === 'string' ? body.actionUrl : undefined
   const dedupKey = typeof body.dedupKey === 'string' && body.dedupKey.trim()

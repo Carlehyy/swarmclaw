@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { safeParseBody } from '@/lib/server/safe-parse-body'
 import { genId } from '@/lib/id'
 import { perf } from '@/lib/server/runtime/perf'
 import { loadConnectors, upsertStoredItem } from '@/lib/server/storage'
@@ -47,7 +48,8 @@ export async function GET() {
 
 export async function POST(req: Request) {
   ensureDaemonStarted('api/connectors:post')
-  const raw = await req.json()
+  const { data: raw, error } = await safeParseBody<Record<string, unknown>>(req)
+  if (error) return error
   const parsed = ConnectorCreateSchema.safeParse(raw)
   if (!parsed.success) {
     return NextResponse.json(formatZodError(parsed.error as z.ZodError), { status: 400 })

@@ -26,6 +26,7 @@ import {
   countDistinctExternalResearchHosts,
 } from '@/lib/server/chat-execution/stream-continuation'
 import { truncateToolResultText, calculateMaxToolResultChars } from '@/lib/server/chat-execution/tool-result-guard'
+import { notifyWithPayload } from '@/lib/server/ws-hub'
 import { resolveExclusiveMemoryWriteTerminalAllowance } from '@/lib/server/chat-execution/chat-streaming-utils'
 import { getContextWindowSize } from '@/lib/server/context-manager'
 
@@ -152,6 +153,12 @@ export async function processIterationEvents(opts: ProcessIterationEventsOpts): 
         agentId: session.agentId,
         detail: { toolName, input: inputStr?.slice(0, 4000) },
       })
+      notifyWithPayload(`session:${session.id}:execution`, {
+        event: 'tool_start',
+        toolName,
+        toolCallId: event.run_id,
+        timestamp: Date.now(),
+      })
       write(`data: ${JSON.stringify({
         t: 'tool_call',
         toolName,
@@ -184,6 +191,13 @@ export async function processIterationEvents(opts: ProcessIterationEventsOpts): 
       logExecution(session.id, 'tool_result', `${toolName} returned`, {
         agentId: session.agentId,
         detail: { toolName, output: outputStr?.slice(0, 4000), error: /^(Error:|error:)/i.test((outputStr || '').trim()) || undefined },
+      })
+      notifyWithPayload(`session:${session.id}:execution`, {
+        event: 'tool_end',
+        toolName,
+        toolCallId: event.run_id,
+        hasError: /^(Error:|error:)/i.test((outputStr || '').trim()),
+        timestamp: Date.now(),
       })
       // Enriched file_op logging
       if (FILE_OP_TOOLS.includes(toolName)) {

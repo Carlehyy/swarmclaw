@@ -17,6 +17,7 @@ import { buildDelegateTools } from './delegate'
 import { buildWebTools, sweepOrphanedBrowsers, cleanupSessionBrowser, getActiveBrowserCount, hasActiveBrowser } from './web'
 import { buildMemoryTools } from './memory'
 import { buildChatroomTools } from './chatroom'
+import { buildProtocolTools } from './protocol'
 import { buildSubagentTools } from './subagent'
 import { buildCanvasTools } from './canvas'
 import { buildWalletTools } from './wallet'
@@ -176,6 +177,7 @@ export async function buildSessionTools(cwd: string, enabledExtensions: string[]
       ['memory', buildMemoryTools],
       ['manage_platform', buildPlatformTools],
       ['manage_chatrooms', buildChatroomTools],
+      ['manage_protocols', buildProtocolTools],
       ['spawn_subagent', buildSubagentTools],
       ['canvas', buildCanvasTools],
       ['wallet', buildWalletTools],

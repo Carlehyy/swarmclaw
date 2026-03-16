@@ -10,10 +10,12 @@ import {
 } from '@/lib/server/schedules/schedule-lifecycle'
 import { errorMessage } from '@/lib/shared-utils'
 import { notify } from '@/lib/server/ws-hub'
+import { safeParseBody } from '@/lib/server/safe-parse-body'
 
 export async function PUT(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
-  const body = await req.json()
+  const { data: body, error } = await safeParseBody(req)
+  if (error) return error
   const schedules = loadSchedules()
   const current = schedules[id]
   if (!current) return notFound()

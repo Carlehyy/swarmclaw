@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server'
+import { safeParseBody } from '@/lib/server/safe-parse-body'
 import { getExtensionManager } from '@/lib/server/extensions'
+import { logActivity } from '@/lib/server/storage'
 import { notify } from '@/lib/server/ws-hub'
 import '@/lib/server/builtin-extensions'
 
@@ -11,7 +13,8 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
-  const body = await req.json()
+  const { data: body, error } = await safeParseBody(req)
+  if (error) return error
   const { filename, enabled } = body
 
   if (!filename || typeof enabled !== 'boolean') {
@@ -23,7 +26,8 @@ export async function POST(req: Request) {
   if (!ext) {
     return NextResponse.json({ error: 'Extension not found' }, { status: 404 })
   }
-  manager.setEnabled(filename, enabled)
+  manager.setEnabled(filename as string, enabled)
+  logActivity({ entityType: 'extension', entityId: filename as string, action: enabled ? 'enabled' : 'disabled', actor: 'user', summary: `Extension "${filename}" ${enabled ? 'enabled' : 'disabled'}` })
   notify('extensions')
 
   return NextResponse.json({ ok: true })
@@ -40,6 +44,7 @@ export async function DELETE(req: Request) {
   if (!deleted) {
     return NextResponse.json({ error: 'Cannot delete built-in or non-existent extension' }, { status: 400 })
   }
+  logActivity({ entityType: 'extension', entityId: filename, action: 'deleted', actor: 'user', summary: `Extension "${filename}" deleted` })
   notify('extensions')
   return NextResponse.json({ ok: true })
 }

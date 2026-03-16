@@ -29,6 +29,7 @@ import type {
   ProtocolSwarmConfig,
   ProtocolTemplate,
 } from '@/types'
+import { loadProtocolRun } from '@/lib/server/storage'
 import { normalizeStepOutputs } from '@/lib/server/protocols/step-outputs'
 import { cleanText, uniqueIds } from '@/lib/server/protocols/protocol-types'
 
@@ -544,6 +545,13 @@ export function normalizeProtocolRun(run: ProtocolRun): ProtocolRun {
     swarmState: normalizeSwarmState(run.swarmState),
     currentPhaseIndex,
   }
+}
+
+export function loadProtocolRunById(runId: string | null | undefined): ProtocolRun | null {
+  const normalized = cleanText(runId, 64)
+  if (!normalized) return null
+  const run = loadProtocolRun(normalized)
+  return run ? normalizeProtocolRun(run) : null
 }
 
 export function normalizeProtocolTemplate(template: ProtocolTemplate): ProtocolTemplate {

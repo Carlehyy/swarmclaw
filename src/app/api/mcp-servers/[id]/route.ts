@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { safeParseBody } from '@/lib/server/safe-parse-body'
 import { loadMcpServers, saveMcpServers, deleteMcpServer } from '@/lib/server/storage'
 import { mutateItem, deleteItem, notFound, type CollectionOps } from '@/lib/server/collection-helpers'
 
@@ -14,7 +15,8 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
 
 export async function PUT(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
-  const body = await req.json()
+  const { data: body, error } = await safeParseBody(req)
+  if (error) return error
   const result = mutateItem(ops, id, (server) => ({
     ...server, ...body, id, updatedAt: Date.now(),
   }))

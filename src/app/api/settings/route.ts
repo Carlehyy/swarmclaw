@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { safeParseBody } from '@/lib/server/safe-parse-body'
 import { normalizeHeartbeatSettingFields } from '@/lib/runtime/heartbeat-defaults'
 import { normalizeWhatsAppApprovedContacts } from '@/lib/server/connectors/pairing'
 import { loadPublicSettings, loadSettings, saveSettings } from '@/lib/server/storage'
@@ -56,7 +57,8 @@ export async function GET() {
 }
 
 export async function PUT(req: Request) {
-  const body = await req.json() as Record<string, unknown>
+  const { data: body, error } = await safeParseBody<Record<string, unknown>>(req)
+  if (error) return error
   const sanitizedBody: Record<string, unknown> = { ...body }
 
   delete sanitizedBody.__encryptedAppSettings

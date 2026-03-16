@@ -9,7 +9,7 @@ import type {
 } from '@/types'
 import { cleanText, now, uniqueIds } from '@/lib/server/protocols/protocol-types'
 import type { ProtocolRunDeps } from '@/lib/server/protocols/protocol-types'
-import { findRunStep } from '@/lib/server/protocols/protocol-normalization'
+import { findRunStep, loadProtocolRunById } from '@/lib/server/protocols/protocol-normalization'
 import { loadTemplate } from '@/lib/server/protocols/protocol-templates'
 import {
   appendProtocolEvent,
@@ -187,7 +187,6 @@ export function syncSubflowParentFromChildRun(
     })
     const { requestProtocolRunExecution } = require('@/lib/server/protocols/protocol-run-lifecycle') as typeof import('@/lib/server/protocols/protocol-run-lifecycle')
     requestProtocolRunExecution(parent.id, deps)
-    const { loadProtocolRunById } = require('@/lib/server/protocols/protocol-queries') as typeof import('@/lib/server/protocols/protocol-queries')
     return loadProtocolRunById(parent.id)
   }
 
@@ -215,7 +214,6 @@ export function syncSubflowParentFromChildRun(
       endedAt: parent.endedAt || now(deps),
       updatedAt: now(deps),
     })
-    const { loadProtocolRunById } = require('@/lib/server/protocols/protocol-queries') as typeof import('@/lib/server/protocols/protocol-queries')
     return loadProtocolRunById(parent.id)
   }
 
@@ -242,6 +240,5 @@ export function syncSubflowParentFromChildRun(
   })
   const { requestProtocolRunExecution } = require('@/lib/server/protocols/protocol-run-lifecycle') as typeof import('@/lib/server/protocols/protocol-run-lifecycle')
   requestProtocolRunExecution(parent.id, deps)
-  const { loadProtocolRunById } = require('@/lib/server/protocols/protocol-queries') as typeof import('@/lib/server/protocols/protocol-queries')
   return loadProtocolRunById(parent.id)
 }

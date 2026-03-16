@@ -3,6 +3,7 @@ import { spawn } from 'child_process'
 import { loadSessions, devServers, localIP } from '@/lib/server/storage'
 import { notFound } from '@/lib/server/collection-helpers'
 import { resolveDevServerLaunchDir } from '@/lib/server/runtime/devserver-launch'
+import { safeParseBody } from '@/lib/server/safe-parse-body'
 import { sleep } from '@/lib/shared-utils'
 import net from 'net'
 
@@ -99,7 +100,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const session = sessions[id]
   if (!session) return notFound()
 
-  const { action } = await req.json()
+  const { data: body, error } = await safeParseBody<{ action: string }>(req)
+  if (error) return error
+  const { action } = body
 
   if (action === 'start') {
     if (devServers.has(id)) {

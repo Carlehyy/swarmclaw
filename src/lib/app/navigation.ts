@@ -7,6 +7,7 @@ import type { AppView } from '@/types'
 const VIEW_TO_PATH: Record<AppView, string> = {
   home: '/home',
   agents: '/agents',
+  org_chart: '/org-chart',
   inbox: '/inbox',
   chatrooms: '/chatrooms',
   protocols: '/protocols',

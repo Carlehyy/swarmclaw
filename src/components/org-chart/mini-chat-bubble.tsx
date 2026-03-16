@@ -1,0 +1,267 @@
+'use client'
+
+import { useCallback, useEffect, useRef, useState } from 'react'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
+import { AgentAvatar } from '@/components/agents/agent-avatar'
+import { api } from '@/lib/app/api-client'
+import { fetchMessages } from '@/lib/chat/chats'
+import { streamChat } from '@/lib/chat/chat'
+import type { Agent, Message, Session, SSEEvent } from '@/types'
+
+interface Props {
+  agent: Agent
+  onClose: () => void
+  onToolActivity?: (toolName: string) => void
+}
+
+const BUBBLE_W = 320
+const INTERNAL_JSON_LINE_RE = /^\s*\{[^}]*"(?:isDeliverableTask|quality_score)"[^}]*\}\s*$/
+
+function stripInternalJson(text: string): string {
+  return text
+    .split('\n')
+    .filter((line) => !INTERNAL_JSON_LINE_RE.test(line))
+    .join('\n')
+    .trim()
+}
+
+export function MiniChatBubble({ agent, onClose, onToolActivity }: Props) {
+  const [sessionId, setSessionId] = useState<string | null>(null)
+  const [messages, setMessages] = useState<Message[]>([])
+  const [streaming, setStreaming] = useState(false)
+  const [streamText, setStreamText] = useState('')
+  const [inputValue, setInputValue] = useState('')
+  const [loading, setLoading] = useState(true)
+  const abortRef = useRef<AbortController | null>(null)
+  const scrollRef = useRef<HTMLDivElement>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  // Initialize: get or create thread session, load messages
+  useEffect(() => {
+    let cancelled = false
+    async function init() {
+      try {
+        const session = await api<Session>('POST', `/agents/${agent.id}/thread`)
+        if (cancelled) return
+        setSessionId(session.id)
+        const msgs = await fetchMessages(session.id)
+        if (cancelled) return
+        setMessages(msgs)
+      } catch {
+        // Agent may not be available
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    }
+    init()
+    return () => { cancelled = true }
+  }, [agent.id])
+
+  // Auto-scroll to bottom on new messages or streaming text
+  useEffect(() => {
+    const el = scrollRef.current
+    if (el) el.scrollTop = el.scrollHeight
+  }, [messages, streamText])
+
+  // Focus input once loaded
+  useEffect(() => {
+    if (!loading && inputRef.current) inputRef.current.focus()
+  }, [loading])
+
+  // Escape to close
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose()
+    }
+    document.addEventListener('keydown', handler)
+    return () => document.removeEventListener('keydown', handler)
+  }, [onClose])
+
+  const send = useCallback(async () => {
+    if (!sessionId || !inputValue.trim() || streaming) return
+    const text = inputValue.trim()
+    setInputValue('')
+
+    // Optimistic user message
+    const userMsg: Message = { role: 'user', text, time: Date.now() }
+    setMessages((prev) => [...prev, userMsg])
+    setStreaming(true)
+    setStreamText('')
+
+    await streamChat(sessionId, text, undefined, undefined, (event: SSEEvent) => {
+      switch (event.t) {
+        case 'd':
+          if (event.text) setStreamText((prev) => prev + event.text)
+          break
+        case 'md':
+          // Skip run-status metadata (JSON blobs from the queue system)
+          if (event.text && !event.text.startsWith('{')) {
+            setStreamText((prev) => prev + event.text)
+          }
+          break
+        case 'tool_call':
+          if (event.toolName) onToolActivity?.(event.toolName)
+          break
+        case 'status':
+          if (event.text) onToolActivity?.(event.text)
+          break
+        case 'done':
+          // Refresh messages to get the final state
+          fetchMessages(sessionId).then((msgs) => setMessages(msgs)).catch(() => {})
+          setStreaming(false)
+          setStreamText('')
+          break
+        case 'err':
+          setStreaming(false)
+          setStreamText('')
+          break
+      }
+    })
+  }, [sessionId, inputValue, streaming, onToolActivity])
+
+  const stop = useCallback(() => {
+    abortRef.current?.abort()
+    setStreaming(false)
+    setStreamText('')
+  }, [])
+
+  // Filter out system/heartbeat messages
+  const visibleMessages = messages.filter(
+    (m) => !m.suppressed && m.kind !== 'heartbeat' && m.kind !== 'context-clear',
+  )
+
+  return (
+    <div
+      className="flex flex-col rounded-[12px] border border-white/[0.08] bg-[#12121e] shadow-2xl shadow-black/50 overflow-hidden"
+      style={{ width: BUBBLE_W, height: 400 }}
+      onPointerDown={(e) => e.stopPropagation()}
+      onClick={(e) => e.stopPropagation()}
+      onWheel={(e) => e.stopPropagation()}
+    >
+      {/* Header */}
+      <div className="flex items-center gap-2 px-3 py-2 border-b border-white/[0.06] bg-white/[0.02] shrink-0">
+        <AgentAvatar
+          seed={agent.avatarSeed || null}
+          avatarUrl={agent.avatarUrl}
+          name={agent.name}
+          size={20}
+        />
+        <span className="text-[12px] font-600 text-text truncate flex-1">{agent.name}</span>
+        <button
+          onClick={onClose}
+          className="w-5 h-5 rounded-[4px] flex items-center justify-center text-text-3 hover:text-text hover:bg-white/[0.08] cursor-pointer border-none transition-colors"
+        >
+          <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+            <path d="M1 1l8 8M9 1l-8 8" />
+          </svg>
+        </button>
+      </div>
+
+      {/* Messages */}
+      <div ref={scrollRef} className="flex-1 overflow-y-auto px-3 py-2 space-y-2 min-h-0">
+        {loading && (
+          <div className="text-[11px] text-text-3/50 text-center py-8">Loading...</div>
+        )}
+        {!loading && visibleMessages.length === 0 && !streaming && (
+          <div className="text-[11px] text-text-3/40 text-center py-8">
+            Start a conversation with {agent.name}
+          </div>
+        )}
+        {visibleMessages.map((msg, i) => (
+          <MessageRow key={`${msg.time}-${i}`} message={msg} />
+        ))}
+        {streaming && streamText && (
+          <div className="flex justify-start">
+            <div className="max-w-[85%] rounded-[8px] px-2.5 py-1.5 bg-white/[0.04] border border-white/[0.06]">
+              <div className="mini-chat-md text-[12px] text-text-2 leading-relaxed">
+                <ReactMarkdown remarkPlugins={[remarkGfm]}>{stripInternalJson(streamText)}</ReactMarkdown>
+              </div>
+              <span className="inline-block w-[5px] h-[12px] bg-accent-bright/60 ml-0.5 animate-pulse" />
+            </div>
+          </div>
+        )}
+        {streaming && !streamText && (
+          <div className="flex justify-start">
+            <div className="rounded-[8px] px-2.5 py-1.5 bg-white/[0.04] border border-white/[0.06]">
+              <div className="flex gap-1 items-center">
+                <span className="w-1.5 h-1.5 rounded-full bg-text-3/40 animate-pulse" />
+                <span className="w-1.5 h-1.5 rounded-full bg-text-3/40 animate-pulse" style={{ animationDelay: '150ms' }} />
+                <span className="w-1.5 h-1.5 rounded-full bg-text-3/40 animate-pulse" style={{ animationDelay: '300ms' }} />
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Input */}
+      <div className="flex items-center gap-1.5 px-2 py-2 border-t border-white/[0.06] shrink-0">
+        <input
+          ref={inputRef}
+          type="text"
+          value={inputValue}
+          onChange={(e) => setInputValue(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send() } }}
+          placeholder="Type a message..."
+          disabled={loading || !sessionId}
+          className="flex-1 text-[12px] bg-white/[0.04] border border-white/[0.06] rounded-[6px] px-2.5 py-1.5 text-text placeholder:text-text-3/30 outline-none focus:border-accent-bright/30 transition-colors disabled:opacity-40"
+        />
+        {streaming ? (
+          <button
+            onClick={stop}
+            className="w-7 h-7 rounded-[6px] flex items-center justify-center bg-red-500/20 text-red-400 hover:bg-red-500/30 cursor-pointer border-none transition-colors"
+          >
+            <svg width="10" height="10" viewBox="0 0 10 10" fill="currentColor">
+              <rect x="1" y="1" width="8" height="8" rx="1" />
+            </svg>
+          </button>
+        ) : (
+          <button
+            onClick={send}
+            disabled={!inputValue.trim() || loading || !sessionId}
+            className="w-7 h-7 rounded-[6px] flex items-center justify-center bg-accent-bright/20 text-accent-bright hover:bg-accent-bright/30 cursor-pointer border-none transition-colors disabled:opacity-30 disabled:cursor-default"
+          >
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor">
+              <path d="M1 11L11 6L1 1v4l5 1-5 1z" />
+            </svg>
+          </button>
+        )}
+      </div>
+
+      {/* Caret pointing down */}
+      <div
+        className="absolute left-1/2 -translate-x-1/2 w-0 h-0"
+        style={{
+          bottom: -8,
+          borderLeft: '8px solid transparent',
+          borderRight: '8px solid transparent',
+          borderTop: '8px solid #12121e',
+        }}
+      />
+    </div>
+  )
+}
+
+function MessageRow({ message }: { message: Message }) {
+  const isUser = message.role === 'user'
+
+  return (
+    <div className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}>
+      <div
+        className={`max-w-[85%] rounded-[8px] px-2.5 py-1.5 ${
+          isUser
+            ? 'bg-accent-bright/15 border border-accent-bright/20'
+            : 'bg-white/[0.04] border border-white/[0.06]'
+        }`}
+      >
+        {isUser ? (
+          <p className="text-[12px] text-text leading-relaxed whitespace-pre-wrap break-words">{message.text}</p>
+        ) : (
+          <div className="mini-chat-md text-[12px] text-text-2 leading-relaxed">
+            <ReactMarkdown remarkPlugins={[remarkGfm]}>{stripInternalJson(message.text)}</ReactMarkdown>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}

@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { safeParseBody } from '@/lib/server/safe-parse-body'
 import { loadWallets, upsertWallet, deleteWallet as deleteWalletFromStore, loadAgent, loadAgents, upsertAgent } from '@/lib/server/storage'
 import { notify } from '@/lib/server/ws-hub'
 import { getWalletLimitAtomic, normalizeAtomicString } from '@/lib/wallet/wallet'
@@ -84,7 +85,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const wallet = wallets[id]
   if (!wallet) return NextResponse.json({ error: 'Wallet not found' }, { status: 404 })
 
-  const body = await req.json()
+  const { data: body, error } = await safeParseBody(req)
+  if (error) return error
   const shouldMakeActive = body.makeActive === true
 
   // Reassign wallet to a different agent
@@ -120,7 +122,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     }
   }
 
-  if (body.label !== undefined) wallet.label = body.label
+  if (body.label !== undefined) wallet.label = body.label as string | undefined
   if (body.spendingLimitAtomic !== undefined || body.spendingLimitLamports !== undefined) {
     wallet.spendingLimitAtomic = normalizeAtomicString(body.spendingLimitAtomic ?? body.spendingLimitLamports, getWalletLimitAtomic(wallet, 'perTx'))
   }

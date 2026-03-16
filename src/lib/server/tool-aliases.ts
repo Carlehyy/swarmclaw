@@ -15,6 +15,7 @@ const EXTENSION_ALIAS_GROUPS: string[][] = [
   ['manage_secrets'],
   ['manage_connectors', 'connectors', 'connector_message_tool'],
   ['manage_chatrooms', 'chatroom'],
+  ['manage_protocols', 'protocol'],
   ['spawn_subagent', 'subagent', 'delegate_to_agent'],
   ['manage_sessions', 'session_info', 'sessions_tool', 'whoami_tool', 'search_history_tool'],
   ['schedule_wake', 'schedule'],

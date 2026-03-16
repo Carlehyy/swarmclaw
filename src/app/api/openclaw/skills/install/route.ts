@@ -1,10 +1,12 @@
 import { NextResponse } from 'next/server'
 import { ensureGatewayConnected } from '@/lib/server/openclaw/gateway'
 import { errorMessage } from '@/lib/shared-utils'
+import { safeParseBody } from '@/lib/server/safe-parse-body'
 
 /** POST { name, installId, timeoutMs? } — install a skill via gateway */
 export async function POST(req: Request) {
-  const body = await req.json()
+  const { data: body, error } = await safeParseBody<Record<string, unknown>>(req)
+  if (error) return error
   const { name, installId, timeoutMs } = body as {
     name?: string
     installId?: string

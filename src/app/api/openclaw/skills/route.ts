@@ -6,6 +6,7 @@ import { loadAgents, saveAgents } from '@/lib/server/storage'
 import { notify } from '@/lib/server/ws-hub'
 import type { SkillAllowlistMode } from '@/types'
 import { errorMessage } from '@/lib/shared-utils'
+import { safeParseBody } from '@/lib/server/safe-parse-body'
 
 /** GET ?agentId=X — fetch skills from gateway with eligibility */
 export async function GET(req: Request) {
@@ -37,7 +38,8 @@ export async function GET(req: Request) {
 
 /** PATCH { skillKey, enabled?, apiKey? } — update a skill's config on gateway */
 export async function PATCH(req: Request) {
-  const body = await req.json()
+  const { data: body, error } = await safeParseBody<Record<string, unknown>>(req)
+  if (error) return error
   const { skillKey, enabled, apiKey } = body as {
     skillKey?: string
     enabled?: boolean
@@ -63,7 +65,8 @@ export async function PATCH(req: Request) {
 
 /** PUT { agentId, mode, allowedSkills } — save skill allowlist config to agent */
 export async function PUT(req: Request) {
-  const body = await req.json()
+  const { data: body, error: parseError } = await safeParseBody<Record<string, unknown>>(req)
+  if (parseError) return parseError
   const { agentId, mode, allowedSkills } = body as {
     agentId?: string
     mode?: SkillAllowlistMode

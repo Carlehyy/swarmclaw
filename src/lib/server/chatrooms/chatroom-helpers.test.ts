@@ -41,6 +41,42 @@ function makeAgents(): Record<string, Agent> {
   }
 }
 
+function makeMultiWordAgents(): Record<string, Agent> {
+  const now = Date.now()
+  return {
+    hal2k: {
+      id: 'hal2k',
+      name: 'Hal2k',
+      description: '',
+      systemPrompt: '',
+      provider: 'openai',
+      model: 'gpt-4o',
+      createdAt: now,
+      updatedAt: now,
+    },
+    'hal2k-openai': {
+      id: 'hal2k-openai',
+      name: 'Hal2k (OpenAI)',
+      description: '',
+      systemPrompt: '',
+      provider: 'openai',
+      model: 'gpt-4o',
+      createdAt: now,
+      updatedAt: now,
+    },
+    'code-monkey': {
+      id: 'code-monkey',
+      name: 'Code Monkey',
+      description: '',
+      systemPrompt: '',
+      provider: 'openai',
+      model: 'gpt-4o',
+      createdAt: now,
+      updatedAt: now,
+    },
+  }
+}
+
 describe('chatroom-helpers', () => {
   it('parses mentions with punctuation and agent ids', () => {
     const agents = makeAgents()
@@ -196,6 +232,50 @@ describe('chatroom-helpers', () => {
     const cwd = buildSyntheticSession(makeAgents().default, 'room-safe').cwd
     assert.equal(cwd, resolveChatroomWorkspaceDir('room-safe'))
     assert.match(cwd, /chatrooms[\/\\]room-safe$/)
+  })
+
+  it('matches multi-word agent name over shorter prefix', () => {
+    const agents = makeMultiWordAgents()
+    const memberIds = ['hal2k', 'hal2k-openai', 'code-monkey']
+    const mentions = parseMentions('Hey @Hal2k (OpenAI), can you help?', agents, memberIds)
+    assert.deepEqual(mentions, ['hal2k-openai'])
+  })
+
+  it('matches short name when only short prefix is used', () => {
+    const agents = makeMultiWordAgents()
+    const memberIds = ['hal2k', 'hal2k-openai', 'code-monkey']
+    const mentions = parseMentions('Hey @Hal2k, can you help?', agents, memberIds)
+    assert.deepEqual(mentions, ['hal2k'])
+  })
+
+  it('matches multi-word agent with spaces', () => {
+    const agents = makeMultiWordAgents()
+    const memberIds = ['hal2k', 'hal2k-openai', 'code-monkey']
+    const mentions = parseMentions('Ask @Code Monkey to review this', agents, memberIds)
+    assert.deepEqual(mentions, ['code-monkey'])
+  })
+
+  it('self-mention falls through to implicit when senderId matches', () => {
+    const agents = makeMultiWordAgents()
+    const memberIds = ['hal2k', 'hal2k-openai', 'code-monkey']
+    // Agent "Hal2k" mentions itself — should fall through to implicit matching
+    const mentions = parseMentions('@Hal2k check this code', agents, memberIds, { senderId: 'hal2k' })
+    // hal2k is still included (self-mention not removed), but implicit also runs
+    assert.ok(mentions.includes('hal2k'), 'self-mention should still be in results')
+  })
+
+  it('@all still works with multi-word agents', () => {
+    const agents = makeMultiWordAgents()
+    const memberIds = ['hal2k', 'hal2k-openai', 'code-monkey']
+    const mentions = parseMentions('@all please review', agents, memberIds)
+    assert.deepEqual(mentions, ['hal2k', 'hal2k-openai', 'code-monkey'])
+  })
+
+  it('matches both short and long name in the same message', () => {
+    const agents = makeMultiWordAgents()
+    const memberIds = ['hal2k', 'hal2k-openai', 'code-monkey']
+    const mentions = parseMentions('@Hal2k and @Hal2k (OpenAI) both look at this', agents, memberIds)
+    assert.deepEqual(mentions, ['hal2k', 'hal2k-openai'])
   })
 
   it('includes discoverable local skills in chatroom prompts even when none are pinned', () => {

@@ -47,6 +47,9 @@ const MAX_TOOL_ERROR_FOLLOWTHROUGH = 2
 /** Max tool summary continuations */
 const MAX_TOOL_SUMMARY = 2
 
+/** Max coordinator synthesis continuations */
+const MAX_COORDINATOR_SYNTHESIS = 2
+
 // ---------------------------------------------------------------------------
 
 export class ContinuationLimits {
@@ -79,6 +82,7 @@ export class ContinuationLimits {
       unfinished_tool_followthrough: { count: 0, max: maxUnfinishedToolFollowthroughs },
       tool_error_followthrough: { count: 0, max: MAX_TOOL_ERROR_FOLLOWTHROUGH },
       tool_summary: { count: 0, max: maxToolSummaryRetries },
+      coordinator_synthesis: { count: 0, max: MAX_COORDINATOR_SYNTHESIS },
     }
   }
 

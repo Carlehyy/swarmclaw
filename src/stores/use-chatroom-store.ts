@@ -30,8 +30,12 @@ function nextQueuedId() {
   return `queued-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
 }
 
+export type ChatroomFilterMode = 'chatrooms' | 'protocols'
+
 interface ChatroomState {
   chatrooms: Record<string, Chatroom>
+  protocolRooms: Record<string, Chatroom>
+  chatroomFilter: ChatroomFilterMode
   currentChatroomId: string | null
   streaming: boolean
   streamingAgents: Map<string, StreamingAgent>
@@ -66,6 +70,8 @@ interface ChatroomState {
   removeMember: (agentId: string) => Promise<void>
   setChatroomSheetOpen: (open: boolean) => void
   setEditingChatroomId: (id: string | null) => void
+  setChatroomFilter: (filter: ChatroomFilterMode) => void
+  loadProtocolRooms: () => Promise<void>
 
   // Moderation
   deleteMessage: (messageId: string, targetAgentId: string) => Promise<void>
@@ -76,6 +82,8 @@ interface ChatroomState {
 
 export const useChatroomStore = create<ChatroomState>((set, get) => ({
   chatrooms: {},
+  protocolRooms: {},
+  chatroomFilter: 'chatrooms' as ChatroomFilterMode,
   currentChatroomId: null,
   streaming: false,
   streamingAgents: new Map(),
@@ -428,6 +436,11 @@ export const useChatroomStore = create<ChatroomState>((set, get) => ({
 
   setChatroomSheetOpen: (open) => set({ chatroomSheetOpen: open }),
   setEditingChatroomId: (id) => set({ editingChatroomId: id }),
+  setChatroomFilter: (filter) => set({ chatroomFilter: filter }),
+  loadProtocolRooms: async () => {
+    const rooms = await api<Record<string, Chatroom>>('GET', '/chatrooms?filter=protocols')
+    set({ protocolRooms: rooms || {} })
+  },
 
   // Moderation
   deleteMessage: async (messageId, targetAgentId) => {

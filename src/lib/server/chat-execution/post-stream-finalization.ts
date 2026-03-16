@@ -150,6 +150,8 @@ export async function finalizeStreamResult(opts: FinalizeStreamResultOpts): Prom
       estimatedCost: cost,
       timestamp: Date.now(),
       durationMs: Date.now() - startTs,
+      agentId: session.agentId || null,
+      projectId: session.projectId || null,
       extensionDefinitionCosts,
       extensionInvocations: state.extensionInvocations.length > 0 ? state.extensionInvocations : undefined,
     }

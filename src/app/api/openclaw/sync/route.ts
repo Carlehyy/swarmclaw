@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { runSync, type SyncType } from '@/lib/server/openclaw/sync'
+import { safeParseBody } from '@/lib/server/safe-parse-body'
 export const dynamic = 'force-dynamic'
 
 const VALID_ACTIONS = new Set(['push', 'pull', 'both'])
@@ -7,8 +8,9 @@ const VALID_TYPES: SyncType[] = ['memory', 'workspace', 'schedules', 'credential
 
 export async function POST(req: Request) {
   try {
-    const body = await req.json()
-    const action = body.action
+    const { data: body, error } = await safeParseBody<Record<string, unknown>>(req)
+    if (error) return error
+    const action = typeof body.action === 'string' ? body.action : ''
     const types = body.types
 
     if (!action || !VALID_ACTIONS.has(action)) {
@@ -22,7 +24,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: `No valid types. Use: ${VALID_TYPES.join(', ')}` }, { status: 400 })
     }
 
-    const results = await runSync({ action, types: validTypes })
+    const results = await runSync({ action: action as 'push' | 'pull' | 'both', types: validTypes })
     return NextResponse.json({ ok: true, results })
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Sync failed'

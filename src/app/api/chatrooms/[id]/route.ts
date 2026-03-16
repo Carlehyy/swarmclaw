@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { loadChatrooms, saveChatrooms, loadAgents, loadConnectors, saveConnectors } from '@/lib/server/storage'
 import { notify } from '@/lib/server/ws-hub'
 import { notFound } from '@/lib/server/collection-helpers'
+import { safeParseBody } from '@/lib/server/safe-parse-body'
 import { genId } from '@/lib/id'
 
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -14,7 +15,8 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
 
 export async function PUT(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
-  const body = await req.json()
+  const { data: body, error } = await safeParseBody<Record<string, unknown>>(req)
+  if (error) return error
   const chatrooms = loadChatrooms()
   const chatroom = chatrooms[id]
   if (!chatroom) return notFound()
@@ -40,7 +42,8 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
       )
     }
     const agents = loadAgents()
-    const invalidAgentIds = (body.agentIds as string[]).filter((agentId) => !agents[agentId])
+    const agentIds = (body.agentIds as unknown[]).filter((v): v is string => typeof v === 'string' && v.trim().length > 0)
+    const invalidAgentIds = agentIds.filter((agentId) => !agents[agentId])
     if (invalidAgentIds.length > 0) {
       return NextResponse.json(
         { error: `Unknown chatroom member(s): ${invalidAgentIds.join(', ')}` },
@@ -49,8 +52,8 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
     }
 
     const oldIds = new Set(chatroom.agentIds)
-    const newIds = new Set(body.agentIds as string[])
-    const added = (body.agentIds as string[]).filter((aid: string) => !oldIds.has(aid))
+    const newIds = new Set(agentIds)
+    const added = agentIds.filter((aid: string) => !oldIds.has(aid))
     const removed = chatroom.agentIds.filter((aid: string) => !newIds.has(aid))
 
     if (added.length > 0 || removed.length > 0) {
@@ -83,7 +86,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
       }
     }
 
-    chatroom.agentIds = body.agentIds
+    chatroom.agentIds = agentIds
   }
 
   chatroom.updatedAt = Date.now()

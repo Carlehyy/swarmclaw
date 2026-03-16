@@ -82,3 +82,6 @@ IMPROVEMENTS.md
 
 # local-only imported skills and runtime scratch should never ship
 /data/skills/
+
+# superpowers skill docs (local only)
+/docs/superpowers/

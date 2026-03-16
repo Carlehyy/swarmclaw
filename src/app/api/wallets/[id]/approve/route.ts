@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { safeParseBody } from '@/lib/server/safe-parse-body'
 import { loadWallets, loadWalletTransactions, upsertWalletTransaction } from '@/lib/server/storage'
 import { notify } from '@/lib/server/ws-hub'
 import type { AgentWallet, WalletTransaction } from '@/types'
@@ -13,7 +14,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const wallet = wallets[id]
   if (!wallet) return NextResponse.json({ error: 'Wallet not found' }, { status: 404 })
 
-  const body = await req.json()
+  const { data: body, error } = await safeParseBody(req)
+  if (error) return error
   const transactionId = typeof body.transactionId === 'string' ? body.transactionId.trim() : ''
   const decision = body.decision as 'approve' | 'deny'
 

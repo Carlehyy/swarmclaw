@@ -1,20 +1,18 @@
 'use client'
 
 import { useState } from 'react'
-import ReactMarkdown from 'react-markdown'
-import remarkGfm from 'remark-gfm'
-import rehypeHighlight from 'rehype-highlight'
 import { AgentAvatar } from '@/components/agents/agent-avatar'
 import { useNow } from '@/hooks/use-now'
-import { CodeBlock } from '@/components/chat/code-block'
 import { ReactionPicker } from './reaction-picker'
 import { ReplyQuote } from '@/components/shared/reply-quote'
-import { AttachmentChip, parseAttachmentUrl } from '@/components/shared/attachment-chip'
+import { MarkdownBody } from '@/components/shared/markdown-body'
+import { MessageAttachments } from '@/components/shared/attachment-chip'
+import { MessageActions, ActionButton } from '@/components/shared/message-actions'
+import { isStructuredMarkdown } from '@/components/shared/markdown-utils'
 import { useAppStore } from '@/stores/use-app-store'
 import { useNavigate } from '@/lib/app/navigation'
 import { AgentHoverCard } from './agent-hover-card'
 import { ChatroomToolRequestBanner } from './chatroom-tool-request-banner'
-import { isStructuredMarkdown } from '@/components/chat/markdown-utils'
 import { TransferAgentPicker } from '@/components/chat/transfer-agent-picker'
 import { ConnectorPlatformIcon, getConnectorPlatformLabel } from '@/components/shared/connector-platform-icon'
 import type { ChatroomMessage, Chatroom, Agent } from '@/types'
@@ -98,38 +96,6 @@ function groupReactions(reactions: Array<{ emoji: string; reactorId: string }>):
     map.set(r.emoji, existing)
   }
   return Array.from(map.entries()).map(([emoji, data]) => ({ emoji, ...data }))
-}
-
-// TransferAgentPicker imported from @/components/chat/transfer-agent-picker
-
-/** Render chatroom message attachments */
-function renderChatroomAttachments(message: ChatroomMessage) {
-  const isUser = message.senderId === 'user'
-  const seen = new Set<string>()
-  const chips: { url: string; filename: string }[] = []
-
-  if (message.imagePath) {
-    const primary = parseAttachmentUrl(message.imagePath)
-    if (primary.url) {
-      seen.add(primary.url)
-      chips.push(primary)
-    }
-  }
-  if (message.attachedFiles?.length) {
-    for (const fp of message.attachedFiles) {
-      const att = parseAttachmentUrl(fp)
-      if (att.url && !seen.has(att.url)) {
-        seen.add(att.url)
-        chips.push(att)
-      }
-    }
-  }
-  if (!chips.length) return null
-  return (
-    <div className="flex flex-col">
-      {chips.map((c) => <AttachmentChip key={c.url} url={c.url} filename={c.filename} isUserMsg={isUser} />)}
-    </div>
-  )
 }
 
 export function ChatroomMessageBubble({ message, agents, onToggleReaction, onReply, onTogglePin, onTransfer, onDeleteMessage, onMuteAgent, onUnmuteAgent, onSetRole, chatroom, pinnedMessageIds, streamingAgentIds, messages, grouped: isGrouped, momentOverlay }: Props) {
@@ -264,104 +230,52 @@ export function ChatroomMessageBubble({ message, agents, onToggleReaction, onRep
 
         {/* Message text with markdown */}
         <div className={`text-[13px] text-text leading-[1.5] break-words chatroom-prose ${wide ? 'max-w-[92%]' : 'max-w-[85%]'}`}>
-          <ReactMarkdown
-            remarkPlugins={[remarkGfm]}
-            rehypePlugins={[rehypeHighlight]}
-            components={{
-              pre({ children }) {
-                return <pre>{children}</pre>
-              },
-              code({ className, children }) {
-                const isBlock = className?.startsWith('language-') || className?.startsWith('hljs')
-                if (isBlock) {
-                  return <CodeBlock className={className}>{children}</CodeBlock>
+          <MarkdownBody
+            text={processedText}
+            renderLink={(href, children) => {
+              // Agent mention links (recognized agents — hover card)
+              if (href.startsWith('#agent:')) {
+                const agentId = href.replace('#agent:', '')
+                const mentionAgent = agents[agentId]
+                if (mentionAgent) {
+                  return (
+                    <AgentHoverCard agent={mentionAgent}>
+                      <span className="text-accent-bright font-600 bg-accent-soft/40 px-0.5 rounded hover:underline cursor-pointer">
+                        {children}
+                      </span>
+                    </AgentHoverCard>
+                  )
                 }
                 return (
-                  <code className="px-1 py-0.5 rounded bg-white/[0.08] text-[12px] font-mono text-accent-bright/90">
+                  <span className="text-accent-bright font-600 bg-accent-soft/40 px-0.5 rounded">
                     {children}
-                  </code>
+                  </span>
                 )
-              },
-              a({ href, children }) {
-                if (!href) return <>{children}</>
-                // Agent mention links (recognized agents — hover card)
-                if (href.startsWith('#agent:')) {
-                  const agentId = href.replace('#agent:', '')
-                  const mentionAgent = agents[agentId]
-                  if (mentionAgent) {
-                    return (
-                      <AgentHoverCard agent={mentionAgent}>
-                        <span className="text-accent-bright font-600 bg-accent-soft/40 px-0.5 rounded hover:underline cursor-pointer">
-                          {children}
-                        </span>
-                      </AgentHoverCard>
-                    )
-                  }
-                  return (
-                    <span className="text-accent-bright font-600 bg-accent-soft/40 px-0.5 rounded">
-                      {children}
-                    </span>
-                  )
-                }
-                // Unrecognized @mention — styled but not clickable
-                if (href.startsWith('#mention:')) {
-                  return (
-                    <span className="text-accent-bright font-600 bg-accent-soft/40 px-0.5 rounded">
-                      {children}
-                    </span>
-                  )
-                }
-                // YouTube embeds
-                const ytMatch = href.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([\w-]+)/)
-                if (ytMatch) {
-                  return (
-                    <div className="my-2">
-                      <iframe
-                        src={`https://www.youtube.com/embed/${ytMatch[1]}`}
-                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                        allowFullScreen
-                        className="w-full max-w-[480px] aspect-video rounded-[8px] border border-white/[0.06]"
-                      />
-                    </div>
-                  )
-                }
-                // Upload links
-                if (typeof href === 'string' && href.includes('/api/uploads/')) {
-                  const filename = href.split('/').pop() || 'file'
-                  return (
-                    <a href={href} download={filename} className="text-accent-bright hover:underline">
-                      {children}
-                    </a>
-                  )
-                }
-                // Default external link
+              }
+              // Unrecognized @mention — styled but not clickable
+              if (href.startsWith('#mention:')) {
                 return (
-                  <a href={href} target="_blank" rel="noopener noreferrer" className="text-accent-bright hover:underline">
+                  <span className="text-accent-bright font-600 bg-accent-soft/40 px-0.5 rounded">
                     {children}
-                  </a>
+                  </span>
                 )
-              },
-              img({ src, alt }) {
-                if (!src || typeof src !== 'string') return null
-                const isVideo = /\.(mp4|webm|mov|avi)$/i.test(src)
-                if (isVideo) {
-                  return <video src={src} controls preload="none" className="max-w-full rounded-[8px] my-2" />
-                }
-                return (
-                  <a href={src} download target="_blank" rel="noopener noreferrer" className="block my-2">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={src} alt={alt || 'Image'} loading="lazy" className="max-w-full max-h-[400px] rounded-[8px] border border-white/[0.06]" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }} />
-                  </a>
-                )
-              },
+              }
+              return null // fall through to default handling
             }}
-          >
-            {processedText}
-          </ReactMarkdown>
+            renderInlineCode={(_text, children) => (
+              <code className="px-1 py-0.5 rounded bg-white/[0.08] text-[12px] font-mono text-accent-bright/90">
+                {children}
+              </code>
+            )}
+          />
         </div>
 
         {/* Attachments */}
-        {renderChatroomAttachments(message)}
+        <MessageAttachments
+          imagePath={message.imagePath}
+          attachedFiles={message.attachedFiles}
+          isUser={isUser}
+        />
 
         {/* Tool request banner for agent messages */}
         {!isUser && agent && (
@@ -393,48 +307,35 @@ export function ChatroomMessageBubble({ message, agents, onToggleReaction, onRep
         )}
       </div>
 
-      {/* Action buttons — visible on hover or when a picker/menu is open */}
-      <div className={`relative shrink-0 mt-0.5 flex items-start gap-1 transition-opacity duration-150 ${showPicker || showTransferPicker || showModMenu ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`} style={{ zIndex: showPicker || showTransferPicker || showModMenu ? 50 : undefined }}>
-        {/* Reply button */}
+      {/* Action buttons (reply + pin + transfer + moderate + reaction) */}
+      <MessageActions
+        layout="inline"
+        forceVisible={showPicker || showTransferPicker || showModMenu}
+        style={{ zIndex: showPicker || showTransferPicker || showModMenu ? 50 : undefined }}
+      >
         {onReply && (
-          <button
+          <ActionButton
+            variant="outlined"
             onClick={() => onReply(message)}
-            className="w-7 h-7 rounded-[8px] border border-white/[0.06] bg-white/[0.02] flex items-center justify-center hover:bg-white/[0.08] transition-all cursor-pointer"
             title="Reply"
-          >
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-text-3">
-              <polyline points="9 17 4 12 9 7" />
-              <path d="M20 18v-2a4 4 0 0 0-4-4H4" />
-            </svg>
-          </button>
+            icon={<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-text-3"><polyline points="9 17 4 12 9 7" /><path d="M20 18v-2a4 4 0 0 0-4-4H4" /></svg>}
+          />
         )}
-        {/* Pin button */}
         {onTogglePin && (
-          <button
+          <ActionButton
+            variant="outlined"
             onClick={() => onTogglePin(message.id)}
-            className="w-7 h-7 rounded-[8px] border border-white/[0.06] bg-white/[0.02] flex items-center justify-center hover:bg-white/[0.08] transition-all cursor-pointer"
             title={pinnedMessageIds?.includes(message.id) ? 'Unpin message' : 'Pin message'}
-          >
-            <svg width="12" height="12" viewBox="0 0 24 24" fill={pinnedMessageIds?.includes(message.id) ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={pinnedMessageIds?.includes(message.id) ? 'text-amber-400' : 'text-text-3'}>
-              <path d="M12 17v5" />
-              <path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16h14v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 2-2H6a2 2 0 0 0 2 2 1 1 0 0 1 1 1z" />
-            </svg>
-          </button>
+            icon={<svg width="12" height="12" viewBox="0 0 24 24" fill={pinnedMessageIds?.includes(message.id) ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={pinnedMessageIds?.includes(message.id) ? 'text-amber-400' : 'text-text-3'}><path d="M12 17v5" /><path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16h14v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 2-2H6a2 2 0 0 0 2 2 1 1 0 0 1 1 1z" /></svg>}
+          />
         )}
-        {/* Transfer button */}
         {onTransfer && !isUser && (
-          <button
+          <ActionButton
+            variant="outlined"
             onClick={() => setShowTransferPicker(!showTransferPicker)}
-            className="w-7 h-7 rounded-[8px] border border-white/[0.06] bg-white/[0.02] flex items-center justify-center hover:bg-white/[0.08] transition-all cursor-pointer"
             title="Transfer to agent"
-          >
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-text-3">
-              <path d="M8 3L4 7l4 4" />
-              <path d="M4 7h16" />
-              <path d="M16 21l4-4-4-4" />
-              <path d="M20 17H4" />
-            </svg>
-          </button>
+            icon={<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-text-3"><path d="M8 3L4 7l4 4" /><path d="M4 7h16" /><path d="M16 21l4-4-4-4" /><path d="M20 17H4" /></svg>}
+          />
         )}
         {showTransferPicker && onTransfer && (
           <TransferAgentPicker
@@ -446,17 +347,13 @@ export function ChatroomMessageBubble({ message, agents, onToggleReaction, onRep
             onClose={() => setShowTransferPicker(false)}
           />
         )}
-        {/* Moderation menu button */}
         {!isUser && (onDeleteMessage || onMuteAgent || onSetRole) && (
-          <button
+          <ActionButton
+            variant="outlined"
             onClick={() => setShowModMenu(!showModMenu)}
-            className="w-7 h-7 rounded-[8px] border border-white/[0.06] bg-white/[0.02] flex items-center justify-center hover:bg-white/[0.08] transition-all cursor-pointer"
             title="Moderate"
-          >
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="text-text-3">
-              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
-            </svg>
-          </button>
+            icon={<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="text-text-3"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" /></svg>}
+          />
         )}
         {showModMenu && !isUser && (
           <div className="absolute right-0 top-7 z-50 bg-[#1a1a2e] border border-white/[0.1] rounded-[8px] shadow-lg py-1 min-w-[160px]">
@@ -548,19 +445,12 @@ export function ChatroomMessageBubble({ message, agents, onToggleReaction, onRep
             </button>
           </div>
         )}
-        {/* Reaction button */}
-        <button
+        <ActionButton
+          variant="outlined"
           onClick={() => setShowPicker(!showPicker)}
-          className="w-7 h-7 rounded-[8px] border border-white/[0.06] bg-white/[0.02] flex items-center justify-center hover:bg-white/[0.08] transition-all cursor-pointer"
           title="Add reaction"
-        >
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-text-3">
-            <circle cx="12" cy="12" r="10" />
-            <path d="M8 14s1.5 2 4 2 4-2 4-2" />
-            <line x1="9" y1="9" x2="9.01" y2="9" />
-            <line x1="15" y1="9" x2="15.01" y2="9" />
-          </svg>
-        </button>
+          icon={<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-text-3"><circle cx="12" cy="12" r="10" /><path d="M8 14s1.5 2 4 2 4-2 4-2" /><line x1="9" y1="9" x2="9.01" y2="9" /><line x1="15" y1="9" x2="15.01" y2="9" /></svg>}
+        />
         {showPicker && (
           <ReactionPicker
             onSelect={(emoji) => {
@@ -570,7 +460,7 @@ export function ChatroomMessageBubble({ message, agents, onToggleReaction, onRep
             onClose={() => setShowPicker(false)}
           />
         )}
-      </div>
+      </MessageActions>
     </div>
   )
 }

@@ -8,13 +8,15 @@ import { notify } from '@/lib/server/ws-hub'
 import { normalizeAgentSandboxConfig } from '@/lib/agent-sandbox-defaults'
 import { normalizeCapabilitySelection } from '@/lib/capability-selection'
 import { normalizeOrchestratorConfig } from '@/lib/orchestrator-config'
+import { safeParseBody } from '@/lib/server/safe-parse-body'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const ops: CollectionOps<any> = { load: () => loadAgents({ includeTrashed: true }), save: saveAgents, topic: 'agents', table: 'agents' }
 
 export async function PUT(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
-  const body = await req.json()
+  const { data: body, error } = await safeParseBody(req)
+  if (error) return error
   const result = mutateItem(ops, id, (agent) => {
     Object.assign(agent, body, { updatedAt: Date.now() })
     if (body.tools !== undefined || body.extensions !== undefined) {
@@ -42,7 +44,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
     if (body.apiEndpoint !== undefined) {
       agent.apiEndpoint = normalizeProviderEndpoint(
         body.provider || agent.provider,
-        body.apiEndpoint,
+        body.apiEndpoint as string | null | undefined,
       )
     }
     if (body.provider !== undefined && body.provider !== 'ollama' && body.ollamaMode === undefined) {
@@ -111,7 +113,6 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
     }
     delete (agent as Record<string, unknown>).platformAssignScope
     delete (agent as Record<string, unknown>).subAgentIds
-    delete (agent as Record<string, unknown>).isOrchestrator
     delete (agent as Record<string, unknown>).id
     agent.id = id
     return agent

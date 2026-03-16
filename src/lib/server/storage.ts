@@ -88,6 +88,12 @@ if (!IS_BUILD_BOOTSTRAP) {
 }
 db.pragma('foreign_keys = ON')
 
+/** Run a function inside an immediate SQLite transaction for atomicity. */
+export function withTransaction<T>(fn: () => T): T {
+  const wrapped = db.transaction(fn)
+  return wrapped()
+}
+
 type StoredObject = Record<string, unknown>
 type StoredSessionRecord = Session
 type StoredAgentRecord = Agent
@@ -117,6 +123,7 @@ const COLLECTIONS = [
   'runtime_estop',
   'connectors',
   'documents',
+  'document_revisions',
   'webhooks',
   'model_overrides',
   'mcp_servers',
@@ -1372,6 +1379,11 @@ export const upsertChatroom = chatroomsStore.upsert as (id: string, value: Chatr
 const documentsStore = createCollectionStore('documents')
 export const loadDocuments = documentsStore.load
 export const saveDocuments = documentsStore.save
+
+// --- Document Revisions ---
+const documentRevisionsStore = createCollectionStore('document_revisions')
+export const loadDocumentRevisions = documentRevisionsStore.load
+export const upsertDocumentRevision = documentRevisionsStore.upsert
 
 // --- Webhooks ---
 const webhooksStore = createCollectionStore('webhooks')

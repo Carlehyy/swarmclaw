@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { safeParseBody } from '@/lib/server/safe-parse-body'
 import { loadSkills, saveSkills, deleteSkill } from '@/lib/server/storage'
 import { normalizeSkillPayload } from '@/lib/server/skills/skills-normalize'
 import { mutateItem, deleteItem, notFound, type CollectionOps } from '@/lib/server/collection-helpers'
@@ -15,7 +16,8 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
 
 export async function PUT(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
-  const body = await req.json()
+  const { data: body, error } = await safeParseBody(req)
+  if (error) return error
   const result = mutateItem(ops, id, (skill) => {
     const normalized = normalizeSkillPayload({ ...skill, ...body })
     const updatedScope = body.scope === 'agent' ? 'agent' as const : body.scope === 'global' ? 'global' as const : skill.scope

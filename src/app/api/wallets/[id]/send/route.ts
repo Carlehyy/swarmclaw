@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { safeParseBody } from '@/lib/server/safe-parse-body'
 import { genId } from '@/lib/id'
 import { loadSettings, loadWallets, upsertWalletTransaction } from '@/lib/server/storage'
 import { notify } from '@/lib/server/ws-hub'
@@ -22,7 +23,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   if (!wallet) return NextResponse.json({ error: 'Wallet not found' }, { status: 404 })
   const settings = loadSettings()
 
-  const body = await req.json()
+  const { data: body, error } = await safeParseBody(req)
+  if (error) return error
   const toAddress = typeof body.toAddress === 'string' ? body.toAddress.trim() : ''
   const amountAtomic = normalizeAtomicString(body.amountAtomic ?? body.amountLamports, '0')
   const memo = typeof body.memo === 'string' ? body.memo.slice(0, 500) : undefined

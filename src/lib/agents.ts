@@ -11,3 +11,6 @@ export const updateAgent = (id: string, data: Partial<Agent>) =>
 
 export const deleteAgent = (id: string) =>
   api<string>('DELETE', `/agents/${id}`)
+
+export const bulkPatchAgents = (patches: Array<{ id: string; patch: Partial<Agent> }>) =>
+  api<{ updated: number; errors: string[] }>('PATCH', '/agents/bulk', { patches })

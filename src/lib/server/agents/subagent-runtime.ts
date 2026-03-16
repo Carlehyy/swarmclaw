@@ -35,7 +35,7 @@ import {
   getDescendants,
   buildLineageTree,
   cancelSubtree,
-  transitionState,
+  setLineageStatus,
   isTerminalState,
   cleanupTerminalNodes,
   type LineageNode,
@@ -43,6 +43,7 @@ import {
   type SubagentState,
 } from '@/lib/server/agents/subagent-lineage'
 import { errorMessage, hmrSingleton } from '@/lib/shared-utils'
+import { enqueueSystemEvent } from '@/lib/server/runtime/system-events'
 import { getEnabledCapabilityIds, splitCapabilityIds } from '@/lib/capability-selection'
 
 // ---------------------------------------------------------------------------
@@ -159,12 +160,18 @@ export function getSessionDepth(
 ): number {
   if (!sessionId) return 0
   const allSessions = sessions ?? loadSessions()
+  const session = allSessions[sessionId] as unknown as Record<string, unknown> | undefined
+  // Use stored delegationDepth if available (O(1) vs O(depth) chain walk)
+  if (session && typeof session.delegationDepth === 'number' && session.delegationDepth >= 0) {
+    return session.delegationDepth
+  }
+  // Fallback: walk the parent chain
   let depth = 0
   let current = sessionId
   while (current && depth < maxDepth + 1) {
-    const session = allSessions[current] as unknown as Record<string, unknown> | undefined
-    if (!session?.parentSessionId) break
-    current = session.parentSessionId as string
+    const s = allSessions[current] as unknown as Record<string, unknown> | undefined
+    if (!s?.parentSessionId) break
+    current = s.parentSessionId as string
     depth++
   }
   return depth
@@ -255,9 +262,10 @@ async function spawnSubagentImpl(
     messages: [],
     createdAt: now,
     lastActiveAt: now,
-    sessionType: 'orchestrated',
+    sessionType: 'delegated',
     agentId: agent.id,
     parentSessionId: context.sessionId || null,
+    delegationDepth: depth + 1,
     tools: effectiveSelection.tools,
     extensions: effectiveSelection.extensions,
     browserProfileId,
@@ -276,8 +284,8 @@ async function spawnSubagentImpl(
     cwd: input.cwd || context.cwd,
   })
 
-  // 4. Transition: initializing → ready
-  transitionState(lineageNode.id, 'READY')
+  // 4. Mark lineage node ready
+  setLineageStatus(lineageNode.id, 'ready')
 
   // 5. Start delegation job
   startDelegationJob(job.id, {
@@ -288,8 +296,8 @@ async function spawnSubagentImpl(
   })
   appendDelegationCheckpoint(job.id, `Created child session ${sid}`, 'running')
 
-  // 6. Transition: ready → running
-  transitionState(lineageNode.id, 'START')
+  // 6. Mark lineage node running
+  setLineageStatus(lineageNode.id, 'running')
 
   // 7. Enqueue session run (native execution — no CLI)
   const run = enqueueSessionRun({
@@ -355,6 +363,15 @@ async function spawnSubagentImpl(
         },
         { enabledIds: parentExtensions },
       )
+      // Auto-announce completion to parent session
+      if (context.sessionId) {
+        const preview = (subagentResult.response || subagentResult.error || '').slice(0, 200)
+        enqueueSystemEvent(
+          context.sessionId,
+          `[subagent_completed] ${agent.name} (job ${job.id}): ${subagentResult.status}. ${preview}`,
+          `subagent:${job.id}`,
+        )
+      }
       await runCapabilityHook(
         'sessionEnd',
         {
@@ -396,6 +413,15 @@ async function spawnSubagentImpl(
         },
         { enabledIds: parentExtensions },
       )
+      // Auto-announce failure to parent session
+      if (context.sessionId) {
+        const preview = (subagentResult.error || '').slice(0, 200)
+        enqueueSystemEvent(
+          context.sessionId,
+          `[subagent_completed] ${agent.name} (job ${job.id}): ${subagentResult.status}. ${preview}`,
+          `subagent:${job.id}`,
+        )
+      }
       await runCapabilityHook(
         'sessionEnd',
         {

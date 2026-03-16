@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { loadSessions, saveSessions } from '@/lib/server/storage'
 import { notify } from '@/lib/server/ws-hub'
 import { normalizeCanvasContent } from '@/lib/canvas-content'
+import { safeParseBody } from '@/lib/server/safe-parse-body'
 
 export async function GET(_req: Request, { params }: { params: Promise<{ sessionId: string }> }) {
   const { sessionId } = await params
@@ -17,7 +18,8 @@ export async function GET(_req: Request, { params }: { params: Promise<{ session
 
 export async function POST(req: Request, { params }: { params: Promise<{ sessionId: string }> }) {
   const { sessionId } = await params
-  const body = await req.json()
+  const { data: body, error } = await safeParseBody(req)
+  if (error) return error
   const sessions = loadSessions()
   const session = sessions[sessionId]
   if (!session) return NextResponse.json({ error: 'Session not found' }, { status: 404 })

@@ -144,9 +144,15 @@ test('applyResolvedRoute copies gateway, endpoint, and fallback credentials onto
 test('resolveAgentRouteCandidatesWithProfiles keeps explicit Ollama cloud routes on the cloud path', async () => {
   const storage = await import('@/lib/server/storage')
   const now = Date.now()
+  // Remove any pre-existing ollama credentials so the single-match fallback works
   const existing = storage.loadCredentials()
+  const staleOllamaIds = Object.entries(existing)
+    .filter(([id, cred]) => (cred as Record<string, unknown>)?.provider === 'ollama' && id !== 'cred-ollama-cloud')
+    .map(([id]) => id)
+  for (const id of staleOllamaIds) {
+    storage.deleteCredential(id)
+  }
   storage.saveCredentials({
-    ...existing,
     'cred-ollama-cloud': {
       id: 'cred-ollama-cloud',
       provider: 'ollama',

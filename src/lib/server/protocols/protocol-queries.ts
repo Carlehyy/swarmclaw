@@ -20,9 +20,9 @@ import {
   upsertChatroom,
 } from '@/lib/server/storage'
 import { notify } from '@/lib/server/ws-hub'
-import { cleanText } from '@/lib/server/protocols/protocol-types'
 import type { ProtocolRunDetail } from '@/lib/server/protocols/protocol-types'
-import { normalizeProtocolRun } from '@/lib/server/protocols/protocol-normalization'
+import { loadProtocolRunById, normalizeProtocolRun } from '@/lib/server/protocols/protocol-normalization'
+import { ensureProtocolEngineRecovered } from '@/lib/server/protocols/protocol-run-lifecycle'
 import { listAllTemplates, loadTemplate } from '@/lib/server/protocols/protocol-templates'
 import { listEvents } from '@/lib/server/protocols/protocol-agent-turn'
 
@@ -41,7 +41,6 @@ export function listProtocolRuns(options?: {
   includeSystemOwned?: boolean
   limit?: number
 }): ProtocolRun[] {
-  const { ensureProtocolEngineRecovered } = require('@/lib/server/protocols/protocol-run-lifecycle') as typeof import('@/lib/server/protocols/protocol-run-lifecycle')
   ensureProtocolEngineRecovered()
   const limit = Number.isFinite(options?.limit) ? Math.max(1, Math.trunc(options?.limit as number)) : 200
   return Object.values(loadProtocolRuns())
@@ -58,12 +57,7 @@ export function listProtocolRuns(options?: {
     .slice(0, limit)
 }
 
-export function loadProtocolRunById(runId: string | null | undefined): ProtocolRun | null {
-  const normalized = cleanText(runId, 64)
-  if (!normalized) return null
-  const run = loadProtocolRun(normalized)
-  return run ? normalizeProtocolRun(run) : null
-}
+export { loadProtocolRunById } from '@/lib/server/protocols/protocol-normalization'
 
 export function listProtocolRunEventsForRun(runId: string, limit = 200): ProtocolRunEvent[] {
   return listEvents(runId).slice(-Math.max(1, Math.trunc(limit)))

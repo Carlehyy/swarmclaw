@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { execSync } from 'child_process'
 import { loadSessions } from '@/lib/server/storage'
 import { notFound } from '@/lib/server/collection-helpers'
+import { safeParseBody } from '@/lib/server/safe-parse-body'
 
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -9,7 +10,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const session = sessions[id]
   if (!session) return notFound()
 
-  const body = await req.json()
+  const { data: body, error } = await safeParseBody<{ message?: string }>(req)
+  if (error) return error
   const msg = body.message || 'Deploy from SwarmClaw'
 
   try {

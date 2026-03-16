@@ -21,6 +21,63 @@ export function parseAttachmentUrl(filePath?: string, fileUrl?: string) {
   return { url, filename }
 }
 
+/* ------------------------------------------------------------------ */
+/*  MessageAttachments — shared attachment list for both chat contexts */
+/* ------------------------------------------------------------------ */
+
+export function MessageAttachments({
+  imagePath,
+  imageUrl,
+  attachedFiles,
+  isUser,
+  onOpenImage,
+}: {
+  imagePath?: string
+  imageUrl?: string
+  attachedFiles?: string[]
+  isUser: boolean
+  onOpenImage?: (image: { url: string; filename: string }) => void
+}) {
+  const seen = new Set<string>()
+  const chips: { url: string; filename: string }[] = []
+
+  if (imagePath || imageUrl) {
+    const primary = parseAttachmentUrl(imagePath, imageUrl)
+    if (primary.url) {
+      seen.add(primary.url)
+      chips.push(primary)
+    }
+  }
+  if (attachedFiles?.length) {
+    for (const fp of attachedFiles) {
+      const att = parseAttachmentUrl(fp)
+      if (att.url && !seen.has(att.url)) {
+        seen.add(att.url)
+        chips.push(att)
+      }
+    }
+  }
+
+  if (!chips.length) return null
+  return (
+    <div className="flex flex-col">
+      {chips.map((c) => (
+        <AttachmentChip
+          key={c.url}
+          url={c.url}
+          filename={c.filename}
+          isUserMsg={isUser}
+          onOpenImage={onOpenImage}
+        />
+      ))}
+    </div>
+  )
+}
+
+/* ------------------------------------------------------------------ */
+/*  AttachmentChip — individual file attachment with preview/download  */
+/* ------------------------------------------------------------------ */
+
 export function AttachmentChip({
   url,
   filename,

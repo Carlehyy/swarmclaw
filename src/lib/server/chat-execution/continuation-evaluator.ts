@@ -2,6 +2,9 @@
  * Evaluates whether the agent loop should continue after an iteration
  * and which continuation type applies.  Each check is a named function
  * walked in priority order.
+ *
+ * Consolidated from 13 → 9 checks by merging overlapping execution and
+ * shell-fallback logic.
  */
 import type { Message } from '@/types'
 import type { ContinuationType } from '@/lib/server/chat-execution/stream-continuation'
@@ -76,19 +79,12 @@ function resolveCurrentFinalResponse(state: ChatTurnState): string {
   })
 }
 
+/**
+ * Unfinished tool calls — delegates deliverable detection to checkDeliverableFollowthrough
+ * rather than duplicating the deliverable branch here.
+ */
 function checkUnfinishedToolCallsPending(ctx: ContinuationContext): ContinuationDecision | null {
   if (ctx.toolEventTracker.pendingCount === 0 || ctx.abortControllerAborted) return null
-  if (classifiedIsDeliverableTask(ctx.classification, ctx.message) && ctx.limits.canContinue('deliverable_followthrough')) {
-    const count = ctx.limits.increment('deliverable_followthrough')
-    const { max } = ctx.limits.getStatus('deliverable_followthrough')
-    writeStatus(ctx, {
-      deliverableFollowthrough: count,
-      maxFollowthroughs: max,
-      reason: 'unfinished_tool_calls',
-      pendingToolCallIds: ctx.toolEventTracker.listPendingRunIds(),
-    })
-    return { type: 'deliverable_followthrough', requiredToolReminderNames: [] }
-  }
   if (ctx.limits.canContinue('unfinished_tool_followthrough')) {
     const count = ctx.limits.increment('unfinished_tool_followthrough')
     const { max } = ctx.limits.getStatus('unfinished_tool_followthrough')
@@ -124,35 +120,112 @@ function checkLoopDetection(ctx: ContinuationContext): ContinuationDecision | nu
   return { type: false, requiredToolReminderNames: [] }
 }
 
-function checkExecutionFollowthrough(ctx: ContinuationContext): ContinuationDecision | null {
-  if (!ctx.executionFollowthroughReason) return null
-  if (!ctx.limits.canContinue('execution_followthrough')) return null
-  const count = ctx.limits.increment('execution_followthrough')
-  const { max } = ctx.limits.getStatus('execution_followthrough')
-  writeStatus(ctx, {
-    externalExecutionFollowthrough: count,
-    maxFollowthroughs: max,
-    reason: ctx.executionFollowthroughReason,
-  })
-  return { type: 'execution_followthrough', requiredToolReminderNames: [] }
+/**
+ * Consolidated execution continuation check.
+ * Merges the former checkExecutionFollowthrough (reason-based),
+ * checkExecutionKickoff, and checkExternalExecutionFollowthrough into one.
+ */
+function checkExecutionContinuation(ctx: ContinuationContext): ContinuationDecision | null {
+  // 1. Explicit reason from caller (e.g. research_limit, post_simulation)
+  if (ctx.executionFollowthroughReason) {
+    if (!ctx.limits.canContinue('execution_followthrough')) return null
+    const count = ctx.limits.increment('execution_followthrough')
+    const { max } = ctx.limits.getStatus('execution_followthrough')
+    writeStatus(ctx, {
+      externalExecutionFollowthrough: count,
+      maxFollowthroughs: max,
+      reason: ctx.executionFollowthroughReason,
+    })
+    return { type: 'execution_followthrough', requiredToolReminderNames: [] }
+  }
+
+  const finalResponse = resolveCurrentFinalResponse(ctx.state)
+
+  // 2. Execution kickoff (agent described what it will do but didn't start)
+  if (ctx.limits.canContinue('execution_kickoff_followthrough')) {
+    if (shouldForceExternalExecutionKickoffFollowthrough({
+      userMessage: ctx.message,
+      finalResponse,
+      hasToolCalls: ctx.state.hasToolCalls,
+      toolEvents: ctx.state.streamedToolEvents,
+      classification: ctx.classification,
+    })) {
+      const count = ctx.limits.increment('execution_kickoff_followthrough')
+      const { max } = ctx.limits.getStatus('execution_kickoff_followthrough')
+      writeStatus(ctx, {
+        externalExecutionKickoff: count,
+        maxFollowthroughs: max,
+      })
+      return { type: 'execution_kickoff_followthrough', requiredToolReminderNames: [] }
+    }
+  }
+
+  // 3. External execution followthrough (agent started but didn't finish)
+  if (ctx.limits.canContinue('execution_followthrough')) {
+    if (shouldForceExternalExecutionFollowthrough({
+      userMessage: ctx.message,
+      finalResponse,
+      hasToolCalls: ctx.state.hasToolCalls,
+      toolEvents: ctx.state.streamedToolEvents,
+      classification: ctx.classification,
+    })) {
+      const count = ctx.limits.increment('execution_followthrough')
+      const { max } = ctx.limits.getStatus('execution_followthrough')
+      writeStatus(ctx, {
+        externalExecutionFollowthrough: count,
+        maxFollowthroughs: max,
+      })
+      return { type: 'execution_followthrough', requiredToolReminderNames: [] }
+    }
+  }
+
+  return null
 }
 
+/**
+ * Required tools + workspace shell fallback (merged).
+ * Shell fallback is just a special case of "required tool not yet used."
+ */
 function checkRequiredTools(ctx: ContinuationContext): ContinuationDecision | null {
-  if (ctx.explicitRequiredToolNames.length === 0) return null
   if (!ctx.limits.canContinue('required_tool')) return null
-  const reminderNames = ctx.explicitRequiredToolNames.filter((toolName) => {
-    const canonical = canonicalizeExtensionId(toolName) || toolName
-    return !ctx.state.usedToolNames.has(toolName) && !ctx.state.usedToolNames.has(canonical)
-  })
-  if (reminderNames.length === 0) return null
-  const count = ctx.limits.increment('required_tool')
-  const { max } = ctx.limits.getStatus('required_tool')
-  writeStatus(ctx, {
-    requiredToolsPending: reminderNames,
-    reminderCount: count,
-    maxReminders: max,
-  })
-  return { type: 'required_tool', requiredToolReminderNames: reminderNames }
+
+  // Explicit required tools
+  if (ctx.explicitRequiredToolNames.length > 0) {
+    const reminderNames = ctx.explicitRequiredToolNames.filter((toolName) => {
+      const canonical = canonicalizeExtensionId(toolName) || toolName
+      return !ctx.state.usedToolNames.has(toolName) && !ctx.state.usedToolNames.has(canonical)
+    })
+    if (reminderNames.length > 0) {
+      const count = ctx.limits.increment('required_tool')
+      const { max } = ctx.limits.getStatus('required_tool')
+      writeStatus(ctx, {
+        requiredToolsPending: reminderNames,
+        reminderCount: count,
+        maxReminders: max,
+      })
+      return { type: 'required_tool', requiredToolReminderNames: reminderNames }
+    }
+  }
+
+  // Workspace shell fallback — agent should have used shell but didn't
+  if (shouldForceWorkspaceScopeShellFallback({
+    userMessage: ctx.message,
+    finalResponse: resolveCurrentFinalResponse(ctx.state),
+    toolEvents: ctx.state.streamedToolEvents,
+    enabledExtensions: ctx.sessionExtensions,
+  })) {
+    const count = ctx.limits.increment('required_tool')
+    const { max } = ctx.limits.getStatus('required_tool')
+    writeStatus(ctx, {
+      requiredToolsPending: ['shell'],
+      reminderCount: count,
+      maxReminders: max,
+      reason: 'workspace_scope_shell_fallback',
+    })
+    return { type: 'required_tool', requiredToolReminderNames: ['shell'] }
+  }
+
+  return null
 }
 
 function checkMemoryWriteFollowthrough(ctx: ContinuationContext): ContinuationDecision | null {
@@ -186,42 +259,6 @@ function checkAttachmentFollowthrough(ctx: ContinuationContext): ContinuationDec
   return { type: 'attachment_followthrough', requiredToolReminderNames: [] }
 }
 
-function checkExecutionKickoff(ctx: ContinuationContext): ContinuationDecision | null {
-  if (!ctx.limits.canContinue('execution_kickoff_followthrough')) return null
-  if (!shouldForceExternalExecutionKickoffFollowthrough({
-    userMessage: ctx.message,
-    finalResponse: resolveCurrentFinalResponse(ctx.state),
-    hasToolCalls: ctx.state.hasToolCalls,
-    toolEvents: ctx.state.streamedToolEvents,
-    classification: ctx.classification,
-  })) return null
-  const count = ctx.limits.increment('execution_kickoff_followthrough')
-  const { max } = ctx.limits.getStatus('execution_kickoff_followthrough')
-  writeStatus(ctx, {
-    externalExecutionKickoff: count,
-    maxFollowthroughs: max,
-  })
-  return { type: 'execution_kickoff_followthrough', requiredToolReminderNames: [] }
-}
-
-function checkExternalExecutionFollowthrough(ctx: ContinuationContext): ContinuationDecision | null {
-  if (!ctx.limits.canContinue('execution_followthrough')) return null
-  if (!shouldForceExternalExecutionFollowthrough({
-    userMessage: ctx.message,
-    finalResponse: resolveCurrentFinalResponse(ctx.state),
-    hasToolCalls: ctx.state.hasToolCalls,
-    toolEvents: ctx.state.streamedToolEvents,
-    classification: ctx.classification,
-  })) return null
-  const count = ctx.limits.increment('execution_followthrough')
-  const { max } = ctx.limits.getStatus('execution_followthrough')
-  writeStatus(ctx, {
-    externalExecutionFollowthrough: count,
-    maxFollowthroughs: max,
-  })
-  return { type: 'execution_followthrough', requiredToolReminderNames: [] }
-}
-
 function checkDeliverableFollowthrough(ctx: ContinuationContext): ContinuationDecision | null {
   if (!ctx.limits.canContinue('deliverable_followthrough')) return null
   if (!shouldForceDeliverableFollowthrough({
@@ -242,27 +279,10 @@ function checkDeliverableFollowthrough(ctx: ContinuationContext): ContinuationDe
   return { type: 'deliverable_followthrough', requiredToolReminderNames: [] }
 }
 
-function checkWorkspaceShellFallback(ctx: ContinuationContext): ContinuationDecision | null {
-  if (!ctx.limits.canContinue('required_tool')) return null
-  if (!shouldForceWorkspaceScopeShellFallback({
-    userMessage: ctx.message,
-    finalResponse: resolveCurrentFinalResponse(ctx.state),
-    toolEvents: ctx.state.streamedToolEvents,
-    enabledExtensions: ctx.sessionExtensions,
-  })) return null
-  const count = ctx.limits.increment('required_tool')
-  const { max } = ctx.limits.getStatus('required_tool')
-  writeStatus(ctx, {
-    requiredToolsPending: ['shell'],
-    reminderCount: count,
-    maxReminders: max,
-    reason: 'workspace_scope_shell_fallback',
-  })
-  return { type: 'required_tool', requiredToolReminderNames: ['shell'] }
-}
-
 function checkIncompleteDelegation(ctx: ContinuationContext): ContinuationDecision | null {
+  if (!ctx.limits.canContinue('unfinished_tool_followthrough')) return null
   if (!hasIncompleteDelegationWait(ctx.state.streamedToolEvents)) return null
+  ctx.limits.increment('unfinished_tool_followthrough')
   writeStatus(ctx, { unfinishedDelegation: true })
   return { type: 'unfinished_tool_followthrough', requiredToolReminderNames: [] }
 }
@@ -327,22 +347,28 @@ function logStatus(ctx: ContinuationContext, kind: LogCategory, msg: string, det
 /**
  * Walk the continuation checks in priority order, returning the first match.
  * Returns `{ type: false }` when no continuation is warranted.
+ *
+ * 9 checks (consolidated from 13):
+ *  1. checkUnfinishedToolCallsPending
+ *  2. checkLoopDetection
+ *  3. checkExecutionContinuation (merged: reason + kickoff + external)
+ *  4. checkRequiredTools (merged: explicit + shell fallback)
+ *  5. checkMemoryWriteFollowthrough
+ *  6. checkAttachmentFollowthrough
+ *  7. checkDeliverableFollowthrough
+ *  8. checkIncompleteDelegation
+ *  9. checkToolErrorFollowthrough
+ * 10. checkToolSummary
  */
 export function evaluateContinuation(ctx: ContinuationContext): ContinuationDecision {
-  // Checks that run even when shouldContinue was already set by error handling
-  // are handled by the caller before this function is invoked.
-
   const checks = [
     checkUnfinishedToolCallsPending,
     checkLoopDetection,
-    checkExecutionFollowthrough,
+    checkExecutionContinuation,
     checkRequiredTools,
     checkMemoryWriteFollowthrough,
     checkAttachmentFollowthrough,
-    checkExecutionKickoff,
-    checkExternalExecutionFollowthrough,
     checkDeliverableFollowthrough,
-    checkWorkspaceShellFallback,
     checkIncompleteDelegation,
     checkToolErrorFollowthrough,
     checkToolSummary,

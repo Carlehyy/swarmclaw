@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { safeParseBody } from '@/lib/server/safe-parse-body'
 import { loadAgents, loadSettings, loadTasks, logActivity, upsertStoredItems, upsertTask } from '@/lib/server/storage'
 import { notFound } from '@/lib/server/collection-helpers'
 import { disableSessionHeartbeat, enqueueTask, recoverStalledRunningTasks, validateCompletedTasksQueue } from '@/lib/server/runtime/queue'
@@ -30,7 +31,8 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
 
 export async function PUT(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
-  const body = await req.json()
+  const { data: body, error } = await safeParseBody<Record<string, unknown>>(req)
+  if (error) return error
   const settings = loadSettings()
   const tasks = loadTasks()
   if (!tasks[id]) return notFound()
@@ -65,6 +67,29 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
     })
   }
   tasks[id].id = id // prevent id overwrite
+
+  // Maintain parent/child subtask links
+  if (typeof body.parentTaskId === 'string' || body.parentTaskId === null) {
+    const oldParentId = tasks[id].parentTaskId
+    const newParentId = typeof body.parentTaskId === 'string' && body.parentTaskId.trim() ? body.parentTaskId.trim() : null
+    // Remove from old parent's subtaskIds
+    if (oldParentId && oldParentId !== newParentId && tasks[oldParentId]) {
+      const oldSubs = Array.isArray(tasks[oldParentId].subtaskIds) ? tasks[oldParentId].subtaskIds : []
+      tasks[oldParentId].subtaskIds = oldSubs.filter((s: string) => s !== id)
+      tasks[oldParentId].updatedAt = Date.now()
+      upsertTask(oldParentId, tasks[oldParentId])
+    }
+    // Add to new parent's subtaskIds
+    if (newParentId && tasks[newParentId]) {
+      const newSubs = Array.isArray(tasks[newParentId].subtaskIds) ? tasks[newParentId].subtaskIds : []
+      if (!newSubs.includes(id)) {
+        tasks[newParentId].subtaskIds = [...newSubs, id]
+        tasks[newParentId].updatedAt = Date.now()
+        upsertTask(newParentId, tasks[newParentId])
+      }
+    }
+    tasks[id].parentTaskId = newParentId
+  }
 
   // Set archivedAt when transitioning to archived
   if (prevStatus !== 'archived' && tasks[id].status === 'archived') {

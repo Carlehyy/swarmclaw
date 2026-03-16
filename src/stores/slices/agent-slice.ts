@@ -1,11 +1,13 @@
-const inflightAgentThreadLoads = new Map<string, Promise<void>>()
 import { StateCreator } from 'zustand'
 import type { AppState } from '../use-app-store'
 import type { Session, Agent, ExternalAgentRuntime } from '../../types'
-import { fetchAgents } from '../../lib/agents'
+import { fetchAgents, bulkPatchAgents } from '../../lib/agents'
 import { api } from '@/lib/app/api-client'
 import { safeStorageRemove, safeStorageSet } from '@/lib/app/safe-storage'
-import { setIfChanged, invalidateFingerprint } from '../set-if-changed'
+import { invalidateFingerprint } from '../set-if-changed'
+import { createLoader, createInflightDeduplicator } from '../store-utils'
+
+const agentThreadDedup = createInflightDeduplicator('agentSlice_inflightLoads')
 
 export interface AgentSlice {
   currentAgentId: string | null
@@ -13,9 +15,10 @@ export interface AgentSlice {
   agents: Record<string, Agent>
   loadAgents: () => Promise<void>
   updateAgentInStore: (agent: Agent) => void
-  togglePinAgent: (id: string) => void
+  togglePinAgent: (id: string) => Promise<void>
   trashedAgents: Record<string, Agent>
   loadTrashedAgents: () => Promise<void>
+  batchUpdateAgents: (patches: Array<{ id: string; patch: Partial<Agent> }>) => Promise<void>
   externalAgents: ExternalAgentRuntime[]
   loadExternalAgents: () => Promise<void>
 }
@@ -34,13 +37,7 @@ export const createAgentSlice: StateCreator<AppState, [], [], AgentSlice> = (set
     set({ currentAgentId: id })
     safeStorageSet('sc_agent', id)
 
-    const existingLoad = inflightAgentThreadLoads.get(id)
-    if (existingLoad) {
-      await existingLoad
-      return
-    }
-
-    const loadPromise = (async () => {
+    await agentThreadDedup.dedup(id, async () => {
       try {
         const user = get().currentUser || 'default'
         const session = await api<Session>('POST', `/agents/${id}/thread`, { user })
@@ -53,58 +50,51 @@ export const createAgentSlice: StateCreator<AppState, [], [], AgentSlice> = (set
           invalidateFingerprint('sessions')
           set({ sessions, agents })
         }
-      } catch {
-        // ignore — thread creation failed
+      } catch (err: unknown) {
+        console.warn('Agent thread creation failed:', err)
       }
-    })()
-
-    inflightAgentThreadLoads.set(id, loadPromise)
-    try {
-      await loadPromise
-    } finally {
-      if (inflightAgentThreadLoads.get(id) === loadPromise) {
-        inflightAgentThreadLoads.delete(id)
-      }
-    }
+    })
   },
   agents: {},
-  loadAgents: async () => {
-    try {
-      const agents = await fetchAgents()
-      setIfChanged<AppState>(set, 'agents', agents)
-    } catch (err) {
-      console.warn('Store error:', err)
-    }
-  },
+  loadAgents: createLoader<AppState>(set, 'agents', () => fetchAgents()),
   updateAgentInStore: (agent) => {
     invalidateFingerprint('agents')
     set({ agents: { ...get().agents, [agent.id]: agent } })
   },
-  togglePinAgent: (id) => {
+  togglePinAgent: async (id) => {
     const agents = { ...get().agents }
-    if (agents[id]) {
-      agents[id] = { ...agents[id], pinned: !agents[id].pinned }
-      invalidateFingerprint('agents')
-      set({ agents })
-      void api('PUT', `/agents/${id}`, { pinned: agents[id].pinned })
+    if (!agents[id]) return
+    const wasPinned = agents[id].pinned
+    agents[id] = { ...agents[id], pinned: !wasPinned }
+    invalidateFingerprint('agents')
+    set({ agents })
+    try {
+      await api('PUT', `/agents/${id}`, { pinned: !wasPinned })
+    } catch (err: unknown) {
+      console.warn('Pin toggle failed:', err)
+      await get().loadAgents()
+    }
+  },
+  batchUpdateAgents: async (patches) => {
+    // Optimistic update
+    const agents = { ...get().agents }
+    for (const { id, patch } of patches) {
+      if (agents[id]) {
+        agents[id] = { ...agents[id], ...patch, updatedAt: Date.now() }
+      }
+    }
+    invalidateFingerprint('agents')
+    set({ agents })
+    try {
+      await bulkPatchAgents(patches)
+      await get().loadAgents()
+    } catch (err: unknown) {
+      console.warn('Bulk agent update failed:', err)
+      await get().loadAgents()
     }
   },
   trashedAgents: {},
-  loadTrashedAgents: async () => {
-    try {
-      const trashedAgents = await api<Record<string, Agent>>('GET', '/agents/trash')
-      setIfChanged<AppState>(set, 'trashedAgents', trashedAgents)
-    } catch (err) {
-      console.warn('Store error:', err)
-    }
-  },
+  loadTrashedAgents: createLoader<AppState>(set, 'trashedAgents', () => api<Record<string, Agent>>('GET', '/agents/trash')),
   externalAgents: [],
-  loadExternalAgents: async () => {
-    try {
-      const externalAgents = await api<ExternalAgentRuntime[]>('GET', '/external-agents')
-      setIfChanged<AppState>(set, 'externalAgents', externalAgents)
-    } catch (err) {
-      console.warn('Store error:', err)
-    }
-  }
+  loadExternalAgents: createLoader<AppState>(set, 'externalAgents', () => api<ExternalAgentRuntime[]>('GET', '/external-agents'))
 })

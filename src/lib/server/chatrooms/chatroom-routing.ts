@@ -1,4 +1,5 @@
 import type { ChatroomRoutingRule, Agent } from '@/types'
+import { matchesCapabilities } from '@/lib/server/agents/capability-match'
 
 /**
  * Evaluate routing rules against inbound message text.
@@ -48,7 +49,7 @@ export function evaluateRoutingRules(
 
       // Check if the specific agent has a matching capability
       const agent = agents.find((a) => a.id === rule.agentId)
-      if (agent?.capabilities?.some((cap) => cap.toLowerCase().includes(patternLower))) {
+      if (agent && matchesCapabilities(agent.capabilities, [rule.pattern])) {
         // Only match if the message text is relevant to the capability
         // Use the pattern as a keyword match against the message text too
         try {

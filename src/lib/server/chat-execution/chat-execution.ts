@@ -502,14 +502,18 @@ function syncSessionFromAgent(sessionId: string): void {
     }
   }
   const agentSelection = getEnabledCapabilitySelection(agent)
-  const currentSelection = getEnabledCapabilitySelection(session)
-  if (
-    JSON.stringify(currentSelection.tools) !== JSON.stringify(agentSelection.tools)
-    || JSON.stringify(currentSelection.extensions) !== JSON.stringify(agentSelection.extensions)
-  ) {
-    session.tools = agentSelection.tools
-    session.extensions = agentSelection.extensions
-    changed = true
+  // Subagent sessions have capabilities computed at spawn time (agent + parent merge).
+  // Don't overwrite them with just the agent's capabilities.
+  if (!session.parentSessionId) {
+    const currentSelection = getEnabledCapabilitySelection(session)
+    if (
+      JSON.stringify(currentSelection.tools) !== JSON.stringify(agentSelection.tools)
+      || JSON.stringify(currentSelection.extensions) !== JSON.stringify(agentSelection.extensions)
+    ) {
+      session.tools = agentSelection.tools
+      session.extensions = agentSelection.extensions
+      changed = true
+    }
   }
   const desiredMemoryScopeMode = resolveEffectiveSessionMemoryScopeMode(session, agent.memoryScopeMode ?? null)
   if ((((session as unknown as Record<string, unknown>).memoryScopeMode as string | null | undefined) ?? null) !== desiredMemoryScopeMode) {
@@ -1528,6 +1532,8 @@ export async function executeSessionChatTurn(input: ExecuteChatTurnInput): Promi
         estimatedCost: cost,
         timestamp: Date.now(),
         durationMs,
+        agentId: sessionForRun.agentId || null,
+        projectId: sessionForRun.projectId || null,
       }
       appendUsage(sessionId, usageRecord)
       emit({

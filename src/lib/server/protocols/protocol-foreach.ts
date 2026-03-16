@@ -11,7 +11,7 @@ import type {
 } from '@/types'
 import { cleanText, now, uniqueIds } from '@/lib/server/protocols/protocol-types'
 import type { ProtocolRunDeps } from '@/lib/server/protocols/protocol-types'
-import { findRunStep } from '@/lib/server/protocols/protocol-normalization'
+import { findRunStep, loadProtocolRunById } from '@/lib/server/protocols/protocol-normalization'
 import { isTerminalProtocolRunStatus } from '@/lib/server/protocols/protocol-templates'
 import {
   appendProtocolEvent,
@@ -259,6 +259,5 @@ export function syncForEachParentFromChildRun(
     const { requestProtocolRunExecution } = require('@/lib/server/protocols/protocol-run-lifecycle') as typeof import('@/lib/server/protocols/protocol-run-lifecycle')
     requestProtocolRunExecution(updatedParent.id, deps)
   }
-  const { loadProtocolRunById } = require('@/lib/server/protocols/protocol-queries') as typeof import('@/lib/server/protocols/protocol-queries')
   return loadProtocolRunById(updatedParent.id)
 }

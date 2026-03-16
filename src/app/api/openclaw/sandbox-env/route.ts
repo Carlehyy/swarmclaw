@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { ensureGatewayConnected } from '@/lib/server/openclaw/gateway'
 import { errorMessage } from '@/lib/shared-utils'
+import { safeParseBody } from '@/lib/server/safe-parse-body'
 
 /** GET — list available and allowed env keys for sandbox */
 export async function GET() {
@@ -37,7 +38,8 @@ export async function GET() {
 
 /** PUT { allowed: string[] } — update sandbox env allowlist */
 export async function PUT(req: Request) {
-  const body = await req.json()
+  const { data: body, error } = await safeParseBody<Record<string, unknown>>(req)
+  if (error) return error
   const { allowed } = body as { allowed?: string[] }
   if (!allowed || !Array.isArray(allowed)) {
     return NextResponse.json({ error: 'Missing allowed array' }, { status: 400 })

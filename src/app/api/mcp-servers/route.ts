@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { safeParseBody } from '@/lib/server/safe-parse-body'
 import { genId } from '@/lib/id'
 import { loadMcpServers, saveMcpServers } from '@/lib/server/storage'
 export const dynamic = 'force-dynamic'
@@ -9,7 +10,8 @@ export async function GET(_req: Request) {
 }
 
 export async function POST(req: Request) {
-  const body = await req.json()
+  const { data: body, error } = await safeParseBody(req)
+  if (error) return error
   const servers = loadMcpServers()
   const id = genId()
   servers[id] = {

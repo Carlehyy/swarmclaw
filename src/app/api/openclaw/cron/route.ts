@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { safeParseBody } from '@/lib/server/safe-parse-body'
 import { ensureGatewayConnected } from '@/lib/server/openclaw/gateway'
 import type { GatewayCronJob } from '@/types'
 import { errorMessage } from '@/lib/shared-utils'
@@ -21,8 +22,9 @@ export async function GET() {
 
 /** POST { action, ...params } — add/run/remove cron jobs */
 export async function POST(req: Request) {
-  const body = await req.json()
-  const { action, ...params } = body as { action: string; [key: string]: unknown }
+  const { data: body, error } = await safeParseBody<{ action: string; [key: string]: unknown }>(req)
+  if (error) return error
+  const { action, ...params } = body
 
   const gw = await ensureGatewayConnected()
   if (!gw) {

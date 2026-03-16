@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { ensureGatewayConnected } from '@/lib/server/openclaw/gateway'
 import { resolveOpenClawGatewayAgentId } from '@/lib/server/openclaw/agent-resolver'
 import { errorMessage } from '@/lib/shared-utils'
+import { safeParseBody } from '@/lib/server/safe-parse-body'
 
 const AGENT_FILES = ['SOUL.md', 'IDENTITY.md', 'USER.md', 'TOOLS.md', 'HEARTBEAT.md', 'MEMORY.md', 'AGENTS.md'] as const
 
@@ -47,7 +48,8 @@ export async function GET(req: Request) {
 
 /** PUT { agentId, filename, content } — save an agent file */
 export async function PUT(req: Request) {
-  const body = await req.json()
+  const { data: body, error } = await safeParseBody<Record<string, unknown>>(req)
+  if (error) return error
   const { agentId, filename, content } = body as { agentId?: string; filename?: string; content?: string }
   if (!agentId || !filename) {
     return NextResponse.json({ error: 'Missing agentId or filename' }, { status: 400 })

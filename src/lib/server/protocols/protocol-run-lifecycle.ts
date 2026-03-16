@@ -22,7 +22,7 @@ import { errorMessage, hmrSingleton } from '@/lib/shared-utils'
 import { requestMissionTick } from '@/lib/server/missions/mission-service'
 import { cleanText, isDiscussionStepKind, now, uniqueIds } from '@/lib/server/protocols/protocol-types'
 import type { CreateProtocolRunInput, ProtocolRunActionInput, ProtocolRunDeps } from '@/lib/server/protocols/protocol-types'
-import { deriveDisplayPhasesFromSteps, normalizeProtocolRun, resolveRunSteps } from '@/lib/server/protocols/protocol-normalization'
+import { deriveDisplayPhasesFromSteps, loadProtocolRunById, normalizeProtocolRun, resolveRunSteps } from '@/lib/server/protocols/protocol-normalization'
 import { findRunStep } from '@/lib/server/protocols/protocol-normalization'
 import { acquireProtocolLease, loadTemplate, renewProtocolLease } from '@/lib/server/protocols/protocol-templates'
 import {
@@ -68,7 +68,6 @@ export function requestProtocolRunExecution(runId: string, deps?: ProtocolRunDep
 }
 
 export function wakeProtocolRunFromTaskCompletion(taskId: string, deps?: ProtocolRunDeps): void {
-  const { loadProtocolRunById } = require('@/lib/server/protocols/protocol-queries') as typeof import('@/lib/server/protocols/protocol-queries')
   const task = loadTask(taskId)
   if (!task?.protocolRunId) return
   const runId = task.protocolRunId
@@ -119,7 +118,6 @@ export function wakeProtocolRunFromTaskCompletion(taskId: string, deps?: Protoco
 export function ensureProtocolEngineRecovered(deps?: ProtocolRunDeps): void {
   if (protocolRecoveryState.completed) return
   protocolRecoveryState.completed = true
-  const { loadProtocolRunById } = require('@/lib/server/protocols/protocol-queries') as typeof import('@/lib/server/protocols/protocol-queries')
   const runs = Object.values(loadProtocolRuns()).map((entry) => normalizeProtocolRun(entry))
   for (const run of runs) {
     if (run.parentRunId) {
@@ -300,7 +298,6 @@ export function createProtocolRun(input: CreateProtocolRunInput, deps?: Protocol
 }
 
 export async function runProtocolRun(runId: string, deps?: ProtocolRunDeps): Promise<ProtocolRun | null> {
-  const { loadProtocolRunById } = require('@/lib/server/protocols/protocol-queries') as typeof import('@/lib/server/protocols/protocol-queries')
   const release = acquireProtocolLease(runId)
   if (!release) {
     console.warn(`[protocols] could not acquire lease for run ${runId}, another execution may be active`)
@@ -397,7 +394,6 @@ export async function runProtocolRun(runId: string, deps?: ProtocolRunDeps): Pro
 }
 
 export function performProtocolRunAction(runId: string, input: ProtocolRunActionInput): ProtocolRun | null {
-  const { loadProtocolRunById } = require('@/lib/server/protocols/protocol-queries') as typeof import('@/lib/server/protocols/protocol-queries')
   const { claimSwarmWorkItem } = require('@/lib/server/protocols/protocol-swarm') as typeof import('@/lib/server/protocols/protocol-swarm')
   const run = loadProtocolRunById(runId)
   if (!run) return null

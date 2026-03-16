@@ -3,23 +3,35 @@ import { genId } from '@/lib/id'
 import { loadChatrooms, saveChatrooms, loadAgents } from '@/lib/server/storage'
 import { notify } from '@/lib/server/ws-hub'
 import { ChatroomCreateSchema, formatZodError } from '@/lib/validation/schemas'
+import { safeParseBody } from '@/lib/server/safe-parse-body'
 import { z } from 'zod'
 import type { Chatroom, ChatroomMessage } from '@/types'
 
 export const dynamic = 'force-dynamic'
 
-export async function GET() {
+export async function GET(req: Request) {
+  const { searchParams } = new URL(req.url)
+  const filter = searchParams.get('filter') || 'chatrooms'
   const chatrooms = loadChatrooms()
   const filtered: typeof chatrooms = {}
   for (const [id, chatroom] of Object.entries(chatrooms)) {
-    if (chatroom.hidden === true || chatroom.archivedAt) continue
+    if (chatroom.archivedAt) continue
+    if (filter === 'chatrooms') {
+      // Default: exclude hidden (protocol transcript rooms)
+      if (chatroom.hidden === true) continue
+    } else if (filter === 'protocols') {
+      // Only protocol transcript rooms
+      if (!chatroom.protocolRunId) continue
+    }
+    // filter === 'all': include everything except archived
     filtered[id] = chatroom
   }
   return NextResponse.json(filtered)
 }
 
 export async function POST(req: Request) {
-  const raw = await req.json()
+  const { data: raw, error } = await safeParseBody<Record<string, unknown>>(req)
+  if (error) return error
   const parsed = ChatroomCreateSchema.safeParse(raw)
   if (!parsed.success) {
     return NextResponse.json(formatZodError(parsed.error as z.ZodError), { status: 400 })

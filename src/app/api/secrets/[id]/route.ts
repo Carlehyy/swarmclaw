@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { loadSecrets, saveSecrets } from '@/lib/server/storage'
 import { mutateItem, deleteItem, notFound, type CollectionOps } from '@/lib/server/collection-helpers'
+import { safeParseBody } from '@/lib/server/safe-parse-body'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const ops: CollectionOps<any> = { load: loadSecrets, save: saveSecrets }
@@ -13,7 +14,8 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
 
 export async function PUT(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
-  const body = await req.json()
+  const { data: body, error } = await safeParseBody<Record<string, unknown>>(req)
+  if (error) return error
   const result = mutateItem(ops, id, (secret) => {
     if (body.name !== undefined) secret.name = body.name
     if (body.service !== undefined) secret.service = body.service

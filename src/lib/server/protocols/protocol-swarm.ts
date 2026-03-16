@@ -19,7 +19,7 @@ import { notify } from '@/lib/server/ws-hub'
 import { enqueueTask } from '@/lib/server/runtime/queue'
 import { cleanText, now } from '@/lib/server/protocols/protocol-types'
 import type { ProtocolRunDeps } from '@/lib/server/protocols/protocol-types'
-import { findRunStep, normalizeProtocolRun } from '@/lib/server/protocols/protocol-normalization'
+import { findRunStep, loadProtocolRunById, normalizeProtocolRun } from '@/lib/server/protocols/protocol-normalization'
 import {
   appendProtocolEvent,
   persistRun,
@@ -170,7 +170,6 @@ export function claimSwarmWorkItem(
   workItemId: string,
   deps?: ProtocolRunDeps,
 ): { success: boolean; error?: string } {
-  const { loadProtocolRunById } = require('@/lib/server/protocols/protocol-queries') as typeof import('@/lib/server/protocols/protocol-queries')
   const run = loadProtocolRunById(runId)
   if (!run) return { success: false, error: 'Run not found' }
   const state = run.swarmState?.[stepId]
@@ -238,7 +237,6 @@ export function claimSwarmWorkItem(
 }
 
 export function syncSwarmClaimCompletion(taskId: string, deps?: ProtocolRunDeps): void {
-  const { loadProtocolRunById } = require('@/lib/server/protocols/protocol-queries') as typeof import('@/lib/server/protocols/protocol-queries')
   const { requestProtocolRunExecution } = require('@/lib/server/protocols/protocol-run-lifecycle') as typeof import('@/lib/server/protocols/protocol-run-lifecycle')
   const task = loadTask(taskId)
   if (!task?.protocolRunId) return

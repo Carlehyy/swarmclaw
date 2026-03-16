@@ -2,16 +2,18 @@ import { NextResponse } from 'next/server'
 import { loadChatrooms, saveChatrooms } from '@/lib/server/storage'
 import { notify } from '@/lib/server/ws-hub'
 import { notFound } from '@/lib/server/collection-helpers'
+import { safeParseBody } from '@/lib/server/safe-parse-body'
 import type { Chatroom } from '@/types'
 
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
-  const body = await req.json()
+  const { data: body, error } = await safeParseBody<Record<string, unknown>>(req)
+  if (error) return error
   const chatrooms = loadChatrooms()
   const chatroom = chatrooms[id] as Chatroom | undefined
   if (!chatroom) return notFound()
 
-  const messageId = body.messageId as string
+  const messageId = typeof body.messageId === 'string' ? body.messageId : ''
   if (!messageId) {
     return NextResponse.json({ error: 'messageId is required' }, { status: 400 })
   }

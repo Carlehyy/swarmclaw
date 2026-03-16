@@ -342,13 +342,14 @@ describe('subagent-runtime', () => {
       if (handle) {
         const childSession = storage.loadSessions()[handle.sessionId]
         assert.ok(childSession, 'Child session should exist')
-        const extensions = childSession.extensions as string[]
-        assert.ok(extensions.includes('shell'), 'should have shell from agent')
-        assert.ok(extensions.includes('memory'), 'should have memory from agent')
-        assert.ok(extensions.includes('browser'), 'should inherit browser from parent')
-        assert.ok(extensions.includes('web'), 'should inherit web from parent')
-        assert.ok(extensions.includes('manage_connectors'), 'should inherit manage_connectors from parent')
-        assert.equal(extensions.filter((p: string) => p.toLowerCase() === 'shell').length, 1, 'shell should not be duplicated')
+        // splitCapabilityIds puts built-in IDs into tools, not extensions
+        const allCapabilities = [...(childSession.tools as string[] || []), ...(childSession.extensions as string[] || [])]
+        assert.ok(allCapabilities.includes('shell'), 'should have shell from agent')
+        assert.ok(allCapabilities.includes('memory'), 'should have memory from agent')
+        assert.ok(allCapabilities.includes('browser'), 'should inherit browser from parent')
+        assert.ok(allCapabilities.includes('web'), 'should inherit web from parent')
+        assert.ok(allCapabilities.includes('manage_connectors'), 'should inherit manage_connectors from parent')
+        assert.equal(allCapabilities.filter((p: string) => p.toLowerCase() === 'shell').length, 1, 'shell should not be duplicated')
       }
     })
 
@@ -376,8 +377,9 @@ describe('subagent-runtime', () => {
       if (handle) {
         const childSession = storage.loadSessions()[handle.sessionId]
         assert.ok(childSession, 'Child session should exist')
-        const extensions = childSession.extensions as string[]
-        assert.deepEqual(extensions, ['shell'], 'should only have agent extensions')
+        // splitCapabilityIds puts built-in IDs into tools, not extensions
+        const allCapabilities = [...(childSession.tools as string[] || []), ...(childSession.extensions as string[] || [])]
+        assert.deepEqual(allCapabilities, ['shell'], 'should only have agent extensions')
       }
     })
   })
@@ -393,8 +395,8 @@ describe('subagent-runtime', () => {
         task: 'Some task',
       })
       // Transition to running so it can be cancelled
-      lineage.transitionState(node.id, 'READY')
-      lineage.transitionState(node.id, 'START')
+      lineage.setLineageStatus(node.id, 'ready')
+      lineage.setLineageStatus(node.id, 'running')
 
       const result = runtime.cancelSubagentBySession('cancel-session')
       assert.equal(result, true)
@@ -416,8 +418,8 @@ describe('subagent-runtime', () => {
         agentName: 'Cleanup Agent',
         task: 'test',
       })
-      lineage.transitionState(node.id, 'READY')
-      lineage.transitionState(node.id, 'START')
+      lineage.setLineageStatus(node.id, 'ready')
+      lineage.setLineageStatus(node.id, 'running')
       lineage.completeLineageNode(node.id, 'done')
 
       // Use negative maxAge so everything qualifies as old
@@ -435,8 +437,8 @@ describe('subagent-runtime', () => {
         agentName: 'Active Agent',
         task: 'test',
       })
-      lineage.transitionState(node.id, 'READY')
-      lineage.transitionState(node.id, 'START')
+      lineage.setLineageStatus(node.id, 'ready')
+      lineage.setLineageStatus(node.id, 'running')
       // Leave in 'running' state
 
       const cleaned = runtime.cleanupFinishedSubagents(0)
@@ -460,8 +462,8 @@ describe('subagent-runtime', () => {
         agentName: 'Orphan Agent',
         task: 'test orphan cleanup',
       })
-      lineage.transitionState(node.id, 'READY')
-      lineage.transitionState(node.id, 'START')
+      lineage.setLineageStatus(node.id, 'ready')
+      lineage.setLineageStatus(node.id, 'running')
       lineage.completeLineageNode(node.id, 'done')
 
       // Manually register a handle referencing this lineage node
@@ -510,8 +512,8 @@ describe('subagent-runtime', () => {
         agentName: 'Active',
         task: 'still running',
       })
-      lineage.transitionState(node.id, 'READY')
-      lineage.transitionState(node.id, 'START')
+      lineage.setLineageStatus(node.id, 'ready')
+      lineage.setLineageStatus(node.id, 'running')
       // Leave in running state — should NOT be cleaned up
 
       const handleRegistry = (globalThis as any).__swarmclaw_subagent_handles__ as Map<string, any>

@@ -49,22 +49,22 @@ export interface LoopDetectionThresholds {
   pingPongCritical: number
   /** Circuit breaker: absolute cap on any identical call. Default 20. */
   circuitBreaker: number
-  /** Per-tool frequency: warn after this many calls to the same tool (any input). Default 5. */
+  /** Per-tool frequency: warn after this many calls to the same tool (any input). Default 15. */
   toolFrequencyWarn: number
-  /** Per-tool frequency: critical after this many calls to the same tool (any input). Default 8. */
+  /** Per-tool frequency: critical after this many calls to the same tool (any input). Default 30. */
   toolFrequencyCritical: number
 }
 
 const DEFAULT_THRESHOLDS: LoopDetectionThresholds = {
-  repeatWarn: 12,
-  repeatCritical: 30,
-  pollWarn: 6,
-  pollCritical: 16,
-  pingPongWarn: 5,
-  pingPongCritical: 10,
-  circuitBreaker: 45,
-  toolFrequencyWarn: 60,
-  toolFrequencyCritical: 120,
+  repeatWarn: 6,
+  repeatCritical: 12,
+  pollWarn: 4,
+  pollCritical: 8,
+  pingPongWarn: 3,
+  pingPongCritical: 5,
+  circuitBreaker: 20,
+  toolFrequencyWarn: 15,
+  toolFrequencyCritical: 30,
 }
 
 // ---------------------------------------------------------------------------

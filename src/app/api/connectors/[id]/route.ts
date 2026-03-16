@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { safeParseBody } from '@/lib/server/safe-parse-body'
 import { loadConnectors, logActivity, upsertStoredItem, deleteStoredItem } from '@/lib/server/storage'
 import { notify } from '@/lib/server/ws-hub'
 import { notFound } from '@/lib/server/collection-helpers'
@@ -44,7 +45,8 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
 export async function PUT(req: Request, { params }: { params: Promise<{ id: string }> }) {
   ensureDaemonStarted('api/connectors/[id]:put')
   const { id } = await params
-  const body = await req.json()
+  const { data: body, error } = await safeParseBody<Record<string, unknown>>(req)
+  if (error) return error
   const connectors = loadConnectors()
   const connector = connectors[id]
   if (!connector) return notFound()
@@ -77,14 +79,14 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
     return NextResponse.json(fresh[id])
   }
 
-  // Regular update
-  if (body.name !== undefined) connector.name = body.name
-  if (body.agentId !== undefined) connector.agentId = body.agentId
-  if (body.chatroomId !== undefined) connector.chatroomId = body.chatroomId
-  if (body.credentialId !== undefined) connector.credentialId = body.credentialId
-  if (body.config !== undefined) connector.config = body.config
-  if (body.isEnabled !== undefined) (connector as any).isEnabled = body.isEnabled
-  (connector as any).updatedAt = Date.now()
+  // Regular update — guard types at the boundary
+  if (body.name !== undefined) connector.name = typeof body.name === 'string' ? body.name : connector.name
+  if (body.agentId !== undefined) connector.agentId = typeof body.agentId === 'string' || body.agentId === null ? body.agentId : connector.agentId
+  if (body.chatroomId !== undefined) connector.chatroomId = typeof body.chatroomId === 'string' || body.chatroomId === null ? body.chatroomId : connector.chatroomId
+  if (body.credentialId !== undefined) connector.credentialId = typeof body.credentialId === 'string' || body.credentialId === null ? body.credentialId : connector.credentialId
+  if (body.config !== undefined) connector.config = body.config && typeof body.config === 'object' && !Array.isArray(body.config) ? body.config as Record<string, string> : connector.config
+  if (body.isEnabled !== undefined) connector.isEnabled = typeof body.isEnabled === 'boolean' ? body.isEnabled : connector.isEnabled
+  connector.updatedAt = Date.now()
 
   upsertStoredItem('connectors', id, connector)
 

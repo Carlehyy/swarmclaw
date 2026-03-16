@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { safeParseBody } from '@/lib/server/safe-parse-body'
 import { SOUL_LIBRARY, type SoulTemplate } from '@/lib/soul-library'
 import { loadSouls, saveSouls, logActivity } from '@/lib/server/storage'
 import { genId } from '@/lib/id'
@@ -37,7 +38,8 @@ export async function GET(req: Request) {
 
 /** POST /api/souls — create a custom soul */
 export async function POST(req: Request) {
-  const body = await req.json()
+  const { data: body, error } = await safeParseBody<Partial<SoulTemplate>>(req)
+  if (error) return error
   if (!body.name || !body.soul) {
     return NextResponse.json({ error: 'Name and soul content are required' }, { status: 400 })
   }

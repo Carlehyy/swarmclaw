@@ -366,6 +366,7 @@ export interface Session {
   sessionType?: SessionType
   agentId?: string | null
   parentSessionId?: string | null
+  delegationDepth?: number | null
   tools?: string[]
   extensions?: string[]
   heartbeatEnabled?: boolean | null
@@ -541,6 +542,8 @@ export interface UsageRecord {
   estimatedCost: number
   timestamp: number
   durationMs?: number
+  agentId?: string | null
+  projectId?: string | null
   extensionDefinitionCosts?: ExtensionDefinitionCost[]
   extensionInvocations?: ExtensionInvocationRecord[]
 }
@@ -1024,7 +1027,16 @@ export interface NetworkInfo {
 
 // --- Agent / Delegation ---
 
+export type AgentRole = 'worker' | 'coordinator'
 export type DelegationTargetMode = 'all' | 'selected'
+
+export interface AgentOrgChart {
+  parentId?: string | null
+  teamLabel?: string | null
+  teamColor?: string | null
+  x?: number | null
+  y?: number | null
+}
 
 export interface Agent {
   id: string
@@ -1050,6 +1062,7 @@ export interface Agent {
   preferredGatewayUseCase?: string | null
   routingStrategy?: AgentRoutingStrategy | null
   routingTargets?: AgentRoutingTarget[]
+  role?: AgentRole                // default 'worker' — coordinators get enhanced delegation prompts
   delegationEnabled?: boolean
   delegationTargetMode?: DelegationTargetMode
   delegationTargetAgentIds?: string[]
@@ -1059,6 +1072,7 @@ export interface Agent {
   skillIds?: string[]           // IDs of pinned managed skills to keep always-on for this agent
   mcpServerIds?: string[]       // IDs of configured MCP servers to inject tools from
   mcpDisabledTools?: string[]   // MCP tool names disabled for this agent (denylist)
+  orgChart?: AgentOrgChart | null
   capabilities?: string[]       // e.g. ['frontend', 'screenshots', 'research', 'devops']
   threadSessionId?: string | null  // persistent shortcut chat session for agent-centric UI
   heartbeatEnabled?: boolean
@@ -1533,7 +1547,7 @@ export interface MemoryEntry {
 }
 
 export type SessionType = 'human'
-export type AppView = 'home' | 'agents' | 'inbox' | 'chatrooms' | 'protocols' | 'schedules' | 'memory' | 'missions' | 'tasks' | 'secrets' | 'providers' | 'skills' | 'connectors' | 'webhooks' | 'mcp_servers' | 'knowledge' | 'extensions' | 'usage' | 'wallets' | 'runs' | 'autonomy' | 'logs' | 'settings' | 'projects' | 'activity'
+export type AppView = 'home' | 'agents' | 'org_chart' | 'inbox' | 'chatrooms' | 'protocols' | 'schedules' | 'memory' | 'missions' | 'tasks' | 'secrets' | 'providers' | 'skills' | 'connectors' | 'webhooks' | 'mcp_servers' | 'knowledge' | 'extensions' | 'usage' | 'wallets' | 'runs' | 'autonomy' | 'logs' | 'settings' | 'projects' | 'activity'
 
 // --- Chatrooms ---
 
@@ -1571,6 +1585,7 @@ export interface ChatroomMessage {
   attachedFiles?: string[]
   imagePath?: string
   replyToId?: string
+  targetAgentId?: string
   source?: MessageSource
   historyExcluded?: boolean
 }
@@ -2973,6 +2988,15 @@ export interface Webhook {
   updatedAt: number
 }
 
+export interface DocumentRevision {
+  id: string
+  documentId: string
+  version: number
+  content: string
+  createdAt: number
+  createdBy?: string | null
+}
+
 export interface DocumentEntry {
   id: string
   title: string
@@ -2981,6 +3005,7 @@ export interface DocumentEntry {
   content: string
   method: string
   textLength: number
+  currentVersion?: number
   metadata?: Record<string, unknown>
   createdAt: number
   updatedAt: number
@@ -3069,6 +3094,9 @@ export interface BoardTask {
     reasons: string[]
     checkedAt: number
   } | null
+  // Parent/child task hierarchy (user-created subtasks)
+  parentTaskId?: string | null
+  subtaskIds?: string[]
   // Task dependencies (DAG)
   blockedBy?: string[]
   blocks?: string[]

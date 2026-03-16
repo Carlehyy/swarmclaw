@@ -140,7 +140,7 @@ export function inferSessionResetType(
   session: Partial<Session> | null | undefined,
   opts?: { isGroup?: boolean | null; threadId?: string | null },
 ): SessionResetType {
-  if ((session?.sessionType as string | undefined) === 'orchestrated') return 'main'
+  if ((session?.sessionType as string | undefined) === 'delegated' || (session?.sessionType as string | undefined) === 'orchestrated') return 'main'
   const connectorContext = isDirectConnectorSession(session) ? session?.connectorContext : null
   const threadId = opts?.threadId ?? connectorContext?.threadId ?? null
   if (threadId) return 'thread'

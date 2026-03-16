@@ -740,7 +740,7 @@ async function routeMessageToChatroom(connector: Connector, msg: InboundMessage)
           role: 'assistant',
           text: responseText,
           mentions: filterHealthyChatroomAgents(
-            parseMentions(responseText, agents, freshChatroom.agentIds),
+            parseMentions(responseText, agents, freshChatroom.agentIds, { senderId: agent.id }),
             agents,
           ).healthyAgentIds,
           reactions: [],

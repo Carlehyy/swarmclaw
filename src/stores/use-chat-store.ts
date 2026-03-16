@@ -450,6 +450,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         // Typing cadence: buffer first CADENCE_THRESHOLD chars, release word-by-word
         if (visibleText.length <= CADENCE_THRESHOLD) {
           _cadenceBuffer = visibleText
+          _cadencePos = Math.min(_cadencePos, _cadenceBuffer.length)
           if (!_cadenceInterval) {
             _cadenceInterval = setInterval(() => {
               if (_cadencePos >= _cadenceBuffer.length) {

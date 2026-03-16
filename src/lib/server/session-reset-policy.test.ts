@@ -1,14 +1,18 @@
 import assert from 'node:assert/strict'
-import test from 'node:test'
-import type { Session } from '@/types'
-import {
-  evaluateSessionFreshness,
-  inferSessionResetType,
-  resetSessionRuntime,
-  resolveSessionResetPolicy,
-} from './session-reset-policy'
+import { describe, it, before, after } from 'node:test'
 
-function makeSession(overrides: Partial<Session> = {}): Session {
+let mod: typeof import('@/lib/server/session-reset-policy')
+
+before(async () => {
+  process.env.SWARMCLAW_BUILD_MODE = '1'
+  mod = await import('@/lib/server/session-reset-policy')
+})
+
+after(() => {
+  delete process.env.SWARMCLAW_BUILD_MODE
+})
+
+function makeSession(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return {
     id: 's1',
     name: 'Test Session',
@@ -26,88 +30,176 @@ function makeSession(overrides: Partial<Session> = {}): Session {
   }
 }
 
-test('inferSessionResetType distinguishes direct, group, and thread sessions', () => {
-  assert.equal(inferSessionResetType(makeSession()), 'direct')
-  assert.equal(inferSessionResetType(makeSession({
-    name: 'connector:group',
-    user: 'connector',
-    connectorContext: { isGroup: true },
-  })), 'group')
-  assert.equal(inferSessionResetType(makeSession({
-    name: 'connector:thread',
-    user: 'connector',
-    connectorContext: { threadId: 'thread-1' },
-  })), 'thread')
-})
+describe('session-reset-policy', () => {
+  // ---- inferSessionResetType ----
+  describe('inferSessionResetType', () => {
+    it('delegated session → main', () => {
+      assert.equal(mod.inferSessionResetType({ sessionType: 'delegated' } as never), 'main')
+    })
 
-test('resolveSessionResetPolicy falls back to type defaults', () => {
-  const direct = resolveSessionResetPolicy({ session: makeSession() })
-  assert.equal(direct.mode, 'idle')
-  assert.equal(direct.idleTimeoutSec, 12 * 60 * 60)
+    it('orchestrated (legacy) session → main', () => {
+      assert.equal(mod.inferSessionResetType({ sessionType: 'orchestrated' } as never), 'main')
+    })
 
-  const thread = resolveSessionResetPolicy({
-    session: makeSession({
-      name: 'connector:thread',
-      user: 'connector',
-      connectorContext: { threadId: 'thread-1' },
-    }),
-  })
-  assert.equal(thread.mode, 'idle')
-  assert.equal(thread.idleTimeoutSec, 4 * 60 * 60)
-})
+    it('group session → group', () => {
+      assert.equal(mod.inferSessionResetType(null, { isGroup: true }), 'group')
+    })
 
-test('evaluateSessionFreshness expires idle sessions', () => {
-  const session = makeSession({ createdAt: 0, lastActiveAt: 0 })
-  const policy = resolveSessionResetPolicy({
-    session: { ...session, sessionIdleTimeoutSec: 10, sessionMaxAgeSec: 60 },
-  })
-  const freshness = evaluateSessionFreshness({ session, policy, now: 11_000 })
-  assert.deepEqual(freshness.reason, 'idle_timeout:10')
-  assert.equal(freshness.fresh, false)
-})
+    it('thread session → thread', () => {
+      assert.equal(mod.inferSessionResetType(null, { threadId: 'th-1' }), 'thread')
+    })
 
-test('evaluateSessionFreshness supports daily reset boundaries', () => {
-  const session = makeSession({
-    createdAt: Date.parse('2026-03-04T00:00:00.000Z'),
-    lastActiveAt: Date.parse('2026-03-05T03:30:00.000Z'),
-  })
-  const policy = resolveSessionResetPolicy({
-    session: {
-      ...session,
-      sessionResetMode: 'daily',
-      sessionDailyResetAt: '04:00',
-      sessionResetTimezone: 'UTC',
-      sessionMaxAgeSec: 999999,
-      sessionIdleTimeoutSec: 0,
-    },
-  })
-  const freshness = evaluateSessionFreshness({
-    session,
-    policy,
-    now: Date.parse('2026-03-05T10:00:00.000Z'),
-  })
-  assert.equal(freshness.fresh, false)
-  assert.equal(freshness.reason, 'daily_reset:04:00')
-})
-
-test('resetSessionRuntime clears transient state but preserves continuity state', () => {
-  const session = makeSession({
-    claudeSessionId: 'claude',
-    codexThreadId: 'codex',
-    opencodeSessionId: 'open',
-    delegateResumeIds: { claudeCode: 'a', codex: 'b', opencode: 'c', gemini: 'd' },
-    lastHeartbeatText: 'heartbeat',
-    lastHeartbeatSentAt: 123,
-    lastAutoMemoryAt: 456,
-    conversationTone: 'formal',
-    identityState: { personaLabel: 'Planner' },
+    it('regular session → direct', () => {
+      assert.equal(mod.inferSessionResetType(makeSession() as never), 'direct')
+    })
   })
 
-  const cleared = resetSessionRuntime(session, 'idle_timeout:10', { now: 1000 })
+  // ---- resolveSessionResetPolicy ----
+  describe('resolveSessionResetPolicy', () => {
+    it('default policy for direct type', () => {
+      const policy = mod.resolveSessionResetPolicy({ resetType: 'direct' })
+      assert.equal(policy.type, 'direct')
+      assert.equal(policy.mode, 'idle')
+      assert.equal(policy.idleTimeoutSec, 12 * 60 * 60)
+      assert.equal(policy.maxAgeSec, 7 * 24 * 60 * 60)
+      assert.equal(policy.dailyResetAt, null)
+    })
 
-  assert.equal(cleared, 1)
-  assert.deepEqual(session.messages, [])
-  assert.equal(session.claudeSessionId, null)
-  assert.equal(session.identityState?.personaLabel, 'Planner')
-  assert.equal(session.lastSessionResetReason, 'idle_timeout:10')
+    it('default policy for main type (daily mode)', () => {
+      const policy = mod.resolveSessionResetPolicy({ resetType: 'main' })
+      assert.equal(policy.type, 'main')
+      assert.equal(policy.mode, 'daily')
+      assert.equal(policy.dailyResetAt, '04:00')
+    })
+
+    it('default policy for group type', () => {
+      const policy = mod.resolveSessionResetPolicy({ resetType: 'group' })
+      assert.equal(policy.type, 'group')
+      assert.equal(policy.idleTimeoutSec, 6 * 60 * 60)
+    })
+
+    it('default policy for thread type', () => {
+      const policy = mod.resolveSessionResetPolicy({ resetType: 'thread' })
+      assert.equal(policy.type, 'thread')
+      assert.equal(policy.idleTimeoutSec, 4 * 60 * 60)
+    })
+
+    it('custom override takes precedence', () => {
+      const policy = mod.resolveSessionResetPolicy({
+        resetType: 'direct',
+        overrides: { sessionIdleTimeoutSec: 3600, sessionResetMode: 'daily', sessionDailyResetAt: '06:00' },
+      })
+      assert.equal(policy.idleTimeoutSec, 3600)
+      assert.equal(policy.mode, 'daily')
+      assert.equal(policy.dailyResetAt, '06:00')
+    })
+
+    it('session field overrides agent/settings', () => {
+      const policy = mod.resolveSessionResetPolicy({
+        resetType: 'direct',
+        session: { sessionIdleTimeoutSec: 1800 } as never,
+        agent: { sessionIdleTimeoutSec: 7200 } as never,
+      })
+      assert.equal(policy.idleTimeoutSec, 1800)
+    })
+  })
+
+  // ---- evaluateSessionFreshness ----
+  describe('evaluateSessionFreshness', () => {
+    it('no session → fresh', () => {
+      const policy = mod.resolveSessionResetPolicy({ resetType: 'direct' })
+      const result = mod.evaluateSessionFreshness({ policy })
+      assert.equal(result.fresh, true)
+    })
+
+    it('empty messages → fresh', () => {
+      const policy = mod.resolveSessionResetPolicy({ resetType: 'direct' })
+      const session = makeSession({ messages: [], createdAt: Date.now(), lastActiveAt: Date.now() })
+      const result = mod.evaluateSessionFreshness({ session: session as never, policy })
+      assert.equal(result.fresh, true)
+    })
+
+    it('within idle timeout → fresh', () => {
+      const now = Date.now()
+      const policy = mod.resolveSessionResetPolicy({ resetType: 'direct' })
+      const session = makeSession({ createdAt: now - 1000, lastActiveAt: now - 1000 })
+      const result = mod.evaluateSessionFreshness({ session: session as never, policy, now })
+      assert.equal(result.fresh, true)
+    })
+
+    it('past idle timeout → stale', () => {
+      const policy = mod.resolveSessionResetPolicy({
+        session: makeSession({
+          createdAt: 0,
+          lastActiveAt: 0,
+          sessionIdleTimeoutSec: 10,
+          sessionMaxAgeSec: 60,
+        }) as never,
+      })
+      const session = makeSession({ createdAt: 0, lastActiveAt: 0 })
+      const result = mod.evaluateSessionFreshness({ session: session as never, policy, now: 11_000 })
+      assert.equal(result.fresh, false)
+      assert.ok(result.reason?.startsWith('idle_timeout'))
+    })
+
+    it('past max age → stale', () => {
+      const now = Date.now()
+      const policy = mod.resolveSessionResetPolicy({ resetType: 'direct' })
+      const session = makeSession({
+        createdAt: now - 8 * 24 * 60 * 60 * 1000,
+        lastActiveAt: now - 1000,
+      })
+      const result = mod.evaluateSessionFreshness({ session: session as never, policy, now })
+      assert.equal(result.fresh, false)
+      assert.ok(result.reason?.startsWith('max_age'))
+    })
+
+    it('daily boundary key changes at midnight', () => {
+      const session = makeSession({
+        createdAt: Date.parse('2026-03-04T00:00:00.000Z'),
+        lastActiveAt: Date.parse('2026-03-05T03:30:00.000Z'),
+      })
+      const policy = mod.resolveSessionResetPolicy({
+        session: {
+          ...session,
+          sessionResetMode: 'daily',
+          sessionDailyResetAt: '04:00',
+          sessionResetTimezone: 'UTC',
+          sessionMaxAgeSec: 999999,
+          sessionIdleTimeoutSec: 0,
+        } as never,
+      })
+      const result = mod.evaluateSessionFreshness({
+        session: session as never,
+        policy,
+        now: Date.parse('2026-03-05T10:00:00.000Z'),
+      })
+      assert.equal(result.fresh, false)
+      assert.equal(result.reason, 'daily_reset:04:00')
+    })
+  })
+
+  // ---- resetSessionRuntime ----
+  describe('resetSessionRuntime', () => {
+    it('clears transient state but preserves identity state', () => {
+      const session = makeSession({
+        claudeSessionId: 'claude',
+        codexThreadId: 'codex',
+        opencodeSessionId: 'open',
+        delegateResumeIds: { claudeCode: 'a', codex: 'b', opencode: 'c', gemini: 'd' },
+        lastHeartbeatText: 'heartbeat',
+        lastHeartbeatSentAt: 123,
+        lastAutoMemoryAt: 456,
+        conversationTone: 'formal',
+        identityState: { personaLabel: 'Planner' },
+      })
+
+      const cleared = mod.resetSessionRuntime(session as never, 'idle_timeout:10', { now: 1000 })
+
+      assert.equal(cleared, 1)
+      assert.deepEqual(session.messages, [])
+      assert.equal(session.claudeSessionId, null)
+      assert.equal((session as Record<string, unknown>).lastSessionResetReason, 'idle_timeout:10')
+    })
+  })
 })

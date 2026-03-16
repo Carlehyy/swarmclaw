@@ -177,6 +177,18 @@ The building blocks are the same: **agents, tools, memory, delegation, schedules
 
 ## Release Notes
 
+### v1.1.6 Highlights
+
+- **Org chart view**: visual agent hierarchy with drag-and-drop reparenting, team grouping, and context-menu actions for managing agent relationships directly from the canvas.
+- **Dashboard API**: server-side metrics endpoint with cost tracking, usage aggregation, and budget warning thresholds for operator visibility.
+- **Subagent lifecycle overhaul**: state-machine lineage tracking, `delegationDepth` limits, auto-announce on spawn, and cleaner parent-child session management.
+- **Chat execution refactor**: composable prompt sections replace monolithic prompt building, continuation evaluator consolidation, and extracted stream-continuation logic for maintainability.
+- **Per-agent cost attribution**: token costs are tracked and attributed per agent, enabling budget controls and cost reporting at the agent level.
+- **Capability-based task routing**: tasks can match agents by declared capabilities, not just explicit assignment, enabling smarter automatic dispatch.
+- **Bulk agent operations**: new `/api/agents/bulk` endpoint for batch updates across multiple agents in a single request.
+- **Document revisions API**: version history for documents with `/api/documents/[id]/revisions` endpoint.
+- **Store loader consolidation**: async loaders now use `createLoader()` and `setIfChanged` to eliminate redundant re-renders from polling.
+
 ### v1.1.4 Highlights
 
 - **Orchestrator agents return as a first-class autonomy mode**: eligible agents can now run scheduled orchestrator wake cycles with their own mission, governance policy, wake interval, cycle cap, Autonomy-desk controls, and setup/editor support.
@@ -189,6 +201,19 @@ The building blocks are the same: **agents, tools, memory, delegation, schedules
 - **Release integrity repair**: `build:ci` no longer trips over the langgraph checkpoint duplicate-column path, which restores clean build validation for the release line.
 - **Storage writes are safer**: credential and agent saves were tightened to upsert-only behavior and bulk-delete safety guards so tests or scripts cannot accidentally wipe live state.
 - **Plugin-to-extension cleanup finished**: remaining rename residue in scripts and tests was cleaned up so packaging and release tooling stay aligned with the current extensions model.
+- **Safe body parsing utility**: shared `safeParseBody()` replaces scattered `await req.json()` try/catch blocks across API routes.
+
+### v1.1.4 Highlights
+
+- **Orchestrator agents as a real agent mode**: eligible agents can now run scheduled orchestrator wake cycles with their own mission, governance policy, wake interval, and cycle cap.
+- **Runtime durability and recovery**: configurable parallel task execution, stuck-task idle timeout detection, orphaned running-task recovery on startup, and restart-safe swarm/provider-health persistence.
+- **Failover and safety improvements**: provider errors classified for smarter routing, agent budget limits block task execution before it starts.
+
+### v1.1.3 Highlights
+
+- **`build:ci` repair**: fixed the langgraph checkpoint duplicate-column crash that blocked CI/build validation.
+- **Safer storage writes**: credentials and agents use upsert-only save behavior, and a collection safety guard blocks accidental bulk-delete paths.
+>>>>>>> Stashed changes
 
 ### v1.1.2 Highlights
 

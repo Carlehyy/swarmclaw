@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { genId } from '@/lib/id'
 import { loadCredentials, saveCredentials, encryptKey } from '@/lib/server/storage'
+import { safeParseBody } from '@/lib/server/safe-parse-body'
 export const dynamic = 'force-dynamic'
 
 
@@ -14,7 +15,9 @@ export async function GET(_req: Request) {
 }
 
 export async function POST(req: Request) {
-  const { provider, name, apiKey } = await req.json()
+  const { data: body, error } = await safeParseBody<{ provider: string; name: string; apiKey: string }>(req)
+  if (error) return error
+  const { provider, name, apiKey } = body
   if (!provider || !apiKey) {
     return NextResponse.json({ error: 'provider and apiKey are required' }, { status: 400 })
   }

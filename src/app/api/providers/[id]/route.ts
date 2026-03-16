@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { loadProviderConfigs, saveProviderConfigs } from '@/lib/server/storage'
 import { mutateItem, deleteItem, notFound, badRequest, type CollectionOps } from '@/lib/server/collection-helpers'
+import { safeParseBody } from '@/lib/server/safe-parse-body'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const ops: CollectionOps<any> = { load: loadProviderConfigs, save: saveProviderConfigs, topic: 'providers' }
@@ -15,7 +16,8 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
 
 export async function PUT(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
-  const body = await req.json()
+  const { data: body, error } = await safeParseBody<Record<string, unknown>>(req)
+  if (error) return error
   const result = mutateItem(ops, id, (existing) => ({
     ...existing, ...body, id, updatedAt: Date.now(),
   }))

@@ -10,6 +10,7 @@ import { normalizeAgentSandboxConfig } from '@/lib/agent-sandbox-defaults'
 import { normalizeOrchestratorConfig } from '@/lib/orchestrator-config'
 import { AgentCreateSchema, formatZodError } from '@/lib/validation/schemas'
 import { z } from 'zod'
+import { safeParseBody } from '@/lib/server/safe-parse-body'
 export const dynamic = 'force-dynamic'
 
 async function ensureDaemonIfNeeded(source: string) {
@@ -57,7 +58,8 @@ export async function GET(req: Request) {
 
 export async function POST(req: Request) {
   await ensureDaemonIfNeeded('api/agents:post')
-  const raw = await req.json()
+  const { data: raw, error } = await safeParseBody(req)
+  if (error) return error
   const rawRecord = raw && typeof raw === 'object' ? raw as Record<string, unknown> : null
   const parsed = AgentCreateSchema.safeParse(raw)
   if (!parsed.success) {

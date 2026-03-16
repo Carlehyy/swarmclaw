@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { safeParseBody } from '@/lib/server/safe-parse-body'
 import { loadSouls, saveSouls, deleteSoul, logActivity } from '@/lib/server/storage'
 import { SOUL_LIBRARY } from '@/lib/soul-library'
 import { notify } from '@/lib/server/ws-hub'
@@ -21,7 +22,8 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
 /** PUT /api/souls/[id] — update custom soul */
 export async function PUT(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
-  const body = await req.json()
+  const { data: body, error } = await safeParseBody(req)
+  if (error) return error
   
   // Can only update custom souls
   const souls = loadSouls()

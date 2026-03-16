@@ -7,6 +7,7 @@ import type { ClawHubSkillBundle } from '@/lib/server/skills/clawhub-client'
 import { fetchClawHubSkillBundle, fetchSkillContent } from '@/lib/server/skills/clawhub-client'
 import { clearDiscoveredSkillsCache, resolveWorkspaceSkillsDir } from '@/lib/server/skills/skill-discovery'
 import { auditSkillBundleFiles, auditSkillContent, mergeSkillAuditResults } from '@/lib/server/skills/skill-audit'
+import { safeParseBody } from '@/lib/server/safe-parse-body'
 import { normalizeSkillPayload } from '@/lib/server/skills/skills-normalize'
 
 function sanitizeSkillDirName(value: string): string {
@@ -68,7 +69,8 @@ async function writeClawHubBundleToWorkspace(bundle: ClawHubSkillBundle): Promis
 }
 
 export async function POST(req: Request) {
-  const body = await req.json()
+  const { data: body, error } = await safeParseBody<{ name?: string; description?: string; url: string; author?: string; tags?: string[]; content?: string }>(req)
+  if (error) return error
   const { name, description, url, author, tags } = body
   let { content } = body
   let bundle: ClawHubSkillBundle | null = null

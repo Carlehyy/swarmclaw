@@ -691,7 +691,7 @@ export function isMainSession(session: unknown): boolean {
   const sessionType = typeof (candidate as Record<string, unknown>).sessionType === 'string'
     ? (candidate as Record<string, unknown>).sessionType
     : null
-  if (sessionType === 'orchestrated') return false
+  if (sessionType === 'delegated' || sessionType === 'orchestrated') return false
   const hasAgent = typeof candidate.agentId === 'string' && candidate.agentId.trim().length > 0
   if (!hasAgent) return false
   const shortcutThread = typeof candidate.shortcutForAgentId === 'string' && candidate.shortcutForAgentId.trim().length > 0
@@ -754,10 +754,24 @@ export function buildMainLoopHeartbeatPrompt(session: unknown, fallbackPrompt: s
   ].filter(Boolean).join('\n')
 }
 
+function isInternalMetadataJson(line: string): boolean {
+  const trimmed = line.trim()
+  if (!trimmed.startsWith('{') || !trimmed.endsWith('}')) return false
+  try {
+    const obj = JSON.parse(trimmed)
+    if (typeof obj !== 'object' || obj === null || Array.isArray(obj)) return false
+    if ('isDeliverableTask' in obj && 'confidence' in obj) return true
+    if ('quality_score' in obj && 'quality_reasoning' in obj) return true
+    return false
+  } catch {
+    return false
+  }
+}
+
 export function stripMainLoopMetaForPersistence(text: string): string {
   return (text || '')
     .split('\n')
-    .filter((line) => !LEGACY_META_LINE_RE.test(line))
+    .filter((line) => !LEGACY_META_LINE_RE.test(line) && !isInternalMetadataJson(line))
     .join('\n')
     .trim()
 }

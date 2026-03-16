@@ -14,8 +14,10 @@ import { AgentAvatar } from '@/components/agents/agent-avatar'
 import { CodeBlock } from './code-block'
 import { extractMedia, isExplicitScreenshot } from './tool-call-bubble'
 import { ToolEventsSection } from './tool-events-section'
-import { AttachmentChip, parseAttachmentUrl } from '@/components/shared/attachment-chip'
-import { isStructuredMarkdown } from './markdown-utils'
+import { MessageAttachments } from '@/components/shared/attachment-chip'
+import { MarkdownBody } from '@/components/shared/markdown-body'
+import { MessageActions, ActionButton } from '@/components/shared/message-actions'
+import { isStructuredMarkdown } from '@/components/shared/markdown-utils'
 import { FilePathChip, FILE_PATH_RE, DIR_PATH_RE } from './file-path-chip'
 import { TransferAgentPicker } from './transfer-agent-picker'
 import { DelegationSourceBanner, TaskCompletionCard, parseTaskCompletion } from './delegation-banner'
@@ -189,50 +191,6 @@ interface ToolMediaEntry {
 
 // AttachmentChip, parseAttachmentUrl, regex constants, and FILE_TYPE_COLORS
 // are now imported from @/components/shared/attachment-chip
-
-function renderAttachments(
-  message: Message,
-  onOpenImage?: (image: { url: string; filename: string }) => void,
-) {
-  const isUser = message.role === 'user'
-  const seen = new Set<string>()
-  const chips: { url: string; filename: string }[] = []
-
-  // Primary attachment
-  if (message.imagePath || message.imageUrl) {
-    const primary = parseAttachmentUrl(message.imagePath, message.imageUrl)
-    if (primary.url) {
-      seen.add(primary.url)
-      chips.push(primary)
-    }
-  }
-
-  // Additional attached files
-  if (message.attachedFiles?.length) {
-    for (const fp of message.attachedFiles) {
-      const att = parseAttachmentUrl(fp)
-      if (att.url && !seen.has(att.url)) {
-        seen.add(att.url)
-        chips.push(att)
-      }
-    }
-  }
-
-  if (!chips.length) return null
-  return (
-    <div className="flex flex-col">
-      {chips.map((c) => (
-        <AttachmentChip
-          key={c.url}
-          url={c.url}
-          filename={c.filename}
-          isUserMsg={isUser}
-          onOpenImage={onOpenImage}
-        />
-      ))}
-    </div>
-  )
-}
 
 function countDisplayParagraphs(text: string): number {
   return text
@@ -511,7 +469,10 @@ export const MessageBubble = memo(function MessageBubble({ message, assistantNam
   const taskCompletion = !isUser && message.kind === 'system' ? parseTaskCompletion(message.text || '') : null
   const rawDisplayText = connectorDeliveryTranscript || (delegationSource ? delegationSource.rest : sourceText)
   const displayText = rawDisplayText
-    ? rawDisplayText.split('\n').filter((l) => !/\[(MAIN_LOOP_META|MAIN_LOOP_PLAN|MAIN_LOOP_REVIEW|AGENT_HEARTBEAT_META)\]/.test(l)).join('\n').trim()
+    ? rawDisplayText.split('\n')
+      .filter((l) => !/\[(MAIN_LOOP_META|MAIN_LOOP_PLAN|MAIN_LOOP_REVIEW|AGENT_HEARTBEAT_META)\]/.test(l))
+      .filter((l) => !/^\s*\{[^}]*"(?:isDeliverableTask|quality_score)"[^}]*\}\s*$/.test(l))
+      .join('\n').trim()
     : ''
   const hasDisplayText = displayText.length > 0
   const normalizedDisplayText = useMemo(
@@ -921,179 +882,141 @@ export const MessageBubble = memo(function MessageBubble({ message, assistantNam
             {(() => {
               let liveInlineToolMediaIndex = 0
               return (
-            <ReactMarkdown
-              remarkPlugins={[remarkGfm]}
-              rehypePlugins={[rehypeHighlight]}
-              components={{
-                pre({ children }) {
-                  return <pre>{children}</pre>
-                },
-                p({ node, children }) {
-                  const previews = collectInlinePreviewLinks(node)
-                  const streamedInlineMedia = previews.length === 0
-                    ? liveInlineToolMedia?.[liveInlineToolMediaIndex++] ?? null
-                    : null
-                  if (previews.length === 0 && !streamedInlineMedia) return <p>{children}</p>
-                  return (
-                    <>
-                      <p>{children}</p>
-                      <div className="mt-3 mb-1 flex flex-col gap-3">
-                        {previews.map((preview) => (
-                          <span key={`${preview.type}:${preview.href}`} className="block max-w-full">
-                            {preview.type === 'image' && (
-                              <a href={preview.href} download target="_blank" rel="noopener noreferrer" className="block max-w-full">
-                                {/* eslint-disable-next-line @next/next/no-img-element */}
-                                <img
-                                  src={preview.href}
-                                  alt={preview.label}
-                                  loading="lazy"
-                                  className="max-w-[400px] rounded-[10px] border border-white/10 hover:border-white/25 transition-colors"
-                                  onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
-                                />
-                              </a>
-                            )}
-                            {preview.type === 'video' && (
-                              <video src={preview.href} controls playsInline preload="none" className="max-w-full rounded-[10px] border border-white/10" />
-                            )}
-                            {preview.type === 'pdf' && (
-                              <span className="block w-full max-w-[520px] overflow-hidden rounded-[10px] border border-white/10">
-                                <iframe src={preview.href} loading="lazy" className="h-[360px] w-full bg-white" title={preview.label} />
-                              </span>
-                            )}
-                          </span>
-                        ))}
-                        {streamedInlineMedia && renderToolMediaEntry(
-                          streamedInlineMedia,
-                          `inline-tool-media-${liveInlineToolMediaIndex}-${streamedInlineMedia.url}`,
-                          handleOpenToolMediaImage,
-                        )}
-                      </div>
-                    </>
-                  )
-                },
-                code({ className, children }) {
-                  const isBlock = className?.startsWith('language-') || className?.startsWith('hljs')
-                  if (isBlock) {
-                    return <CodeBlock className={className}>{children}</CodeBlock>
-                  }
-                  // Detect file/dir paths in inline code and make them interactive
-                  const text = typeof children === 'string' ? children : ''
-                  if (text && (FILE_PATH_RE.test(text) || (DIR_PATH_RE.test(text) && text.split('/').length > 2))) {
-                    return <FilePathChip filePath={text.replace(/\/$/, '')} />
-                  }
-                  return <code className={className}>{children}</code>
-                },
-                img({ src, alt }) {
-                  if (!src || typeof src !== 'string') return null
-                  // Skip images already rendered via tool events
-                  if (toolEventMediaUrls?.has(src)) return null
-                  const isVideo = /\.(mp4|webm|mov|avi)$/i.test(src)
-                  if (isVideo) {
+                <MarkdownBody
+                  text={normalizedDisplayText}
+                  skipMediaUrls={toolEventMediaUrls || undefined}
+                  renderParagraph={(node, children) => {
+                    const previews = collectInlinePreviewLinks(node)
+                    const streamedInlineMedia = previews.length === 0
+                      ? liveInlineToolMedia?.[liveInlineToolMediaIndex++] ?? null
+                      : null
+                    if (previews.length === 0 && !streamedInlineMedia) return null // use default <p>
                     return (
-                      <video src={src} controls preload="none" className="max-w-full rounded-[10px] border border-white/10 my-2" />
+                      <>
+                        <p>{children}</p>
+                        <div className="mt-3 mb-1 flex flex-col gap-3">
+                          {previews.map((preview) => (
+                            <span key={`${preview.type}:${preview.href}`} className="block max-w-full">
+                              {preview.type === 'image' && (
+                                <a href={preview.href} download target="_blank" rel="noopener noreferrer" className="block max-w-full">
+                                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                                  <img
+                                    src={preview.href}
+                                    alt={preview.label}
+                                    loading="lazy"
+                                    className="max-w-[400px] rounded-[10px] border border-white/10 hover:border-white/25 transition-colors"
+                                    onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
+                                  />
+                                </a>
+                              )}
+                              {preview.type === 'video' && (
+                                <video src={preview.href} controls playsInline preload="none" className="max-w-full rounded-[10px] border border-white/10" />
+                              )}
+                              {preview.type === 'pdf' && (
+                                <span className="block w-full max-w-[520px] overflow-hidden rounded-[10px] border border-white/10">
+                                  <iframe src={preview.href} loading="lazy" className="h-[360px] w-full bg-white" title={preview.label} />
+                                </span>
+                              )}
+                            </span>
+                          ))}
+                          {streamedInlineMedia && renderToolMediaEntry(
+                            streamedInlineMedia,
+                            `inline-tool-media-${liveInlineToolMediaIndex}-${streamedInlineMedia.url}`,
+                            handleOpenToolMediaImage,
+                          )}
+                        </div>
+                      </>
                     )
-                  }
-                  return (
-                    <a href={src} download target="_blank" rel="noopener noreferrer" className="block my-2">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={src} alt={alt || 'File'} loading="lazy" className="max-w-full rounded-[10px] border border-white/10 hover:border-white/25 transition-colors cursor-pointer" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }} />
-                    </a>
-                  )
-                },
-                a({ href, children }) {
-                  if (!href) return <>{children}</>
-                  // Internal app links: #task:<id> and #schedule:<id>
-                  const taskMatch = href.match(/^#task:(.+)$/)
-                  if (taskMatch) {
-                    return (
-                      <button
-                        type="button"
-                        onClick={async () => {
-                          const store = useAppStore.getState()
-                          await store.loadTasks(true)
-                          store.setTaskSheetViewOnly(true)
-                          store.setEditingTaskId(taskMatch[1])
-                          store.setTaskSheetOpen(true)
-                        }}
-                        className="inline-flex items-center gap-1 text-purple-400 hover:text-purple-300 underline cursor-pointer bg-transparent border-none p-0 font-inherit text-inherit"
-                      >
-                        {children}
-                      </button>
-                    )
-                  }
-                  const schedMatch = href.match(/^#schedule:(.+)$/)
-                  if (schedMatch) {
-                    return (
-                      <button
-                        type="button"
-                        onClick={async () => {
-                          const store = useAppStore.getState()
-                          await store.loadSchedules()
-                          store.setEditingScheduleId(schedMatch[1])
-                          store.setScheduleSheetOpen(true)
-                        }}
-                        className="inline-flex items-center gap-1 text-amber-400 hover:text-amber-300 underline cursor-pointer bg-transparent border-none p-0 font-inherit text-inherit"
-                      >
-                        {children}
-                      </button>
-                    )
-                  }
-                  const isUpload = href.startsWith('/api/uploads/')
-                  if (isUpload) {
-                    const uploadPath = href.split('?')[0]
-                    const uploadIsHtml = /\.(html?)$/i.test(uploadPath)
-                    return (
-                      <span className="inline-flex items-center gap-1.5">
-                        <a href={href} download className="inline-flex items-center gap-1.5 text-sky-400 hover:text-sky-300 underline">
-                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="shrink-0">
-                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                            <polyline points="7 10 12 15 17 10" />
-                            <line x1="12" y1="15" x2="12" y2="3" />
-                          </svg>
+                  }}
+                  renderInlineCode={(text) => {
+                    if (text && (FILE_PATH_RE.test(text) || (DIR_PATH_RE.test(text) && text.split('/').length > 2))) {
+                      return <FilePathChip filePath={text.replace(/\/$/, '')} />
+                    }
+                    return null
+                  }}
+                  renderLink={(href, children) => {
+                    // Internal app links: #task:<id>
+                    const taskMatch = href.match(/^#task:(.+)$/)
+                    if (taskMatch) {
+                      return (
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            const store = useAppStore.getState()
+                            await store.loadTasks(true)
+                            store.setTaskSheetViewOnly(true)
+                            store.setEditingTaskId(taskMatch[1])
+                            store.setTaskSheetOpen(true)
+                          }}
+                          className="inline-flex items-center gap-1 text-purple-400 hover:text-purple-300 underline cursor-pointer bg-transparent border-none p-0 font-inherit text-inherit"
+                        >
                           {children}
-                        </a>
-                        {uploadIsHtml && (
-                          <a href={href} target="_blank" rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-[4px] bg-accent-soft hover:bg-accent-soft/80 text-accent-bright text-[10px] font-600 no-underline transition-colors"
-                            title="Preview in new tab">
-                            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-                              <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
-                              <circle cx="12" cy="12" r="3" />
+                        </button>
+                      )
+                    }
+                    // #schedule:<id>
+                    const schedMatch = href.match(/^#schedule:(.+)$/)
+                    if (schedMatch) {
+                      return (
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            const store = useAppStore.getState()
+                            await store.loadSchedules()
+                            store.setEditingScheduleId(schedMatch[1])
+                            store.setScheduleSheetOpen(true)
+                          }}
+                          className="inline-flex items-center gap-1 text-amber-400 hover:text-amber-300 underline cursor-pointer bg-transparent border-none p-0 font-inherit text-inherit"
+                        >
+                          {children}
+                        </button>
+                      )
+                    }
+                    // Upload links (agent chat has richer handling than default)
+                    const isUpload = href.startsWith('/api/uploads/')
+                    if (isUpload) {
+                      const uploadPath = href.split('?')[0]
+                      const uploadIsHtml = /\.(html?)$/i.test(uploadPath)
+                      return (
+                        <span className="inline-flex items-center gap-1.5">
+                          <a href={href} download className="inline-flex items-center gap-1.5 text-sky-400 hover:text-sky-300 underline">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="shrink-0">
+                              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                              <polyline points="7 10 12 15 17 10" />
+                              <line x1="12" y1="15" x2="12" y2="3" />
                             </svg>
-                            Preview
+                            {children}
                           </a>
-                        )}
-                      </span>
-                    )
-                  }
-                  // YouTube embed
-                  const ytMatch = href.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([a-zA-Z0-9_-]{11})/)
-                  if (ytMatch) {
-                    return (
-                      <div className="my-2">
-                        <iframe
-                          src={`https://www.youtube-nocookie.com/embed/${ytMatch[1]}`}
-                          className="w-full aspect-video rounded-[10px] border border-white/10"
-                          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                          allowFullScreen
-                          title="YouTube video"
-                        />
-                      </div>
-                    )
-                  }
-                  return <a href={href} target="_blank" rel="noopener noreferrer">{children}</a>
-                },
-              }}
-            >
-              {normalizedDisplayText}
-            </ReactMarkdown>
+                          {uploadIsHtml && (
+                            <a href={href} target="_blank" rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-[4px] bg-accent-soft hover:bg-accent-soft/80 text-accent-bright text-[10px] font-600 no-underline transition-colors"
+                              title="Preview in new tab">
+                              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                                <circle cx="12" cy="12" r="3" />
+                              </svg>
+                              Preview
+                            </a>
+                          )}
+                        </span>
+                      )
+                    }
+                    return null // fall through to MarkdownBody defaults
+                  }}
+                />
               )
             })()}
           </div>
           ) : null
           }
 
-          {renderAttachments(message, isDesktop ? handleOpenAttachmentImage : undefined)}
+          <MessageAttachments
+            imagePath={message.imagePath}
+            imageUrl={message.imageUrl}
+            attachedFiles={message.attachedFiles}
+            isUser={isUser}
+            onOpenImage={isDesktop ? handleOpenAttachmentImage : undefined}
+          />
 
           {trailingToolMedia && (
             <div className={`flex flex-col gap-2 ${hasDisplayText || hasPrimaryAttachments ? 'mt-3' : ''}`}>
@@ -1115,83 +1038,49 @@ export const MessageBubble = memo(function MessageBubble({ message, assistantNam
 
       {/* Action buttons */}
       {showActions && (
-        <div className={`flex items-center gap-1 mt-1.5 px-1 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-all duration-200 translate-y-2 md:group-hover:translate-y-0 ${isUser ? 'justify-end' : ''}`}>
+        <MessageActions layout="bubble" align={isUser ? 'end' : 'start'}>
           {canCopy && (
-            <button
+            <ActionButton
               onClick={handleCopy}
-              aria-label="Copy message"
-              className="flex items-center gap-1.5 px-2.5 py-1.5 min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0 rounded-[8px] border-none bg-transparent
-                text-[11px] font-500 text-text-3 cursor-pointer hover:text-text-2 hover:bg-white/[0.04] transition-all justify-center md:justify-start"
-              style={{ fontFamily: 'inherit' }}
-            >
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-                <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
-                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
-              </svg>
-              {copied ? 'Copied' : 'Copy'}
-            </button>
+              title="Copy message"
+              icon={<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2" /><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" /></svg>}
+              label={copied ? 'Copied' : 'Copy'}
+            />
           )}
           {typeof messageIndex === 'number' && onToggleBookmark && (
-            <button
+            <ActionButton
               onClick={() => onToggleBookmark(messageIndex)}
-              aria-label={message.bookmarked ? 'Remove bookmark' : 'Bookmark message'}
-              className={`flex items-center gap-1.5 px-2.5 py-1.5 min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0 rounded-[8px] border-none bg-transparent
-                text-[11px] font-500 cursor-pointer hover:bg-white/[0.04] transition-all justify-center md:justify-start ${message.bookmarked ? 'text-amber-400' : ''}`}
-              style={{ fontFamily: 'inherit' }}
-            >
-              <svg width="12" height="12" viewBox="0 0 24 24" fill={message.bookmarked ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-                <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
-              </svg>
-              {message.bookmarked ? 'Unbookmark' : 'Bookmark'}
-            </button>
+              title={message.bookmarked ? 'Remove bookmark' : 'Bookmark message'}
+              active={message.bookmarked}
+              activeClassName="text-amber-400"
+              icon={<svg width="12" height="12" viewBox="0 0 24 24" fill={message.bookmarked ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" /></svg>}
+              label={message.bookmarked ? 'Unbookmark' : 'Bookmark'}
+            />
           )}
           {isUser && typeof messageIndex === 'number' && onEditResend && (
-            <button
+            <ActionButton
               onClick={() => { setEditText(message.text); setEditing(true) }}
-              aria-label="Edit and resend"
-              className="flex items-center gap-1.5 px-2.5 py-1.5 min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0 rounded-[8px] border-none bg-transparent
-                text-[11px] font-500 text-text-3 cursor-pointer hover:text-text-2 hover:bg-white/[0.04] transition-all justify-center md:justify-start"
-              style={{ fontFamily: 'inherit' }}
-            >
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
-                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
-              </svg>
-              Edit
-            </button>
+              title="Edit and resend"
+              icon={<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" /><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" /></svg>}
+              label="Edit"
+            />
           )}
           {!isUser && isLast && onRetry && (
-            <button
+            <ActionButton
               onClick={onRetry}
-              aria-label="Retry message"
-              className="flex items-center gap-1.5 px-2.5 py-1.5 min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0 rounded-[8px] border-none bg-transparent
-                text-[11px] font-500 text-text-3 cursor-pointer hover:text-text-2 hover:bg-white/[0.04] transition-all justify-center md:justify-start"
-              style={{ fontFamily: 'inherit' }}
-            >
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-                <polyline points="23 4 23 10 17 10" />
-                <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
-              </svg>
-              Retry
-            </button>
+              title="Retry message"
+              icon={<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><polyline points="23 4 23 10 17 10" /><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" /></svg>}
+              label="Retry"
+            />
           )}
           {!isUser && typeof messageIndex === 'number' && onTransferToAgent && (
             <div className="relative">
-              <button
+              <ActionButton
                 onClick={() => setTransferPickerOpen(!transferPickerOpen)}
-                aria-label="Transfer to another agent"
-                className="flex items-center gap-1.5 px-2.5 py-1.5 min-h-[44px] min-w-[44px] md:min-h-0 md:min-w-0 rounded-[8px] border-none bg-transparent
-                  text-[11px] font-500 text-text-3 cursor-pointer hover:text-text-2 hover:bg-white/[0.04] transition-all justify-center md:justify-start"
-                style={{ fontFamily: 'inherit' }}
-              >
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-                  <path d="M8 3L4 7l4 4" />
-                  <path d="M4 7h16" />
-                  <path d="M16 21l4-4-4-4" />
-                  <path d="M20 17H4" />
-                </svg>
-                Transfer
-              </button>
+                title="Transfer to another agent"
+                icon={<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M8 3L4 7l4 4" /><path d="M4 7h16" /><path d="M16 21l4-4-4-4" /><path d="M20 17H4" /></svg>}
+                label="Transfer"
+              />
               {transferPickerOpen && (
                 <TransferAgentPicker
                   onSelect={(agentId) => { onTransferToAgent(messageIndex, agentId); setTransferPickerOpen(false) }}
@@ -1200,7 +1089,7 @@ export const MessageBubble = memo(function MessageBubble({ message, assistantNam
               )}
             </div>
           )}
-        </div>
+        </MessageActions>
       )}
 
       {/* Inline edit mode */}

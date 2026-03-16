@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import fs from 'fs'
 import path from 'path'
+import { safeParseBody } from '@/lib/server/safe-parse-body'
 import { UPLOAD_DIR } from '@/lib/server/storage'
 import { getFileCategory } from '@/lib/server/mime'
 
@@ -54,7 +55,8 @@ function isUnsafeName(name: string): boolean {
 }
 
 export async function DELETE(req: Request) {
-  const body = (await req.json()) as DeleteBody
+  const { data: body, error } = await safeParseBody<DeleteBody>(req)
+  if (error) return error
   const files = listUploadFiles()
   let toDelete: string[] = []
 

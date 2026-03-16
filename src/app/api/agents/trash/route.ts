@@ -3,6 +3,7 @@ import { loadTrashedAgents, loadAgents, saveAgents, deleteAgent } from '@/lib/se
 import { notify } from '@/lib/server/ws-hub'
 import { badRequest, notFound } from '@/lib/server/collection-helpers'
 import { purgeAgentReferences, restoreAgentSchedules } from '@/lib/server/agents/agent-cascade'
+import { safeParseBody } from '@/lib/server/safe-parse-body'
 
 /** GET — list trashed agents */
 export async function GET() {
@@ -11,7 +12,8 @@ export async function GET() {
 
 /** POST { id } — restore a trashed agent */
 export async function POST(req: Request) {
-  const body = await req.json()
+  const { data: body, error } = await safeParseBody(req)
+  if (error) return error
   const id = body?.id as string | undefined
   if (!id) return badRequest('Missing agent id')
 
@@ -35,7 +37,8 @@ export async function POST(req: Request) {
 
 /** DELETE { id } — permanently delete a trashed agent */
 export async function DELETE(req: Request) {
-  const body = await req.json()
+  const { data: body, error: parseError } = await safeParseBody(req)
+  if (parseError) return parseError
   const id = body?.id as string | undefined
   if (!id) return badRequest('Missing agent id')
 

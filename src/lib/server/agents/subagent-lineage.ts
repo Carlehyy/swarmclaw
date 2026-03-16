@@ -1,10 +1,11 @@
 /**
  * Subagent Lineage & Lifecycle Tracker
  *
- * Tracks parent → child relationships between subagent sessions and manages
- * lifecycle state transitions. The lifecycle state lives directly on the
- * lineage node (single source of truth), eliminating the need for a separate
- * state machine registry.
+ * Tracks parent → child relationships between subagent sessions.
+ * Status derives from DelegationJobRecord (the single source of truth
+ * for execution state). The lineage layer provides tree-structure queries
+ * (ancestors, descendants, subtree cancel) and stores a lightweight status
+ * mirror for fast in-memory lookups.
  *
  * Lineage nodes are stored in-memory (globalThis-scoped for HMR safety).
  */
@@ -14,7 +15,7 @@ import { hmrSingleton } from '@/lib/shared-utils'
 import { notify } from '@/lib/server/ws-hub'
 
 // ---------------------------------------------------------------------------
-// Lifecycle States & Events
+// Lifecycle States
 // ---------------------------------------------------------------------------
 
 export type SubagentState =
@@ -27,54 +28,8 @@ export type SubagentState =
   | 'cancelled'     // Cancelled by parent or user
   | 'timed_out'     // Exceeded time limit
 
-export type SubagentEvent =
-  | 'READY'         // Setup complete, queued
-  | 'START'         // Begin execution
-  | 'SPAWN_CHILD'   // Spawned a child subagent, waiting
-  | 'CHILD_DONE'    // Child subagent completed, resume
-  | 'COMPLETE'      // Execution finished successfully
-  | 'FAIL'          // Execution finished with error
-  | 'CANCEL'        // Cancelled externally
-  | 'TIMEOUT'       // Time limit exceeded
-
-const TRANSITIONS: Record<SubagentState, Partial<Record<SubagentEvent, SubagentState>>> = {
-  initializing: { READY: 'ready', FAIL: 'failed', CANCEL: 'cancelled' },
-  ready:        { START: 'running', FAIL: 'failed', CANCEL: 'cancelled' },
-  running:      { SPAWN_CHILD: 'waiting', COMPLETE: 'completed', FAIL: 'failed', CANCEL: 'cancelled', TIMEOUT: 'timed_out' },
-  waiting:      { CHILD_DONE: 'running', COMPLETE: 'completed', FAIL: 'failed', CANCEL: 'cancelled', TIMEOUT: 'timed_out' },
-  completed:    {},
-  failed:       {},
-  cancelled:    {},
-  timed_out:    {},
-}
-
 export function isTerminalState(state: SubagentState): boolean {
   return state === 'completed' || state === 'failed' || state === 'cancelled' || state === 'timed_out'
-}
-
-/** Resolve next state for a (state, event) pair. Returns undefined if invalid. */
-function resolveTransition(state: SubagentState, event: SubagentEvent): SubagentState | undefined {
-  return TRANSITIONS[state]?.[event]
-}
-
-/**
- * Check if a transition is valid without performing it.
- */
-export function canTransition(nodeOrState: string | SubagentState, event: SubagentEvent): boolean {
-  // If it looks like a lineage node ID, look it up
-  const state: SubagentState | undefined =
-    (nodeOrState in TRANSITIONS)
-      ? nodeOrState as SubagentState
-      : store.get(nodeOrState)?.status
-  if (!state) return false
-  return resolveTransition(state, event) !== undefined
-}
-
-/**
- * Get valid events from a state (for tests / introspection).
- */
-export function validEvents(state: SubagentState): SubagentEvent[] {
-  return Object.keys(TRANSITIONS[state] ?? {}) as SubagentEvent[]
 }
 
 // ---------------------------------------------------------------------------
@@ -105,7 +60,7 @@ export interface LineageNode {
   /** Timestamps */
   createdAt: number
   completedAt: number | null
-  /** Lifecycle state — single source of truth for execution status */
+  /** Lifecycle status mirror — kept in sync with DelegationJobRecord */
   status: SubagentState
   /** Result summary (truncated) */
   resultPreview: string | null
@@ -148,21 +103,20 @@ function notifyLineageChanged() {
 }
 
 // ---------------------------------------------------------------------------
-// Lifecycle Transitions
+// Direct Status Updates (replaces state machine)
 // ---------------------------------------------------------------------------
 
 /**
- * Transition a lineage node's lifecycle state. Returns the new state,
- * or null if the transition is invalid or the node doesn't exist.
+ * Set a lineage node's status directly. Returns the updated node,
+ * or null if the node doesn't exist or is already in a terminal state.
  */
-export function transitionState(nodeId: string, event: SubagentEvent): SubagentState | null {
+export function setLineageStatus(nodeId: string, status: SubagentState): LineageNode | null {
   const node = store.get(nodeId)
   if (!node) return null
-  const next = resolveTransition(node.status, event)
-  if (!next) return null
-  store.set(nodeId, { ...node, status: next })
+  if (isTerminalState(node.status)) return node
+  store.set(nodeId, { ...node, status })
   notifyLineageChanged()
-  return next
+  return store.get(nodeId) ?? null
 }
 
 // ---------------------------------------------------------------------------
@@ -235,9 +189,7 @@ export function completeLineageNode(id: string, resultPreview: string | null): L
   const node = store.get(id)
   if (!node) return null
   if (isTerminalState(node.status)) return node
-  const next = resolveTransition(node.status, 'COMPLETE')
-  if (!next) return null
-  const updated = { ...node, status: next, completedAt: Date.now(), resultPreview }
+  const updated = { ...node, status: 'completed' as const, completedAt: Date.now(), resultPreview }
   store.set(id, updated)
   notifyLineageChanged()
   return updated
@@ -247,9 +199,7 @@ export function failLineageNode(id: string, error: string): LineageNode | null {
   const node = store.get(id)
   if (!node) return null
   if (isTerminalState(node.status)) return node
-  const next = resolveTransition(node.status, 'FAIL')
-  if (!next) return null
-  const updated = { ...node, status: next, completedAt: Date.now(), error }
+  const updated = { ...node, status: 'failed' as const, completedAt: Date.now(), error }
   store.set(id, updated)
   notifyLineageChanged()
   return updated
@@ -259,9 +209,7 @@ export function cancelLineageNode(id: string): LineageNode | null {
   const node = store.get(id)
   if (!node) return null
   if (isTerminalState(node.status)) return node
-  const next = resolveTransition(node.status, 'CANCEL')
-  if (!next) return null
-  const updated = { ...node, status: next, completedAt: Date.now() }
+  const updated = { ...node, status: 'cancelled' as const, completedAt: Date.now() }
   store.set(id, updated)
   notifyLineageChanged()
   return updated

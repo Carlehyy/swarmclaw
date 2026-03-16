@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { genId } from '@/lib/id'
 import { loadSecrets, saveSecrets, encryptKey } from '@/lib/server/storage'
+import { safeParseBody } from '@/lib/server/safe-parse-body'
 export const dynamic = 'force-dynamic'
 
 
@@ -17,7 +18,8 @@ export async function GET(_req: Request) {
 }
 
 export async function POST(req: Request) {
-  const body = await req.json()
+  const { data: body, error } = await safeParseBody<{ value?: string; name?: string; service?: string; scope?: string; agentIds?: string[]; projectId?: string }>(req)
+  if (error) return error
   const id = genId()
   const now = Date.now()
   const secrets = loadSecrets()

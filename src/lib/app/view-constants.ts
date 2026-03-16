@@ -3,6 +3,7 @@ import type { AppView } from '@/types'
 export const VIEW_LABELS: Record<AppView, string> = {
   home: 'Home',
   agents: 'Agents',
+  org_chart: 'Org Chart',
   inbox: 'Inbox',
   chatrooms: 'Chatrooms',
   protocols: 'Sessions',
@@ -46,6 +47,7 @@ export const CREATE_LABELS: Partial<Record<AppView, string>> = {
 export const VIEW_DESCRIPTIONS: Record<AppView, string> = {
   home: 'SwarmClaw overview',
   agents: 'Chat with & configure your AI agents',
+  org_chart: 'Visual agent hierarchy and delegation topology',
   inbox: 'Review external connector conversations by platform and bridge',
   chatrooms: 'Multi-agent collaborative chatrooms',
   protocols: 'Temporary structured sessions and protocol-driven runs',
@@ -72,6 +74,12 @@ export const VIEW_DESCRIPTIONS: Record<AppView, string> = {
 }
 
 export const VIEW_EMPTY_STATES: Record<Exclude<AppView, 'agents' | 'home'>, { icon: string; title: string; description: string; features: string[] }> = {
+  org_chart: {
+    icon: 'git-branch',
+    title: 'Org Chart',
+    description: 'Visualize your agent hierarchy and delegation topology. Drag agents to rewire coordinator-worker relationships.',
+    features: ['See who delegates to whom at a glance', 'Drag-and-drop to reparent agents under coordinators', 'Auto-wire delegationTargetAgentIds when you drop', 'Group agents into color-coded teams'],
+  },
   chatrooms: {
     icon: 'message-square',
     title: 'Chatrooms',
@@ -213,7 +221,7 @@ export const VIEW_EMPTY_STATES: Record<Exclude<AppView, 'agents' | 'home'>, { ic
 }
 
 export const FULL_WIDTH_VIEWS = new Set<AppView>([
-  'home', 'inbox', 'chatrooms', 'protocols', 'schedules', 'missions', 'secrets', 'providers', 'skills',
+  'home', 'org_chart', 'inbox', 'chatrooms', 'protocols', 'schedules', 'missions', 'secrets', 'providers', 'skills',
   'connectors', 'webhooks', 'mcp_servers', 'knowledge', 'extensions',
   'usage', 'wallets', 'runs', 'autonomy', 'logs', 'settings', 'activity', 'projects',
 ])

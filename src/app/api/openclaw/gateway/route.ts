@@ -1,11 +1,13 @@
 import { NextResponse } from 'next/server'
+import { safeParseBody } from '@/lib/server/safe-parse-body'
 import { ensureGatewayConnected, getGateway, disconnectGateway, manualConnect } from '@/lib/server/openclaw/gateway'
 import { errorMessage } from '@/lib/shared-utils'
 
 /** POST — proxy an RPC call or perform gateway actions */
 export async function POST(req: Request) {
-  const body = await req.json()
-  const { method, params } = body as { method?: string; params?: Record<string, unknown> }
+  const { data: body, error } = await safeParseBody<{ method?: string; params?: Record<string, unknown> }>(req)
+  if (error) return error
+  const { method, params } = body
   const profileId = typeof params?.profileId === 'string' ? params.profileId : undefined
   if (!method || typeof method !== 'string') {
     return NextResponse.json({ error: 'Missing RPC method' }, { status: 400 })

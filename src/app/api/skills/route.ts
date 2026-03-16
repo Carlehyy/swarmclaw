@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { safeParseBody } from '@/lib/server/safe-parse-body'
 import { genId } from '@/lib/id'
 import { loadSkills, saveSkills } from '@/lib/server/storage'
 import { normalizeSkillPayload } from '@/lib/server/skills/skills-normalize'
@@ -10,7 +11,8 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
-  const body = await req.json()
+  const { data: body, error } = await safeParseBody(req)
+  if (error) return error
   const skills = loadSkills()
   const id = genId()
   const normalized = normalizeSkillPayload(body)

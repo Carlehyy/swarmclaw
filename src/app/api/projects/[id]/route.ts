@@ -3,6 +3,7 @@ import { loadProjects, saveProjects, deleteProject, loadAgents, saveAgents, load
 import { mutateItem, deleteItem, notFound, type CollectionOps } from '@/lib/server/collection-helpers'
 import { ensureProjectWorkspace, normalizeProjectPatchInput } from '@/lib/server/project-utils'
 import { notify } from '@/lib/server/ws-hub'
+import { safeParseBody } from '@/lib/server/safe-parse-body'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const ops: CollectionOps<any> = { load: loadProjects, save: saveProjects, deleteFn: deleteProject, topic: 'projects' }
@@ -16,7 +17,8 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
 
 export async function PUT(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
-  const body = await req.json()
+  const { data: body, error } = await safeParseBody<Record<string, unknown>>(req)
+  if (error) return error
   const result = mutateItem(ops, id, (project) => {
     const patch = normalizeProjectPatchInput(body && typeof body === 'object' ? body as Record<string, unknown> : {})
     Object.assign(project, patch, { updatedAt: Date.now() })

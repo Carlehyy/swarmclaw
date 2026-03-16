@@ -3,6 +3,7 @@ import { genId } from '@/lib/id'
 import { loadProjects, saveProjects } from '@/lib/server/storage'
 import { ensureProjectWorkspace, normalizeProjectCreateInput } from '@/lib/server/project-utils'
 import { notify } from '@/lib/server/ws-hub'
+import { safeParseBody } from '@/lib/server/safe-parse-body'
 export const dynamic = 'force-dynamic'
 
 export async function GET() {
@@ -10,7 +11,8 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
-  const body = await req.json()
+  const { data: body, error } = await safeParseBody<Record<string, unknown>>(req)
+  if (error) return error
   const id = genId()
   const now = Date.now()
   const projects = loadProjects()

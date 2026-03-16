@@ -3,6 +3,7 @@ import {
   loadConnectors, saveConnectors,
   loadCredentials, decryptKey,
   upsertConnectorHealthEvent,
+  logActivity,
 } from '../storage'
 import type { ConnectorHealthEventType } from '@/types'
 import { dedup, errorMessage, sleep } from '@/lib/shared-utils'
@@ -217,6 +218,7 @@ async function _startConnectorImpl(connectorId: string): Promise<void> {
     notify('connectors')
 
     console.log(`[connector] Started ${connector.platform} connector: ${connector.name}`)
+    logActivity({ entityType: 'connector', entityId: connectorId, action: 'started', actor: 'system', summary: `Connector "${connector.name}" (${connector.platform}) started` })
     recordHealthEvent(connectorId, 'started', `${connector.platform} connector "${connector.name}" started`)
   } catch (err: unknown) {
     const errMsg = errorMessage(err)
@@ -276,6 +278,7 @@ export async function stopConnector(
   }
 
   console.log(`[connector] Stopped connector: ${connectorId}`)
+  logActivity({ entityType: 'connector', entityId: connectorId, action: 'stopped', actor: 'system', summary: `Connector stopped` })
   recordHealthEvent(connectorId, 'stopped', `Connector stopped`)
 }
 
@@ -317,6 +320,8 @@ export async function repairConnector(connectorId: string): Promise<void> {
   // Clear auth directory
   const { clearAuthDir } = await import('./whatsapp')
   clearAuthDir(connectorId)
+
+  logActivity({ entityType: 'connector', entityId: connectorId, action: 'repaired', actor: 'system', summary: `Connector repaired (auth cleared, restarting)` })
 
   // Restart the connector — will get fresh QR
   await startConnector(connectorId)

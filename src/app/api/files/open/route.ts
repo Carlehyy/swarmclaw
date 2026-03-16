@@ -2,9 +2,12 @@ import { NextResponse } from 'next/server'
 import { spawn } from 'child_process'
 import fs from 'fs'
 import path from 'path'
+import { safeParseBody } from '@/lib/server/safe-parse-body'
 
 export async function POST(req: Request) {
-  const { path: targetPath } = await req.json() as { path?: string }
+  const { data: body, error } = await safeParseBody<{ path?: string }>(req)
+  if (error) return error
+  const { path: targetPath } = body
   if (!targetPath || typeof targetPath !== 'string') {
     return NextResponse.json({ error: 'path is required' }, { status: 400 })
   }

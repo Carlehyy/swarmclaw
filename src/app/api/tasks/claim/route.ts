@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { safeParseBody } from '@/lib/server/safe-parse-body'
 import { claimPoolTask } from '@/lib/server/runtime/queue'
 
 export async function POST(req: NextRequest) {
-  const body = await req.json()
-  const { taskId, agentId } = body || {}
+  const { data: body, error } = await safeParseBody<{ taskId?: string; agentId?: string }>(req)
+  if (error) return error
+  const { taskId, agentId } = body
   if (!taskId || typeof taskId !== 'string') {
     return NextResponse.json({ error: 'taskId is required' }, { status: 400 })
   }

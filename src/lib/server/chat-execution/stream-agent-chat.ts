@@ -5,23 +5,33 @@ import { MemorySaver } from '@langchain/langgraph'
 import { DEFAULT_HEARTBEAT_INTERVAL_SEC } from '@/lib/runtime/heartbeat-defaults'
 import { buildSessionTools } from '@/lib/server/session-tools'
 import { buildChatModel } from '@/lib/server/build-llm'
-import { loadSettings, loadAgents, loadSkills } from '@/lib/server/storage'
+import { loadSettings, loadAgents } from '@/lib/server/storage'
 import { getExtensionManager } from '@/lib/server/extensions'
 import {
   collectCapabilityAgentContext,
-  listNativeCapabilities,
   runCapabilityBeforePromptBuild,
   runCapabilityHook,
 } from '@/lib/server/native-capabilities'
 import { loadRuntimeSettings, getAgentLoopRecursionLimit } from '@/lib/server/runtime/runtime-settings'
-import { buildRuntimeSkillPromptBlocks, resolveRuntimeSkills } from '@/lib/server/skills/runtime-skill-resolver'
+import { truncateToolResultText } from '@/lib/server/chat-execution/tool-result-guard'
+import {
+  buildIdentitySection,
+  buildThinkingSection,
+  buildWorkspaceSection,
+  buildAgentAwarenessSection,
+  buildSituationalSection,
+  buildProjectSection,
+  buildExtensionAccessAuditSection,
+  buildSuggestionsSection,
+  buildProactiveMemorySection,
+  buildCoordinatorSection,
+} from '@/lib/server/chat-execution/prompt-sections'
 
 import { logExecution } from '@/lib/server/execution-log'
 import { buildCurrentDateTimePromptContext } from '@/lib/server/prompt-runtime-context'
 import { expandExtensionIds } from '@/lib/server/tool-aliases'
 import type { Session, Message } from '@/types'
 import { getEnabledCapabilityIds } from '@/lib/capability-selection'
-import { buildIdentityContinuityContext } from '@/lib/server/identity-continuity'
 import { enqueueSystemEvent } from '@/lib/server/runtime/system-events'
 import { resolveActiveProjectContext } from '@/lib/server/project-context'
 import { resolveImagePath } from '@/lib/server/resolve-image'
@@ -31,7 +41,6 @@ import { resolveSessionToolPolicy } from '@/lib/server/tool-capability-policy'
 import { ToolLoopTracker } from '@/lib/server/tool-loop-detection'
 import { isCurrentThreadRecallRequest } from '@/lib/server/memory/memory-policy'
 import {
-  buildSessionMemoryScopeFilter,
   resolveEffectiveSessionMemoryScopeMode,
 } from '@/lib/server/memory/session-memory-scope'
 import {
@@ -304,6 +313,7 @@ async function streamAgentChatCore(opts: StreamAgentChatOpts): Promise<StreamAge
   }
 
   // Load agent context when a full prompt was not already composed by the route layer.
+  let isCoordinatorAgent = false
   let agentDelegationEnabled = false
   let agentDelegationTargetMode: 'all' | 'selected' = 'all'
   let agentDelegationTargetAgentIds: string[] | undefined
@@ -317,6 +327,7 @@ async function streamAgentChatCore(opts: StreamAgentChatOpts): Promise<StreamAge
   if (session.agentId) {
     const agents = loadAgents()
     const agent = agents[session.agentId]
+    isCoordinatorAgent = agent?.role === 'coordinator'
     agentDelegationEnabled = agent?.delegationEnabled === true
     agentDelegationTargetMode = agent?.delegationTargetMode === 'selected' ? 'selected' : 'all'
     agentDelegationTargetAgentIds = Array.isArray(agent?.delegationTargetAgentIds) ? agent.delegationTargetAgentIds : undefined
@@ -327,91 +338,29 @@ async function streamAgentChatCore(opts: StreamAgentChatOpts): Promise<StreamAge
     agentResponseStyle = agent?.responseStyle || null
     agentResponseMaxChars = agent?.responseMaxChars || null
     if (!hasProvidedSystemPrompt) {
-      if (isMinimalPrompt) {
-        // Minimal mode: name only, no description, no "not Assistant" pep talk
-        promptParts.push(`## My Identity\nMy name is ${agent?.name || 'Agent'}.`)
-      } else {
-        const identityLines = [`## My Identity`, `My name is ${agent?.name || 'Agent'}.`]
-        if (agent?.description) identityLines.push(agent.description)
-        identityLines.push('I should always refer to myself by this name. I am not "Assistant" — I have my own name and identity.')
-        promptParts.push(identityLines.join(' '))
-      }
-      // Identity continuity — full mode only
-      if (!isMinimalPrompt) {
-        const continuityBlock = buildIdentityContinuityContext(session, agent)
-        if (continuityBlock) promptParts.push(continuityBlock)
-      }
-      // Soul — truncated to 300 chars in minimal mode
-      if (agent?.soul) {
-        promptParts.push(isMinimalPrompt ? agent.soul.slice(0, 300) : agent.soul)
-      }
-      if (agent?.systemPrompt) promptParts.push(agent.systemPrompt)
-      // Skills — full mode only
-      if (!isMinimalPrompt) {
-        try {
-          const allSkills = loadSkills()
-          const runtimeSkills = resolveRuntimeSkills({
-            cwd: session.cwd,
-            enabledExtensions: sessionExtensions,
-            agentId: agent?.id || null,
-            sessionId: session.id,
-            userId: session.user,
-            agentSkillIds: agent?.skillIds || [],
-            storedSkills: allSkills,
-            selectedSkillId: session.skillRuntimeState?.selectedSkillId || null,
-          })
-          promptParts.push(...buildRuntimeSkillPromptBlocks(runtimeSkills))
-        } catch { /* non-critical */ }
-      }
+      promptParts.push(...buildIdentitySection(agent, session, sessionExtensions, isMinimalPrompt))
+    }
+    // Coordinator prompt — lists available workers for delegation
+    if (!isMinimalPrompt) {
+      const coordinatorBlock = buildCoordinatorSection(agent, sessionExtensions)
+      if (coordinatorBlock) promptParts.push(coordinatorBlock)
     }
   }
 
-  // Thinking level guidance — full mode only
-  if (!isMinimalPrompt && agentThinkingLevel) {
-    const thinkingGuidance: Record<string, string> = {
-      minimal: 'Be direct and concise. Skip extended analysis.',
-      low: 'Keep reasoning brief. Focus on key conclusions.',
-      medium: 'Provide moderate depth of analysis and reasoning.',
-      high: 'Think deeply and thoroughly. Show detailed reasoning.',
-    }
-    promptParts.push(`## Reasoning Depth\n${thinkingGuidance[agentThinkingLevel]}`)
-  }
+  // Composable prompt sections — each builder returns string | null (or string[])
+  const thinkingBlock = buildThinkingSection(agentThinkingLevel, isMinimalPrompt)
+  if (thinkingBlock) promptParts.push(thinkingBlock)
 
-  // Workspace context — full mode only
-  if (!isMinimalPrompt && !hasProvidedSystemPrompt && agentHeartbeatEnabled) {
-    try {
-      const { buildWorkspaceContext } = await import('@/lib/server/workspace-context')
-      const wsCtx = buildWorkspaceContext({ cwd: session.cwd })
-      if (wsCtx.block) promptParts.push(wsCtx.block)
-    } catch { /* non-critical */ }
-  }
-
-  // Agent awareness — full mode only
-  if (!isMinimalPrompt) {
-    const hasDelegation = sessionExtensions.some(p => p === 'delegate' || p === 'spawn_subagent')
-    if (hasDelegation && session.agentId) {
-      try {
-        const { buildAgentAwarenessBlock } = await import('@/lib/server/agents/agent-registry')
-        const awarenessBlock = buildAgentAwarenessBlock(session.agentId)
-        if (awarenessBlock) promptParts.push(awarenessBlock)
-      } catch { /* non-critical */ }
-    }
-  }
-
-  // Situational awareness — full mode only
-  if (!isMinimalPrompt && session.agentId) {
-    try {
-      const { buildSituationalAwarenessBlock } = await import(
-        '@/lib/server/chat-execution/situational-awareness'
-      )
-      const saBlock = buildSituationalAwarenessBlock({
-        agentId: session.agentId,
-        sessionId: session.id,
-        missionId: session.missionId || null,
-      })
-      if (saBlock) promptParts.push(saBlock)
-    } catch { /* non-critical */ }
-  }
+  // Async sections — run concurrently where possible
+  const [workspaceBlock, awarenessBlock, situationalBlock, extensionAuditBlock] = await Promise.all([
+    !hasProvidedSystemPrompt ? buildWorkspaceSection(session, isMinimalPrompt, agentHeartbeatEnabled) : null,
+    buildAgentAwarenessSection(session, sessionExtensions, isMinimalPrompt),
+    buildSituationalSection(session, isMinimalPrompt),
+    buildExtensionAccessAuditSection(sessionExtensions, agentMcpDisabledTools, isMinimalPrompt),
+  ])
+  if (workspaceBlock) promptParts.push(workspaceBlock)
+  if (awarenessBlock) promptParts.push(awarenessBlock)
+  if (situationalBlock) promptParts.push(situationalBlock)
 
   // Extra system context — always included (caller-provided context is always relevant)
   if (Array.isArray(extraSystemContext)) {
@@ -432,87 +381,15 @@ async function streamAgentChatCore(opts: StreamAgentChatOpts): Promise<StreamAge
   }
 
   // Project context — full mode only
-  if (!isMinimalPrompt && !hasProvidedSystemPrompt && activeProjectContext.projectId) {
-    const projectLines = ['## Current Project']
-    if (activeProjectContext.project?.name) {
-      projectLines.push(`Active project: ${activeProjectContext.project.name}.`)
-    } else {
-      projectLines.push(`Active project ID: ${activeProjectContext.projectId}.`)
-    }
-    if (activeProjectContext.project?.description) {
-      projectLines.push(`Project description: ${activeProjectContext.project.description}`)
-      projectLines.push('Treat the project description above as authoritative context for who the project is for, what it is focused on, and which pilot priorities matter right now. If the user asks about the active project, answer from that description instead of saying the context is unavailable.')
-    }
-    if (activeProjectContext.objective) projectLines.push(`Project objective: ${activeProjectContext.objective}`)
-    if (activeProjectContext.audience) projectLines.push(`Who it is for: ${activeProjectContext.audience}`)
-    if (activeProjectContext.priorities.length > 0) projectLines.push(`Pilot priorities: ${activeProjectContext.priorities.join('; ')}`)
-    if (activeProjectContext.openObjectives.length > 0) projectLines.push(`Open objectives: ${activeProjectContext.openObjectives.join('; ')}`)
-    if (activeProjectContext.capabilityHints.length > 0) projectLines.push(`Suggested operating modes: ${activeProjectContext.capabilityHints.join('; ')}`)
-    if (activeProjectContext.credentialRequirements.length > 0) projectLines.push(`Credential and secret requirements: ${activeProjectContext.credentialRequirements.join('; ')}`)
-    if (activeProjectContext.successMetrics.length > 0) projectLines.push(`Success metrics: ${activeProjectContext.successMetrics.join('; ')}`)
-    if (activeProjectContext.heartbeatPrompt) projectLines.push(`Preferred heartbeat prompt: ${activeProjectContext.heartbeatPrompt}`)
-    if (activeProjectContext.heartbeatIntervalSec != null) projectLines.push(`Preferred heartbeat interval: ${activeProjectContext.heartbeatIntervalSec}s`)
-    if (activeProjectContext.resourceSummary) {
-      const summary = activeProjectContext.resourceSummary
-      const resourceBits = [
-        `open tasks ${summary.openTaskCount}`,
-        `active schedules ${summary.activeScheduleCount}`,
-        `project secrets ${summary.secretCount}`,
-      ]
-      if (summary.topTaskTitles.length > 0) projectLines.push(`Top open tasks: ${summary.topTaskTitles.join('; ')}`)
-      if (summary.scheduleNames.length > 0) projectLines.push(`Active schedules: ${summary.scheduleNames.join('; ')}`)
-      if (summary.secretNames.length > 0) projectLines.push(`Known project secrets: ${summary.secretNames.join('; ')}`)
-      projectLines.push(`Project resource summary: ${resourceBits.join(', ')}.`)
-    }
-    if (activeProjectContext.projectRoot) projectLines.push(`Workspace root: ${activeProjectContext.projectRoot}`)
-    projectLines.push('When creating project tasks, schedules, secrets, memories, or deliverables for this work, default them to the active project unless the user redirects you.')
-    promptParts.push(projectLines.join('\n'))
+  if (!hasProvidedSystemPrompt) {
+    const projectBlock = buildProjectSection(activeProjectContext, isMinimalPrompt)
+    if (projectBlock) promptParts.push(projectBlock)
   }
 
-  // Tool & Extension Access audit — full mode only
-  if (!isMinimalPrompt) {
-    const agentEnabledSet = new Set(sessionExtensions)
-    const { getExtensionManager: getEM } = await import('@/lib/server/extensions')
-    const allExtensions = [...listNativeCapabilities(), ...getEM().listExtensions()]
-    const mcpDisabled = agentMcpDisabledTools ?? []
+  if (extensionAuditBlock) promptParts.push(extensionAuditBlock)
 
-    const globallyDisabled: string[] = []
-    const enabledButNoAccess: string[] = []
-    for (const p of allExtensions) {
-      if (!p.enabled) {
-        globallyDisabled.push(`${p.name} (${p.filename})`)
-      } else if (!agentEnabledSet.has(p.filename)) {
-        enabledButNoAccess.push(`${p.name} (${p.filename})`)
-      }
-    }
-
-    const accessParts: string[] = []
-    if (globallyDisabled.length > 0) {
-      accessParts.push(`**Disabled site-wide:** ${globallyDisabled.join(', ')}`)
-    }
-    if (enabledButNoAccess.length > 0) {
-      accessParts.push(`**Installed but not enabled in this chat:** ${enabledButNoAccess.join(', ')}`)
-    }
-    if (mcpDisabled.length > 0) {
-      accessParts.push(`**MCP tools not available:** ${mcpDisabled.join(', ')}`)
-    }
-    if (accessParts.length > 0) {
-      promptParts.push(`## Tool & Extension Access\n${accessParts.join('\n')}`)
-    }
-  }
-
-  // Follow-up suggestions — full mode only
-  if (!isMinimalPrompt && settings.suggestionsEnabled === true) {
-    promptParts.push(
-      [
-        '## Follow-up Suggestions',
-        'At the end of every response, include a <suggestions> block with exactly 3 short',
-        'follow-up prompts the user might want to send next, as a JSON array. Keep each under 60 chars.',
-        'Make them contextual to what you just said. Example:',
-        '<suggestions>["Set up a Discord connector", "Create a research agent", "Show the task board"]</suggestions>',
-      ].join('\n'),
-    )
-  }
+  const suggestionsBlock = buildSuggestionsSection(settings.suggestionsEnabled, isMinimalPrompt)
+  if (suggestionsBlock) promptParts.push(suggestionsBlock)
 
   // Await classification before building the agentic execution policy
   const classification = await classificationPromise
@@ -537,23 +414,14 @@ async function streamAgentChatCore(opts: StreamAgentChatOpts): Promise<StreamAge
   )
 
   // Proactive memory recall — full mode only
-  if (!isMinimalPrompt && session.agentId && !currentThreadRecallRequest && message.length > 12) {
-    try {
-      const agents = loadAgents()
-      const agentForMemory = agents[session.agentId]
-      if (agentForMemory?.proactiveMemory) {
-        const { getMemoryDb } = await import('@/lib/server/memory/memory-db')
-        const memDb = getMemoryDb()
-        const recalled = memDb.search(message, session.agentId, {
-          scope: buildSessionMemoryScopeFilter(session, agentForMemory?.memoryScopeMode || null, activeProjectContext.projectRoot),
-        })
-        const topRecalled = recalled.slice(0, 3)
-        if (topRecalled.length > 0) {
-          const recalledLines = topRecalled.map((entry) => `- ${entry.content.slice(0, 300)}`)
-          promptParts.push(`## Recalled Context\nRelevant memories from previous interactions:\n${recalledLines.join('\n')}`)
-        }
-      }
-    } catch { /* non-critical */ }
+  {
+    const agents = loadAgents()
+    const agentForMemory = session.agentId ? agents[session.agentId] : null
+    const memoryBlock = await buildProactiveMemorySection(
+      session, agentForMemory, message, activeProjectContext.projectRoot,
+      isMinimalPrompt, currentThreadRecallRequest,
+    )
+    if (memoryBlock) promptParts.push(memoryBlock)
   }
 
   // Apply prompt budget
@@ -725,6 +593,14 @@ async function streamAgentChatCore(opts: StreamAgentChatOpts): Promise<StreamAge
       )
     }
   } catch { /* non-critical */ }
+
+  // Truncate oversized assistant messages in history to prevent context blowout
+  const HISTORY_MSG_MAX_CHARS = 8_000
+  for (const m of effectiveHistory) {
+    if (m.role === 'assistant' && m.text.length > HISTORY_MSG_MAX_CHARS) {
+      m.text = truncateToolResultText(m.text, HISTORY_MSG_MAX_CHARS)
+    }
+  }
 
   // Context state awareness
   const droppedByWindow = postClearHistory.length - recentHistory.length
@@ -1104,6 +980,11 @@ async function streamAgentChatCore(opts: StreamAgentChatOpts): Promise<StreamAge
         shouldContinue = decision.type
         if (decision.requiredToolReminderNames.length > 0) {
           requiredToolReminderNames = decision.requiredToolReminderNames
+        }
+        // Upgrade tool_summary to coordinator_synthesis for coordinator agents
+        // so they get a delegation-aware synthesis prompt
+        if (shouldContinue === 'tool_summary' && isCoordinatorAgent) {
+          shouldContinue = 'coordinator_synthesis'
         }
       }
 

@@ -5,6 +5,7 @@ import { loadSessions, saveSessions } from '@/lib/server/storage'
 import { notify } from '@/lib/server/ws-hub'
 import type { GatewaySessionPreview } from '@/types'
 import { errorMessage } from '@/lib/shared-utils'
+import { safeParseBody } from '@/lib/server/safe-parse-body'
 
 /**
  * Extract a single session preview from the gateway response.
@@ -66,7 +67,8 @@ export async function GET(req: Request) {
 
 /** POST { sessionKey, epoch, localSessionId } — merge gateway history into local session */
 export async function POST(req: Request) {
-  const body = await req.json()
+  const { data: body, error } = await safeParseBody<Record<string, unknown>>(req)
+  if (error) return error
   const { sessionKey, localSessionId } = body as {
     sessionKey?: string
     epoch?: number

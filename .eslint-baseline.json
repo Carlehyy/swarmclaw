@@ -1,8 +1,8 @@
 {
   "version": 1,
-  "generatedAt": "2026-03-16T01:23:43.690Z",
-  "totalIssues": 429,
-  "uniqueIssues": 149,
+  "generatedAt": "2026-03-16T19:23:45.931Z",
+  "totalIssues": 449,
+  "uniqueIssues": 156,
   "issues": [
     {
       "filePath": "bin/worker-cmd.js",
@@ -31,13 +31,6 @@
       "severity": 1,
       "message": "'_req' is defined but never used.",
       "count": 1
-    },
-    {
-      "filePath": "src/app/api/connectors/[id]/route.ts",
-      "ruleId": "@typescript-eslint/no-explicit-any",
-      "severity": 2,
-      "message": "Unexpected any. Specify a different type.",
-      "count": 2
     },
     {
       "filePath": "src/app/api/credentials/route.ts",
@@ -376,6 +369,20 @@
       "count": 1
     },
     {
+      "filePath": "src/components/org-chart/use-org-chart-drag.ts",
+      "ruleId": "@typescript-eslint/no-unused-vars",
+      "severity": 1,
+      "message": "'_evt' is defined but never used.",
+      "count": 1
+    },
+    {
+      "filePath": "src/components/org-chart/use-org-chart-pan-zoom.ts",
+      "ruleId": "@typescript-eslint/no-unused-vars",
+      "severity": 1,
+      "message": "'_err' is defined but never used.",
+      "count": 1
+    },
+    {
       "filePath": "src/components/secrets/secret-sheet.tsx",
       "ruleId": "react-hooks/exhaustive-deps",
       "severity": 1,
@@ -481,13 +488,6 @@
       "count": 2
     },
     {
-      "filePath": "src/lib/providers/anthropic.ts",
-      "ruleId": "@typescript-eslint/no-explicit-any",
-      "severity": 2,
-      "message": "Unexpected any. Specify a different type.",
-      "count": 1
-    },
-    {
       "filePath": "src/lib/providers/codex-cli.ts",
       "ruleId": "@typescript-eslint/no-explicit-any",
       "severity": 2,
@@ -500,13 +500,6 @@
       "severity": 2,
       "message": "Use \"@ts-expect-error\" instead of \"@ts-ignore\", as \"@ts-ignore\" will do nothing if the following line is error-free.",
       "count": 1
-    },
-    {
-      "filePath": "src/lib/providers/openai.ts",
-      "ruleId": "@typescript-eslint/no-explicit-any",
-      "severity": 2,
-      "message": "Unexpected any. Specify a different type.",
-      "count": 2
     },
     {
       "filePath": "src/lib/providers/opencode-cli.ts",
@@ -577,34 +570,6 @@
       "severity": 2,
       "message": "Unexpected any. Specify a different type.",
       "count": 30
-    },
-    {
-      "filePath": "src/lib/server/connectors/manager.ts",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "message": "'buildInboundApprovalSubject' is defined but never used.",
-      "count": 1
-    },
-    {
-      "filePath": "src/lib/server/connectors/manager.ts",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "message": "'mirrorConnectorMessageToAgentThread' is defined but never used.",
-      "count": 1
-    },
-    {
-      "filePath": "src/lib/server/connectors/manager.ts",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "message": "'resolveDirectSession' is defined but never used.",
-      "count": 1
-    },
-    {
-      "filePath": "src/lib/server/connectors/manager.ts",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "message": "'resolveInboundApprovalSenderId' is defined but never used.",
-      "count": 1
     },
     {
       "filePath": "src/lib/server/connectors/matrix.ts",
@@ -772,6 +737,90 @@
       "ruleId": "@typescript-eslint/no-explicit-any",
       "severity": 2,
       "message": "Unexpected any. Specify a different type.",
+      "count": 2
+    },
+    {
+      "filePath": "src/lib/server/protocols/protocol-agent-turn.ts",
+      "ruleId": "@typescript-eslint/no-require-imports",
+      "severity": 2,
+      "message": "A `require()` style import is forbidden.",
+      "count": 3
+    },
+    {
+      "filePath": "src/lib/server/protocols/protocol-foreach.ts",
+      "ruleId": "@typescript-eslint/no-require-imports",
+      "severity": 2,
+      "message": "A `require()` style import is forbidden.",
+      "count": 2
+    },
+    {
+      "filePath": "src/lib/server/protocols/protocol-run-lifecycle.ts",
+      "ruleId": "@typescript-eslint/no-require-imports",
+      "severity": 2,
+      "message": "A `require()` style import is forbidden.",
+      "count": 1
+    },
+    {
+      "filePath": "src/lib/server/protocols/protocol-step-helpers.ts",
+      "ruleId": "@typescript-eslint/no-unused-vars",
+      "severity": 1,
+      "message": "'genId' is defined but never used.",
+      "count": 1
+    },
+    {
+      "filePath": "src/lib/server/protocols/protocol-step-helpers.ts",
+      "ruleId": "@typescript-eslint/no-unused-vars",
+      "severity": 1,
+      "message": "'ProtocolRunStatus' is defined but never used.",
+      "count": 1
+    },
+    {
+      "filePath": "src/lib/server/protocols/protocol-step-helpers.ts",
+      "ruleId": "@typescript-eslint/no-require-imports",
+      "severity": 2,
+      "message": "A `require()` style import is forbidden.",
+      "count": 4
+    },
+    {
+      "filePath": "src/lib/server/protocols/protocol-step-processors.ts",
+      "ruleId": "@typescript-eslint/no-unused-vars",
+      "severity": 1,
+      "message": "'createTranscriptRoom' is defined but never used.",
+      "count": 1
+    },
+    {
+      "filePath": "src/lib/server/protocols/protocol-step-processors.ts",
+      "ruleId": "@typescript-eslint/no-require-imports",
+      "severity": 2,
+      "message": "A `require()` style import is forbidden.",
+      "count": 6
+    },
+    {
+      "filePath": "src/lib/server/protocols/protocol-subflow.ts",
+      "ruleId": "@typescript-eslint/no-unused-vars",
+      "severity": 1,
+      "message": "'cleanText' is defined but never used.",
+      "count": 1
+    },
+    {
+      "filePath": "src/lib/server/protocols/protocol-subflow.ts",
+      "ruleId": "@typescript-eslint/no-require-imports",
+      "severity": 2,
+      "message": "A `require()` style import is forbidden.",
+      "count": 4
+    },
+    {
+      "filePath": "src/lib/server/protocols/protocol-swarm.ts",
+      "ruleId": "@typescript-eslint/no-unused-vars",
+      "severity": 1,
+      "message": "'cleanText' is defined but never used.",
+      "count": 1
+    },
+    {
+      "filePath": "src/lib/server/protocols/protocol-swarm.ts",
+      "ruleId": "@typescript-eslint/no-require-imports",
+      "severity": 2,
+      "message": "A `require()` style import is forbidden.",
       "count": 2
     },
     {

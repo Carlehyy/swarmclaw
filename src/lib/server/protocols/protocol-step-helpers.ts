@@ -22,7 +22,7 @@ import { buildLLM } from '@/lib/server/build-llm'
 import { errorMessage } from '@/lib/shared-utils'
 import { cleanText, isDiscussionStepKind, now, uniqueIds } from '@/lib/server/protocols/protocol-types'
 import type { ProtocolRunDeps } from '@/lib/server/protocols/protocol-types'
-import { findRunStep } from '@/lib/server/protocols/protocol-normalization'
+import { findRunStep, loadProtocolRunById } from '@/lib/server/protocols/protocol-normalization'
 import {
   appendProtocolEvent,
   appendTranscriptMessage,
@@ -143,7 +143,6 @@ export function buildParallelStepState(
 
 export function syncProtocolParentFromChildRun(runOrId: ProtocolRun | string, deps?: ProtocolRunDeps): ProtocolRun | null {
   const { normalizeProtocolRun } = require('@/lib/server/protocols/protocol-normalization') as typeof import('@/lib/server/protocols/protocol-normalization')
-  const { loadProtocolRunById } = require('@/lib/server/protocols/protocol-queries') as typeof import('@/lib/server/protocols/protocol-queries')
   const { syncForEachParentFromChildRun } = require('@/lib/server/protocols/protocol-foreach') as typeof import('@/lib/server/protocols/protocol-foreach')
   const { syncSubflowParentFromChildRun } = require('@/lib/server/protocols/protocol-subflow') as typeof import('@/lib/server/protocols/protocol-subflow')
   const { requestProtocolRunExecution } = require('@/lib/server/protocols/protocol-run-lifecycle') as typeof import('@/lib/server/protocols/protocol-run-lifecycle')

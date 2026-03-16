@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { getExecConfig, setExecConfig } from '@/lib/server/openclaw/exec-config'
 import type { ExecApprovalConfig } from '@/types'
 import { errorMessage } from '@/lib/shared-utils'
+import { safeParseBody } from '@/lib/server/safe-parse-body'
 
 /** GET ?agentId=X — fetch exec approval config */
 export async function GET(req: Request) {
@@ -22,7 +23,8 @@ export async function GET(req: Request) {
 
 /** PUT { agentId, config, baseHash } — save exec approval config */
 export async function PUT(req: Request) {
-  const body = await req.json()
+  const { data: body, error } = await safeParseBody<Record<string, unknown>>(req)
+  if (error) return error
   const { agentId, config, baseHash } = body as {
     agentId?: string
     config?: ExecApprovalConfig

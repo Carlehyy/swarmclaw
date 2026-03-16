@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { safeParseBody } from '@/lib/server/safe-parse-body'
 import { loadAgents, loadSettings, loadWallets } from '@/lib/server/storage'
 import { createAgentWallet, getAgentActiveWalletId, getWalletPortfolioSnapshot, stripWalletPrivateKey } from '@/lib/server/wallet/wallet-service'
 import { buildEmptyWalletPortfolio } from '@/lib/server/wallet/wallet-portfolio'
@@ -60,8 +61,21 @@ export async function GET(req: Request) {
   return NextResponse.json(Object.fromEntries(entries))
 }
 
+interface WalletCreateBody {
+  agentId: string
+  chain?: string | null
+  provider?: string | null
+  label?: string
+  requireApproval?: boolean
+  spendingLimitAtomic?: string | number | null
+  spendingLimitLamports?: string | number | null
+  dailyLimitAtomic?: string | number | null
+  dailyLimitLamports?: string | number | null
+}
+
 export async function POST(req: Request) {
-  const body = await req.json()
+  const { data: body, error } = await safeParseBody<WalletCreateBody>(req)
+  if (error) return error
   const settings = loadSettings()
   try {
     const wallet = createAgentWallet({

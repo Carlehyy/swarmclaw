@@ -91,7 +91,7 @@ describe('subagent-lineage', () => {
     })
   })
 
-  describe('lifecycle transitions', () => {
+  describe('lifecycle status', () => {
     it('follows happy path: initializing → ready → running → completed', () => {
       lineage._clearLineage()
       const node = lineage.createLineageNode({
@@ -101,10 +101,10 @@ describe('subagent-lineage', () => {
         task: 'test',
       })
 
-      assert.equal(lineage.transitionState(node.id, 'READY'), 'ready')
+      lineage.setLineageStatus(node.id, 'ready')
       assert.equal(lineage.getLineageNode(node.id)?.status, 'ready')
 
-      assert.equal(lineage.transitionState(node.id, 'START'), 'running')
+      lineage.setLineageStatus(node.id, 'running')
       assert.equal(lineage.getLineageNode(node.id)?.status, 'running')
 
       const completed = lineage.completeLineageNode(node.id, 'done')
@@ -112,7 +112,7 @@ describe('subagent-lineage', () => {
       assert.ok(completed?.completedAt)
     })
 
-    it('handles spawn child and resume: running → waiting → running → completed', () => {
+    it('handles waiting state: running → waiting → running → completed', () => {
       lineage._clearLineage()
       const node = lineage.createLineageNode({
         sessionId: 'spawn-path',
@@ -120,11 +120,13 @@ describe('subagent-lineage', () => {
         agentName: 'Spawn',
         task: 'test',
       })
-      lineage.transitionState(node.id, 'READY')
-      lineage.transitionState(node.id, 'START')
+      lineage.setLineageStatus(node.id, 'ready')
+      lineage.setLineageStatus(node.id, 'running')
+      lineage.setLineageStatus(node.id, 'waiting')
+      assert.equal(lineage.getLineageNode(node.id)?.status, 'waiting')
 
-      assert.equal(lineage.transitionState(node.id, 'SPAWN_CHILD'), 'waiting')
-      assert.equal(lineage.transitionState(node.id, 'CHILD_DONE'), 'running')
+      lineage.setLineageStatus(node.id, 'running')
+      assert.equal(lineage.getLineageNode(node.id)?.status, 'running')
 
       lineage.completeLineageNode(node.id, 'done')
       assert.equal(lineage.getLineageNode(node.id)?.status, 'completed')
@@ -138,8 +140,8 @@ describe('subagent-lineage', () => {
         agentName: 'Fail',
         task: 'test',
       })
-      lineage.transitionState(node.id, 'READY')
-      lineage.transitionState(node.id, 'START')
+      lineage.setLineageStatus(node.id, 'ready')
+      lineage.setLineageStatus(node.id, 'running')
 
       const failed = lineage.failLineageNode(node.id, 'Something broke')
       assert.equal(failed?.status, 'failed')
@@ -159,14 +161,14 @@ describe('subagent-lineage', () => {
     })
 
     it('handles cancellation from any non-terminal state', () => {
-      const setups = [
-        { label: 'initializing', events: [] as string[] },
-        { label: 'ready', events: ['READY'] },
-        { label: 'running', events: ['READY', 'START'] },
-        { label: 'waiting', events: ['READY', 'START', 'SPAWN_CHILD'] },
+      const states: Array<{ label: string; status: import('@/lib/server/agents/subagent-lineage').SubagentState }> = [
+        { label: 'initializing', status: 'initializing' },
+        { label: 'ready', status: 'ready' },
+        { label: 'running', status: 'running' },
+        { label: 'waiting', status: 'waiting' },
       ]
 
-      for (const { label, events } of setups) {
+      for (const { label, status } of states) {
         lineage._clearLineage()
         const node = lineage.createLineageNode({
           sessionId: `cancel-from-${label}`,
@@ -174,39 +176,15 @@ describe('subagent-lineage', () => {
           agentName: 'Cancel',
           task: 'test',
         })
-        for (const ev of events) {
-          lineage.transitionState(node.id, ev as import('@/lib/server/agents/subagent-lineage').SubagentEvent)
+        if (status !== 'initializing') {
+          lineage.setLineageStatus(node.id, status)
         }
         const cancelled = lineage.cancelLineageNode(node.id)
         assert.equal(cancelled?.status, 'cancelled', `Should cancel from ${label}`)
       }
     })
 
-    it('handles timeout from running and waiting states', () => {
-      lineage._clearLineage()
-      const n1 = lineage.createLineageNode({
-        sessionId: 'timeout-running',
-        agentId: 'ag',
-        agentName: 'T',
-        task: 'test',
-      })
-      lineage.transitionState(n1.id, 'READY')
-      lineage.transitionState(n1.id, 'START')
-      assert.equal(lineage.transitionState(n1.id, 'TIMEOUT'), 'timed_out')
-
-      const n2 = lineage.createLineageNode({
-        sessionId: 'timeout-waiting',
-        agentId: 'ag',
-        agentName: 'T',
-        task: 'test',
-      })
-      lineage.transitionState(n2.id, 'READY')
-      lineage.transitionState(n2.id, 'START')
-      lineage.transitionState(n2.id, 'SPAWN_CHILD')
-      assert.equal(lineage.transitionState(n2.id, 'TIMEOUT'), 'timed_out')
-    })
-
-    it('rejects transitions from terminal states', () => {
+    it('does not update terminal nodes via setLineageStatus', () => {
       lineage._clearLineage()
       const node = lineage.createLineageNode({
         sessionId: 'terminal',
@@ -214,25 +192,13 @@ describe('subagent-lineage', () => {
         agentName: 'T',
         task: 'test',
       })
-      lineage.transitionState(node.id, 'READY')
-      lineage.transitionState(node.id, 'START')
+      lineage.setLineageStatus(node.id, 'ready')
+      lineage.setLineageStatus(node.id, 'running')
       lineage.completeLineageNode(node.id, 'done')
 
-      assert.equal(lineage.transitionState(node.id, 'START'), null)
-      assert.equal(lineage.transitionState(node.id, 'FAIL'), null)
-      assert.equal(lineage.getLineageNode(node.id)?.status, 'completed')
-    })
-
-    it('rejects START from initializing (must go through READY first)', () => {
-      lineage._clearLineage()
-      const node = lineage.createLineageNode({
-        sessionId: 'skip-ready',
-        agentId: 'ag',
-        agentName: 'T',
-        task: 'test',
-      })
-      assert.equal(lineage.transitionState(node.id, 'START'), null)
-      assert.equal(lineage.getLineageNode(node.id)?.status, 'initializing')
+      // setLineageStatus should be a no-op on terminal nodes
+      const result = lineage.setLineageStatus(node.id, 'running')
+      assert.equal(result?.status, 'completed')
     })
 
     it('completeLineageNode is a no-op on already terminal node', () => {
@@ -243,69 +209,14 @@ describe('subagent-lineage', () => {
         agentName: 'T',
         task: 'test',
       })
-      lineage.transitionState(node.id, 'READY')
-      lineage.transitionState(node.id, 'START')
+      lineage.setLineageStatus(node.id, 'ready')
+      lineage.setLineageStatus(node.id, 'running')
       lineage.failLineageNode(node.id, 'failed first')
 
       // Trying to complete a failed node returns the node unchanged
       const result = lineage.completeLineageNode(node.id, 'should not work')
       assert.equal(result?.status, 'failed')
       assert.equal(result?.error, 'failed first')
-    })
-  })
-
-  describe('canTransition', () => {
-    it('returns true for valid transitions', () => {
-      lineage._clearLineage()
-      const node = lineage.createLineageNode({
-        sessionId: 'can-check',
-        agentId: 'ag',
-        agentName: 'T',
-        task: 'test',
-      })
-      assert.equal(lineage.canTransition(node.id, 'READY'), true)
-      assert.equal(lineage.canTransition(node.id, 'FAIL'), true)
-      assert.equal(lineage.canTransition(node.id, 'CANCEL'), true)
-    })
-
-    it('returns false for invalid transitions', () => {
-      lineage._clearLineage()
-      const node = lineage.createLineageNode({
-        sessionId: 'cant-check',
-        agentId: 'ag',
-        agentName: 'T',
-        task: 'test',
-      })
-      assert.equal(lineage.canTransition(node.id, 'START'), false)
-      assert.equal(lineage.canTransition(node.id, 'COMPLETE'), false)
-      assert.equal(lineage.canTransition(node.id, 'SPAWN_CHILD'), false)
-    })
-
-    it('works with state string directly', () => {
-      assert.equal(lineage.canTransition('running', 'COMPLETE'), true)
-      assert.equal(lineage.canTransition('completed', 'START'), false)
-    })
-  })
-
-  describe('validEvents', () => {
-    it('lists correct events for each state', () => {
-      const initEvents = lineage.validEvents('initializing')
-      assert.ok(initEvents.includes('READY'))
-      assert.ok(initEvents.includes('FAIL'))
-      assert.ok(initEvents.includes('CANCEL'))
-      assert.ok(!initEvents.includes('START'))
-
-      const runningEvents = lineage.validEvents('running')
-      assert.ok(runningEvents.includes('SPAWN_CHILD'))
-      assert.ok(runningEvents.includes('COMPLETE'))
-      assert.ok(runningEvents.includes('FAIL'))
-      assert.ok(runningEvents.includes('CANCEL'))
-      assert.ok(runningEvents.includes('TIMEOUT'))
-    })
-
-    it('returns empty array for terminal states', () => {
-      assert.equal(lineage.validEvents('completed').length, 0)
-      assert.equal(lineage.validEvents('failed').length, 0)
     })
   })
 
@@ -364,8 +275,8 @@ describe('subagent-lineage', () => {
         agentName: 'Ag',
         task: 'Complete test',
       })
-      lineage.transitionState(node.id, 'READY')
-      lineage.transitionState(node.id, 'START')
+      lineage.setLineageStatus(node.id, 'ready')
+      lineage.setLineageStatus(node.id, 'running')
 
       const completed = lineage.completeLineageNode(node.id, 'Task finished successfully')
       assert.equal(completed?.status, 'completed')
@@ -381,8 +292,8 @@ describe('subagent-lineage', () => {
         agentName: 'Ag',
         task: 'Fail test',
       })
-      lineage.transitionState(node.id, 'READY')
-      lineage.transitionState(node.id, 'START')
+      lineage.setLineageStatus(node.id, 'ready')
+      lineage.setLineageStatus(node.id, 'running')
 
       const failed = lineage.failLineageNode(node.id, 'Something went wrong')
       assert.equal(failed?.status, 'failed')
@@ -539,8 +450,8 @@ describe('subagent-lineage', () => {
       })
 
       // Complete the child first so it should NOT be cancelled
-      lineage.transitionState(child.id, 'READY')
-      lineage.transitionState(child.id, 'START')
+      lineage.setLineageStatus(child.id, 'ready')
+      lineage.setLineageStatus(child.id, 'running')
       lineage.completeLineageNode(child.id, 'done')
 
       const cancelled = lineage.cancelSubtree(root.id)
@@ -561,8 +472,8 @@ describe('subagent-lineage', () => {
         agentName: 'Cleanup',
         task: 'test',
       })
-      lineage.transitionState(node.id, 'READY')
-      lineage.transitionState(node.id, 'START')
+      lineage.setLineageStatus(node.id, 'ready')
+      lineage.setLineageStatus(node.id, 'running')
       lineage.completeLineageNode(node.id, 'done')
 
       const removed = lineage.cleanupTerminalNodes(-1)
@@ -579,8 +490,8 @@ describe('subagent-lineage', () => {
         agentName: 'Active',
         task: 'test',
       })
-      lineage.transitionState(node.id, 'READY')
-      lineage.transitionState(node.id, 'START')
+      lineage.setLineageStatus(node.id, 'ready')
+      lineage.setLineageStatus(node.id, 'running')
 
       const removed = lineage.cleanupTerminalNodes(0)
       assert.equal(removed.length, 0)
@@ -603,8 +514,8 @@ describe('subagent-lineage', () => {
         agentName: 'B',
         task: 'Task B',
       })
-      lineage.transitionState(a.id, 'READY')
-      lineage.transitionState(a.id, 'START')
+      lineage.setLineageStatus(a.id, 'ready')
+      lineage.setLineageStatus(a.id, 'running')
       lineage.completeLineageNode(a.id, 'done')
 
       const initializing = lineage.listLineageNodes({ status: 'initializing' })
