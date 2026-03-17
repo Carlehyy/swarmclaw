@@ -134,24 +134,8 @@ interface ChatState {
   loadMoreMessages: () => Promise<void>
 }
 
-// Module-level cadence interval (not in state to avoid re-renders)
-let _cadenceInterval: ReturnType<typeof setInterval> | null = null
-let _cadenceBuffer = ''
-let _cadencePos = 0
-
 const CONTROL_TOKEN_PREFIX_RE = /^\s*(?:NO_MESSAGE|HEARTBEAT_OK)(?:(?=[\s.,:;!?()[\]{}"'`-]|$)|(?=[A-Z]))\s*/i
 const CONTROL_TOKEN_LINE_RE = /(^|\n)\s*(?:NO_MESSAGE|HEARTBEAT_OK)\s*(\n|$)/gi
-
-function clearCadence() {
-  if (_cadenceInterval) {
-    clearInterval(_cadenceInterval)
-    _cadenceInterval = null
-  }
-  _cadenceBuffer = ''
-  _cadencePos = 0
-}
-
-const CADENCE_THRESHOLD = 120
 
 function stripHiddenControlTokens(text: string): string {
   let cleaned = String(text || '')
@@ -398,7 +382,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
       attachedFiles,
       ...(replyToId ? { replyToId } : {}),
     }
-    clearCadence()
     const assistantRenderId = nextAssistantRenderId()
     set((s) => ({
       streaming: true,
@@ -444,37 +427,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
         }
 
         // Build a single patch for all state changes this event
-        const patch: Partial<ChatState> = { streamText: visibleText }
+        const patch: Partial<ChatState> = { streamText: visibleText, displayText: visibleText }
 
         // Phase: first text data → 'responding'
         if (get().streamPhase !== 'responding') {
           patch.streamPhase = 'responding'
-        }
-
-        // Typing cadence: buffer first CADENCE_THRESHOLD chars, release word-by-word
-        if (visibleText.length <= CADENCE_THRESHOLD) {
-          _cadenceBuffer = visibleText
-          _cadencePos = Math.min(_cadencePos, _cadenceBuffer.length)
-          if (!_cadenceInterval) {
-            _cadenceInterval = setInterval(() => {
-              if (_cadencePos >= _cadenceBuffer.length) {
-                // Buffer fully released — check if we've passed threshold
-                if (get().streamText.length > CADENCE_THRESHOLD) {
-                  clearCadence()
-                  set({ displayText: get().streamText })
-                }
-                return
-              }
-              // Release ~2 chars per 16ms tick
-              const nextPos = Math.min(_cadencePos + 2, _cadenceBuffer.length)
-              _cadencePos = nextPos
-              set({ displayText: _cadenceBuffer.slice(0, _cadencePos) })
-            }, 16)
-          }
-        } else {
-          // Past threshold — sync displayText directly
-          if (_cadenceInterval) clearCadence()
-          patch.displayText = visibleText
         }
 
         set(patch)
@@ -577,9 +534,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
         const visibleText = stripHiddenControlTokens(fullText)
         toolCallCounter = 0
         soundFiredStart = false
-        if (_cadenceInterval) clearCadence()
-        _cadencePos = 0
-        _cadenceBuffer = ''
         set({ streamText: visibleText, displayText: visibleText, toolEvents: [], streamPhase: 'connecting' })
       } else if (event.t === 'err') {
         const errText = event.text || 'Unknown'
@@ -609,7 +563,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
       }
     }, attachedFiles, { replyToId })
 
-    clearCadence()
     if (get().soundEnabled && soundFiredStart) playStreamEnd()
     const visibleFinalText = stripHiddenControlTokens(fullText)
     if (visibleFinalText.trim()) {
@@ -660,8 +613,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
     void useAppStore.getState().refreshSession(sessionId)
 
     } finally {
-      // Guarantee cadence interval is cleared even if streamChat throws
-      clearCadence()
       if (get().streaming) {
         set({
           streaming: false,
@@ -890,7 +841,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
         // ignore
       }
     }
-    clearCadence()
     set({
       streaming: false,
       streamingSessionId: null,
