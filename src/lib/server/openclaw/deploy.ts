@@ -192,6 +192,7 @@ interface ExposureMeta {
 
 const DEFAULT_LOCAL_PORT = 18789
 const DEFAULT_REMOTE_PORT = 18789
+const DEFAULT_OPENCLAW_IMAGE = 'ghcr.io/openclaw/openclaw:latest'
 const OC_DEPLOY_KEY = '__swarmclaw_openclaw_deploy__'
 
 const REMOTE_PROVIDER_META: Record<OpenClawRemoteDeployProvider, RemoteProviderMeta> = {
@@ -604,14 +605,27 @@ function buildLocalInstallCommand(port: number, token?: string | null, localId =
   return `${parts.join(' ')} && npx openclaw gateway start`
 }
 
-function sanitizePort(value: unknown, fallback = DEFAULT_LOCAL_PORT): number {
+function parsePortNumber(value: unknown): number | null {
   const parsed = typeof value === 'number'
     ? value
     : typeof value === 'string'
       ? Number.parseInt(value, 10)
       : Number.NaN
-  if (!Number.isFinite(parsed)) return fallback
-  return Math.max(1024, Math.min(65535, Math.trunc(parsed)))
+  return Number.isFinite(parsed) ? parsed : null
+}
+
+function sanitizePortInRange(value: unknown, fallback: number, minimum: number): number {
+  const parsed = parsePortNumber(value)
+  if (parsed === null) return fallback
+  return Math.max(minimum, Math.min(65535, Math.trunc(parsed)))
+}
+
+export function sanitizeLocalPort(value: unknown, fallback = DEFAULT_LOCAL_PORT): number {
+  return sanitizePortInRange(value, fallback, 1024)
+}
+
+function sanitizeRemotePort(value: unknown, fallback = DEFAULT_REMOTE_PORT): number {
+  return sanitizePortInRange(value, fallback, 1)
 }
 
 function normalizeToken(value: unknown): string | null {
@@ -666,10 +680,10 @@ function normalizeExposurePreset(value: unknown, fallback?: OpenClawUseCaseTempl
   return useCase?.defaultExposure || 'private-lan'
 }
 
-function sanitizeSshConfig(input?: Partial<OpenClawSshConfig> | null): OpenClawSshConfig | null {
+export function sanitizeSshConfig(input?: Partial<OpenClawSshConfig> | null): OpenClawSshConfig | null {
   const host = typeof input?.host === 'string' && input.host.trim() ? input.host.trim() : ''
   if (!host) return null
-  const port = sanitizePort(input?.port, 22)
+  const port = sanitizePortInRange(input?.port, 22, 1)
   return {
     host,
     user: typeof input?.user === 'string' && input.user.trim() ? input.user.trim() : 'root',
@@ -1034,7 +1048,7 @@ export async function startOpenClawLocalDeploy(input?: {
   makePrimary?: boolean
 }): Promise<{ local: OpenClawLocalDeployStatus; locals: OpenClawLocalDeployStatus[]; token: string }> {
   const state = getRuntimeState()
-  const port = sanitizePort(input?.port, DEFAULT_LOCAL_PORT)
+  const port = sanitizeLocalPort(input?.port, DEFAULT_LOCAL_PORT)
   const requestedLocalId = typeof input?.localId === 'string' && input.localId.trim()
     ? input.localId.trim()
     : null
@@ -1238,7 +1252,7 @@ function resolveHostBindAddress(useCase: OpenClawUseCaseTemplate, exposure: Open
 function buildDockerComposeFile(options: DockerBundleOptions): string {
   return `services:
   openclaw-gateway:
-    image: \${OPENCLAW_IMAGE:-openclaw:latest}
+    image: \${OPENCLAW_IMAGE:-${DEFAULT_OPENCLAW_IMAGE}}
     environment:
       HOME: /home/node
       TERM: xterm-256color
@@ -1284,7 +1298,7 @@ function buildDockerComposeFile(options: DockerBundleOptions): string {
 }
 
 function buildDockerEnvFile(options: DockerBundleOptions): string {
-  return `OPENCLAW_IMAGE=openclaw:latest
+  return `OPENCLAW_IMAGE=${DEFAULT_OPENCLAW_IMAGE}
 OPENCLAW_GATEWAY_TOKEN=${options.token}
 OPENCLAW_GATEWAY_BIND=lan
 OPENCLAW_HOST_BIND=${resolveHostBindAddress(options.useCase, options.exposure)}
@@ -1314,7 +1328,7 @@ if ! command -v docker >/dev/null 2>&1; then
   exit 1
 fi
 
-docker pull "\${OPENCLAW_IMAGE:-openclaw:latest}"
+docker pull "\${OPENCLAW_IMAGE:-${DEFAULT_OPENCLAW_IMAGE}}"
 docker compose up -d
 if [ -f docker-compose.proxy.yml ]; then
   docker compose -f docker-compose.yml -f docker-compose.proxy.yml up -d
@@ -1365,7 +1379,7 @@ ${extraFiles ? `${extraFiles}
 ` : ''}runcmd:
   - mkdir -p /opt/openclaw/.openclaw /opt/openclaw/workspace /opt/openclaw/backups
   - systemctl enable --now docker
-  - bash -lc 'cd /opt/openclaw && docker pull "\${OPENCLAW_IMAGE:-openclaw:latest}"'
+  - bash -lc 'cd /opt/openclaw && docker pull "\${OPENCLAW_IMAGE:-${DEFAULT_OPENCLAW_IMAGE}}"'
   - bash -lc 'cd /opt/openclaw && docker compose up -d'
   - bash -lc 'cd /opt/openclaw && if [ -f docker-compose.proxy.yml ]; then docker compose -f docker-compose.yml -f docker-compose.proxy.yml up -d; fi'
 final_message: "OpenClaw gateway bootstrap complete. Run: sudo docker compose -f /opt/openclaw/docker-compose.yml ps"
@@ -1597,7 +1611,7 @@ export function buildOpenClawDeployBundle(input?: {
   const template = input?.template || 'docker'
   const token = normalizeToken(input?.token) || generateOpenClawGatewayToken()
   const scheme = input?.scheme === 'http' ? 'http' : 'https'
-  const port = sanitizePort(input?.port, DEFAULT_REMOTE_PORT)
+  const port = sanitizeRemotePort(input?.port, DEFAULT_REMOTE_PORT)
   const rawTarget = typeof input?.target === 'string' ? input.target.trim() : ''
   const endpoint = normalizeOpenClawEndpoint(ensureSchemeAndPort(rawTarget || 'openclaw.example.com', scheme, port))
   const wsUrl = deriveOpenClawWsUrl(endpoint)
@@ -1802,7 +1816,7 @@ export async function runOpenClawRemoteLifecycleAction(input?: {
   const sshConfig = sanitizeSshConfig(input?.ssh)
   if (!sshConfig) throw new Error('SSH host is required for remote lifecycle actions.')
   const remoteDir = sshConfig.targetDir || '/opt/openclaw'
-  const image = normalizeText(input?.image) || 'openclaw:latest'
+  const image = normalizeText(input?.image) || DEFAULT_OPENCLAW_IMAGE
   const action = input?.action || 'restart'
   let remoteCommand = ''
   let summary = ''

@@ -47,6 +47,10 @@ function ensureDir(dir) {
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true })
 }
 
+function resolveStandaloneRuntimeDir(serverJs) {
+  return path.dirname(serverJs)
+}
+
 function log(msg) {
   process.stdout.write(`[swarmclaw] ${msg}\n`)
 }
@@ -206,6 +210,51 @@ function symlinkDir(targetPath, linkPath) {
   fs.symlinkSync(targetPath, linkPath, process.platform === 'win32' ? 'junction' : 'dir')
 }
 
+function syncStandaloneRuntimeAssets({
+  sourceRoot,
+  runtimeDir,
+  force = false,
+} = {}) {
+  const assets = [
+    {
+      key: 'staticCopied',
+      sourcePath: path.join(sourceRoot, '.next', 'static'),
+      targetPath: path.join(runtimeDir, '.next', 'static'),
+      optional: false,
+    },
+    {
+      key: 'publicCopied',
+      sourcePath: path.join(sourceRoot, 'public'),
+      targetPath: path.join(runtimeDir, 'public'),
+      optional: true,
+    },
+  ]
+
+  const result = {
+    staticCopied: false,
+    publicCopied: false,
+  }
+
+  for (const asset of assets) {
+    if (!fs.existsSync(asset.sourcePath)) {
+      if (!asset.optional) result[asset.key] = false
+      continue
+    }
+    if (!force && fs.existsSync(asset.targetPath)) continue
+
+    ensureDir(path.dirname(asset.targetPath))
+    fs.rmSync(asset.targetPath, { recursive: true, force: true })
+    fs.cpSync(asset.sourcePath, asset.targetPath, {
+      recursive: true,
+      force: true,
+      dereference: true,
+    })
+    result[asset.key] = true
+  }
+
+  return result
+}
+
 function prepareBuildWorkspace({ pkgRoot = PKG_ROOT, buildRoot = resolvePackageBuildRoot(pkgRoot), nodeModulesDir } = {}) {
   copyBuildWorkspaceContents(pkgRoot, buildRoot)
   symlinkDir(nodeModulesDir, path.join(buildRoot, 'node_modules'))
@@ -285,6 +334,15 @@ function runBuild({ pkgRoot = PKG_ROOT } = {}) {
     },
   })
 
+  const standalone = locateStandaloneServer({ pkgRoot: buildRoot })
+  if (standalone) {
+    syncStandaloneRuntimeAssets({
+      sourceRoot: buildRoot,
+      runtimeDir: resolveStandaloneRuntimeDir(standalone.serverJs),
+      force: true,
+    })
+  }
+
   log('Build complete.')
 }
 
@@ -306,10 +364,12 @@ async function startServer(opts, { pkgRoot = PKG_ROOT } = {}) {
     logError('Standalone server.js not found in the installed package. Try running: swarmclaw server --build')
     process.exit(1)
   }
-  const { root: runtimeRoot, serverJs } = standalone
+  const { root: buildRoot, serverJs } = standalone
+  const runtimeRoot = resolveStandaloneRuntimeDir(serverJs)
 
   ensureDir(SWARMCLAW_HOME)
   ensureDir(DATA_DIR)
+  syncStandaloneRuntimeAssets({ sourceRoot: buildRoot, runtimeDir: runtimeRoot })
 
   const port = opts.port || '3456'
   const wsPort = opts.wsPort || String(Number(port) + 1)
@@ -328,6 +388,7 @@ async function startServer(opts, { pkgRoot = PKG_ROOT } = {}) {
 
   log(`Starting server on ${host}:${port} (WebSocket: ${wsPort})...`)
   log(`Package root: ${pkgRoot}`)
+  log(`Build root: ${buildRoot}`)
   log(`Runtime root: ${runtimeRoot}`)
   log(`Home: ${SWARMCLAW_HOME}`)
   log(`Data directory: ${DATA_DIR}`)
@@ -545,6 +606,8 @@ module.exports = {
   resolveReadyCheckHost,
   resolveStandaloneCandidateRoots,
   resolveStandaloneBase,
+  resolveStandaloneRuntimeDir,
   runBuild,
+  syncStandaloneRuntimeAssets,
   waitForPortReady,
 }

@@ -190,6 +190,13 @@ The building blocks are the same: **agents, tools, memory, delegation, schedules
 
 ## Release Notes
 
+### v1.2.3 Highlights
+
+- **Standalone asset staging repair**: `swarmclaw server` now copies `.next/static` and `public/` into the Next.js standalone runtime after the first build, preventing blank UI loads and 503s for CSS, JS, and image assets.
+- **OpenClaw SSH port fix**: remote OpenClaw deploys now preserve well-known SSH ports like `22` instead of clamping them to `1024`.
+- **OpenClaw image source fix**: generated remote deploy bundles and default upgrade actions now use the official `ghcr.io/openclaw/openclaw:latest` image instead of the missing Docker Hub shorthand.
+- **Standalone self-healing**: server startup now repairs older incomplete standalone bundles by staging missing runtime assets before launching `server.js`.
+
 ### v1.2.2 Highlights
 
 - **Modular chat execution pipeline**: decomposed the monolithic chat-execution module into 6 focused stages (preflight, preparation, stream execution, partial persistence, finalization, types) for maintainability and testability.

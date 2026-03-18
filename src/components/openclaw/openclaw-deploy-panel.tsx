@@ -851,6 +851,8 @@ export function OpenClawDeployPanel(props: OpenClawDeployPanelProps) {
               <label className="block text-[11px] font-700 uppercase tracking-[0.08em] text-text-3/70 mb-2">Port</label>
               <input
                 type="number"
+                min={1024}
+                max={65535}
                 value={localPort}
                 onChange={(e) => setLocalPort(Number.parseInt(e.target.value, 10) || 18789)}
                 className="w-full rounded-[12px] border border-white/[0.08] bg-bg px-3 py-3 text-[13px] text-text outline-none focus:border-accent-bright/30"
@@ -1168,6 +1170,8 @@ export function OpenClawDeployPanel(props: OpenClawDeployPanelProps) {
                   />
                   <input
                     type="number"
+                    min={1}
+                    max={65535}
                     value={sshPort}
                     onChange={(e) => setSshPort(Number.parseInt(e.target.value, 10) || 22)}
                     placeholder="22"

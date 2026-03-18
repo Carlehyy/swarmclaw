@@ -6,6 +6,8 @@ import {
   getOpenClawLocalDeployStatus,
   getOpenClawRemoteDeployCollectionStatus,
   getOpenClawRemoteDeployStatus,
+  sanitizeLocalPort,
+  sanitizeSshConfig,
 } from './deploy'
 
 const GLOBAL_KEY = '__swarmclaw_openclaw_deploy__' as const
@@ -42,13 +44,17 @@ test('docker smart deploy bundle uses official image and provider-specific metad
 
   const envFile = bundle.files.find((file) => file.name === '.env')
   assert.ok(envFile)
-  assert.match(envFile.content, /OPENCLAW_IMAGE=openclaw:latest/)
+  assert.match(envFile.content, /OPENCLAW_IMAGE=ghcr\.io\/openclaw\/openclaw:latest/)
   assert.match(envFile.content, /OPENCLAW_GATEWAY_TOKEN=test-token/)
+
+  const dockerCompose = bundle.files.find((file) => file.name === 'docker-compose.yml')
+  assert.ok(dockerCompose)
+  assert.match(dockerCompose.content, /image: \$\{OPENCLAW_IMAGE:-ghcr\.io\/openclaw\/openclaw:latest\}/)
 
   const cloudInit = bundle.files.find((file) => file.name === 'cloud-init.yaml')
   assert.ok(cloudInit)
   assert.match(cloudInit.content, /docker\.io/)
-  assert.match(cloudInit.content, /docker pull "\$\{OPENCLAW_IMAGE:-openclaw:latest\}"/)
+  assert.match(cloudInit.content, /docker pull "\$\{OPENCLAW_IMAGE:-ghcr\.io\/openclaw\/openclaw:latest\}"/)
   assert.match(cloudInit.content, /\/opt\/openclaw\/docker-compose\.yml/)
 
   const caddyfile = bundle.files.find((file) => file.name === 'Caddyfile')
@@ -72,6 +78,39 @@ test('render bundle stays aligned with the official repo flow', () => {
     'OPENCLAW_GATEWAY_TOKEN.txt',
   ])
   assert.match(bundle.runbook[0] || '', /official OpenClaw GitHub repo/i)
+})
+
+test('remote bundle preserves low HTTP ports below 1024', () => {
+  const bundle = buildOpenClawDeployBundle({
+    template: 'docker',
+    target: 'gateway.example.com',
+    scheme: 'http',
+    port: 81,
+  })
+
+  assert.equal(bundle.endpoint, 'http://gateway.example.com:81/v1')
+  assert.equal(bundle.wsUrl, 'ws://gateway.example.com:81')
+})
+
+test('ssh config preserves port 22', () => {
+  const config = sanitizeSshConfig({
+    host: 'gateway.example.com',
+    port: 22,
+  })
+
+  assert.deepEqual(config, {
+    host: 'gateway.example.com',
+    user: 'root',
+    port: 22,
+    keyPath: null,
+    targetDir: '/opt/openclaw',
+  })
+})
+
+test('local managed deploy ports stay clamped to unprivileged values', () => {
+  assert.equal(sanitizeLocalPort(22), 1024)
+  assert.equal(sanitizeLocalPort('443'), 1024)
+  assert.equal(sanitizeLocalPort(18789), 18789)
 })
 
 test('local deploy status exposes a sensible default endpoint before startup', () => {
@@ -159,7 +198,7 @@ test('remote deploy collection preserves multiple remotes and targeted lookup', 
         createdAt: 30,
         updatedAt: 40,
         lastError: null,
-        lastSummary: 'Pulling openclaw:latest and recreating the OpenClaw stack on beta.example.com.',
+        lastSummary: 'Pulling ghcr.io/openclaw/openclaw:latest and recreating the OpenClaw stack on beta.example.com.',
         lastCommandPreview: 'ssh root@beta.example.com docker compose up -d',
         lastBackupPath: null,
       },

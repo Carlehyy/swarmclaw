@@ -136,6 +136,80 @@ test('prepareBuildWorkspace copies the package tree and links node_modules outsi
   fs.rmSync(externalNodeModules, { recursive: true, force: true })
 })
 
+test('syncStandaloneRuntimeAssets copies .next/static and public into a direct standalone runtime', () => {
+  const homeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'swarmclaw-server-home-'))
+  const pkgRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'swarmclaw-server-pkg-'))
+  const serverCmd = loadServerCmdForHome(homeDir)
+  const runtimeDir = path.join(pkgRoot, '.next', 'standalone')
+
+  fs.mkdirSync(path.join(pkgRoot, '.next', 'static', 'chunks'), { recursive: true })
+  fs.mkdirSync(path.join(pkgRoot, 'public', 'branding'), { recursive: true })
+  fs.writeFileSync(path.join(pkgRoot, '.next', 'static', 'chunks', 'app.js'), 'chunk\n', 'utf8')
+  fs.writeFileSync(path.join(pkgRoot, 'public', 'branding', 'logo.svg'), '<svg />\n', 'utf8')
+
+  const result = serverCmd.syncStandaloneRuntimeAssets({
+    sourceRoot: pkgRoot,
+    runtimeDir,
+    force: true,
+  })
+
+  assert.deepEqual(result, { staticCopied: true, publicCopied: true })
+  assert.equal(fs.readFileSync(path.join(runtimeDir, '.next', 'static', 'chunks', 'app.js'), 'utf8'), 'chunk\n')
+  assert.equal(fs.readFileSync(path.join(runtimeDir, 'public', 'branding', 'logo.svg'), 'utf8'), '<svg />\n')
+
+  fs.rmSync(homeDir, { recursive: true, force: true })
+  fs.rmSync(pkgRoot, { recursive: true, force: true })
+})
+
+test('syncStandaloneRuntimeAssets targets the resolved nested runtime directory', () => {
+  const homeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'swarmclaw-server-home-'))
+  const pkgRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'swarmclaw-server-pkg-'))
+  const serverCmd = loadServerCmdForHome(homeDir)
+  const serverJs = path.join(pkgRoot, '.next', 'standalone', 'Users', 'wayde', 'Dev', 'swarmclaw', 'server.js')
+  const runtimeDir = serverCmd.resolveStandaloneRuntimeDir(serverJs)
+
+  fs.mkdirSync(path.dirname(serverJs), { recursive: true })
+  fs.writeFileSync(serverJs, 'console.log("ok")\n', 'utf8')
+  fs.mkdirSync(path.join(pkgRoot, '.next', 'static', 'css'), { recursive: true })
+  fs.writeFileSync(path.join(pkgRoot, '.next', 'static', 'css', 'app.css'), 'body{}\n', 'utf8')
+
+  const result = serverCmd.syncStandaloneRuntimeAssets({
+    sourceRoot: pkgRoot,
+    runtimeDir,
+  })
+
+  assert.deepEqual(result, { staticCopied: true, publicCopied: false })
+  assert.equal(fs.readFileSync(path.join(runtimeDir, '.next', 'static', 'css', 'app.css'), 'utf8'), 'body{}\n')
+  assert.equal(fs.existsSync(path.join(runtimeDir, 'public')), false)
+
+  fs.rmSync(homeDir, { recursive: true, force: true })
+  fs.rmSync(pkgRoot, { recursive: true, force: true })
+})
+
+test('syncStandaloneRuntimeAssets repairs missing assets without overwriting an existing target by default', () => {
+  const homeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'swarmclaw-server-home-'))
+  const pkgRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'swarmclaw-server-pkg-'))
+  const serverCmd = loadServerCmdForHome(homeDir)
+  const runtimeDir = path.join(pkgRoot, '.next', 'standalone')
+
+  fs.mkdirSync(path.join(pkgRoot, '.next', 'static', 'chunks'), { recursive: true })
+  fs.writeFileSync(path.join(pkgRoot, '.next', 'static', 'chunks', 'main.js'), 'fresh\n', 'utf8')
+  fs.mkdirSync(path.join(runtimeDir, 'public'), { recursive: true })
+  fs.writeFileSync(path.join(runtimeDir, 'public', 'keep.txt'), 'keep\n', 'utf8')
+
+  const result = serverCmd.syncStandaloneRuntimeAssets({
+    sourceRoot: pkgRoot,
+    runtimeDir,
+  })
+
+  assert.deepEqual(result, { staticCopied: true, publicCopied: false })
+  assert.equal(fs.readFileSync(path.join(runtimeDir, '.next', 'static', 'chunks', 'main.js'), 'utf8'), 'fresh\n')
+  assert.equal(fs.readFileSync(path.join(runtimeDir, 'public', 'keep.txt'), 'utf8'), 'keep\n')
+
+  fs.rmSync(homeDir, { recursive: true, force: true })
+  fs.rmSync(pkgRoot, { recursive: true, force: true })
+})
+
 test('resolveReadyCheckHost maps wildcard bind hosts to loopback', () => {
   const homeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'swarmclaw-server-home-'))
   const serverCmd = loadServerCmdForHome(homeDir)
