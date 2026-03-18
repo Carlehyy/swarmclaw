@@ -27,6 +27,7 @@ import {
   buildProactiveMemorySection,
   buildCoordinatorSection,
   buildCredentialAwarenessSection,
+  buildRunContextSection,
 } from '@/lib/server/chat-execution/prompt-sections'
 
 import { log } from '@/lib/server/logger'
@@ -358,6 +359,12 @@ async function streamAgentChatCore(opts: StreamAgentChatOpts): Promise<StreamAge
   if (workspaceBlock) promptParts.push(workspaceBlock)
   if (awarenessBlock) promptParts.push(awarenessBlock)
   if (situationalBlock) promptParts.push(situationalBlock)
+
+  // RunContext — structured working memory that survives compaction
+  if (!hasProvidedSystemPrompt) {
+    const runContextBlock = buildRunContextSection(session.runContext, isMinimalPrompt)
+    if (runContextBlock) promptParts.push(runContextBlock)
+  }
 
   // Extra system context — always included (caller-provided context is always relevant)
   if (Array.isArray(extraSystemContext)) {

@@ -8,6 +8,7 @@ import type { Extension, ExtensionHooks, Session } from '@/types'
 import { registerNativeCapability } from '../native-capabilities'
 import { normalizeToolInputArgs } from './normalize-tool-args'
 import { errorMessage } from '@/lib/shared-utils'
+import { updateSessionRunContext } from '@/lib/server/run-context'
 
 interface ContextToolContext {
   ctx?: { agentId?: string | null; sessionId?: string | null }
@@ -67,6 +68,34 @@ async function executeContextSummarize(args: { keepLastN?: number }, bctx: Conte
   } catch (err: unknown) { return `Error: ${errorMessage(err)}` }
 }
 
+const PIN_CONTEXT_TYPE_MAP: Record<string, 'keyFacts' | 'failedApproaches' | 'blockers' | 'discoveries'> = {
+  fact: 'keyFacts',
+  failed_approach: 'failedApproaches',
+  blocker: 'blockers',
+  discovery: 'discoveries',
+}
+
+async function executePinContext(
+  args: { type?: string; content?: string },
+  bctx: ContextToolContext,
+) {
+  try {
+    const normalized = normalizeToolInputArgs((args ?? {}) as Record<string, unknown>)
+    const type = String(normalized.type || '').toLowerCase()
+    const content = String(normalized.content || '').slice(0, 300).trim()
+    if (!content) return 'Error: content is required.'
+    const field = PIN_CONTEXT_TYPE_MAP[type]
+    if (!field) return `Error: type must be one of: ${Object.keys(PIN_CONTEXT_TYPE_MAP).join(', ')}`
+    const sessionId = bctx.ctx?.sessionId
+    if (!sessionId) return 'Error: no session context.'
+    updateSessionRunContext(sessionId, (ctx) => {
+      ctx[field] = [...ctx[field], content]
+      return ctx
+    })
+    return JSON.stringify({ status: 'pinned', type, field })
+  } catch (err: unknown) { return `Error: ${errorMessage(err)}` }
+}
+
 /**
  * Register as a Built-in Extension
  */
@@ -89,6 +118,19 @@ const ContextExtension: Extension = {
         properties: { keepLastN: { type: 'number' } }
       },
       execute: async (args, context) => executeContextSummarize(args as { keepLastN?: number }, { ctx: { sessionId: context.session.id, agentId: context.session.agentId ?? null }, resolveCurrentSession: () => context.session as unknown as Session })
+    },
+    {
+      name: 'pin_context',
+      description: 'Pin a fact, failed approach, blocker, or discovery to working memory so it survives context compaction and flows to subagents.',
+      parameters: {
+        type: 'object',
+        properties: {
+          type: { type: 'string', enum: ['fact', 'failed_approach', 'blocker', 'discovery'], description: 'What kind of context to pin.' },
+          content: { type: 'string', description: 'The content to pin (max 300 chars).' },
+        },
+        required: ['type', 'content'],
+      },
+      execute: async (args, context) => executePinContext(args as { type?: string; content?: string }, { ctx: { sessionId: context.session.id, agentId: context.session.agentId ?? null }, resolveCurrentSession: () => context.session as unknown as Session })
     }
   ]
 }
@@ -107,6 +149,17 @@ export function buildContextTools(bctx: ToolBuildContext): StructuredToolInterfa
     tool(
       async (args) => executeContextSummarize(args as { keepLastN?: number }, bctx),
       { name: 'context_summarize', description: ContextExtension.tools![1].description, schema: z.object({}).passthrough() }
-    )
+    ),
+    tool(
+      async (args) => executePinContext(args as { type?: string; content?: string }, bctx),
+      {
+        name: 'pin_context',
+        description: ContextExtension.tools![2].description,
+        schema: z.object({
+          type: z.enum(['fact', 'failed_approach', 'blocker', 'discovery']).describe('What kind of context to pin.'),
+          content: z.string().describe('The content to pin (max 300 chars).'),
+        }),
+      }
+    ),
   ]
 }

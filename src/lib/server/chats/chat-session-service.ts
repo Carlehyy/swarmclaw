@@ -18,6 +18,7 @@ import {
   getSessionRunState,
 } from '@/lib/server/runtime/session-run-manager'
 import { deleteSession, getSession, listSessions, saveSession } from '@/lib/server/sessions/session-repository'
+import { deleteSessionWorkingState } from '@/lib/server/working-state/service'
 import { normalizeProviderEndpoint } from '@/lib/openclaw/openclaw-endpoint'
 import { WORKSPACE_DIR } from '@/lib/server/data-dir'
 import { buildSessionListSummary } from '@/lib/chat/session-summary'
@@ -160,6 +161,8 @@ export function deleteChats(ids: string[]): { deleted: number; requested: number
   for (const id of ids) {
     if (!sessions[id]) continue
     stopActiveSessionProcess(id)
+    deleteSessionWorkingState(id)
+    clearMainLoopStateForSession(id)
     deleteSession(id)
     deleted += 1
   }
@@ -174,6 +177,7 @@ export function updateChatSession(sessionId: string, updates: Record<string, unk
 
   if (updates.resetMainLoopState === true) {
     clearMainLoopStateForSession(sessionId)
+    deleteSessionWorkingState(sessionId)
   }
 
   const agentIdUpdateProvided = updates.agentId !== undefined

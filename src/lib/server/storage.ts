@@ -157,6 +157,7 @@ const COLLECTIONS = [
   'provider_health',
   'swarm_snapshots',
   'main_loop_states',
+  'working_states',
   'daemon_status',
 ] as const
 
@@ -1594,6 +1595,12 @@ const mainLoopStatesStore = createCollectionStore('main_loop_states')
 export const loadPersistedMainLoopState = mainLoopStatesStore.loadItem
 export const upsertPersistedMainLoopState = mainLoopStatesStore.upsert
 export const deletePersistedMainLoopState = mainLoopStatesStore.deleteItem
+
+// --- Working States ---
+const workingStatesStore = createCollectionStore('working_states')
+export const loadPersistedWorkingState = workingStatesStore.loadItem
+export const upsertPersistedWorkingState = workingStatesStore.upsert
+export const deletePersistedWorkingState = workingStatesStore.deleteItem
 
 export function getSessionMessages(sessionId: string): Message[] {
   const session = loadSession(sessionId)

@@ -36,6 +36,7 @@ import { getAgent } from '@/lib/server/agents/agent-repository'
 import { isDirectConnectorSession } from '@/lib/server/connectors/session-kind'
 import { getSession, getSessionMessages, saveSession } from '@/lib/server/sessions/session-repository'
 import { appendUsage } from '@/lib/server/usage/usage-repository'
+import { synchronizeWorkingStateForTurn } from '@/lib/server/working-state/service'
 import { notify } from '@/lib/server/ws-hub'
 
 import type { ExecuteChatTurnInput, ExecuteChatTurnResult } from './chat-execution-types'
@@ -563,8 +564,9 @@ export async function finalizeChatTurn(params: {
 
     refreshSessionIdentityState(current, currentAgent)
     let resolvedMissionId = mission?.id || current.missionId || null
+    let updatedMission = mission || null
     if (resolvedMissionId) {
-      const updatedMission = await applyMissionOutcomeForTurn({
+      updatedMission = await applyMissionOutcomeForTurn({
         session: current,
         missionId: resolvedMissionId,
         source,
@@ -577,6 +579,43 @@ export async function finalizeChatTurn(params: {
       if (updatedMission?.id) {
         resolvedMissionId = updatedMission.id
         current.missionId = updatedMission.id
+      }
+    }
+    const missionStateChanged = Boolean(
+      updatedMission
+      && (
+        updatedMission.id !== mission?.id
+        || updatedMission.updatedAt !== mission?.updatedAt
+        || updatedMission.status !== mission?.status
+        || updatedMission.phase !== mission?.phase
+        || updatedMission.currentStep !== mission?.currentStep
+        || updatedMission.waitState?.reason !== mission?.waitState?.reason
+      )
+    )
+    const shouldSyncWorkingState = (
+      (!isHeartbeatRun && (assistantPersisted || persistedToolEvents.length > 0 || Boolean(errorMessage)))
+      || (isHeartbeatRun && (persistedToolEvents.length > 0 || Boolean(errorMessage) || missionStateChanged))
+    )
+    if (shouldSyncWorkingState) {
+      try {
+        await synchronizeWorkingStateForTurn({
+          sessionId,
+          agentId: current.agentId || null,
+          mission: updatedMission,
+          message,
+          assistantText: hiddenControlOnly ? '' : textForPersistence,
+          error: errorMessage || null,
+          toolEvents: persistedToolEvents,
+          runId: lifecycleRunId,
+          source,
+        })
+      } catch (workingStateError: unknown) {
+        log.warn('chat-run', `Working-state sync failed for session ${sessionId}`, {
+          runId: lifecycleRunId,
+          error: typeof workingStateError === 'object' && workingStateError !== null && 'message' in workingStateError
+            ? (workingStateError as Error).message
+            : String(workingStateError),
+        })
       }
     }
     try {

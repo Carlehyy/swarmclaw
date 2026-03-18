@@ -527,3 +527,6 @@ export function buildCliDelegationContext(opts: {
 
   return parts.join('\n')
 }
+
+// Re-export RunContext prompt builder from its canonical home
+export { buildRunContextSection } from '@/lib/server/run-context'

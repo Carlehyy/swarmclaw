@@ -12,6 +12,8 @@ import { enqueueSystemEvent } from '@/lib/server/runtime/system-events'
 import { buildMissionHeartbeatPrompt as buildMissionHeartbeatPromptFromMission, getMissionForSession } from '@/lib/server/missions/mission-service'
 import { loadSettings } from '@/lib/server/settings/settings-repository'
 import { getSession, loadSessions } from '@/lib/server/sessions/session-repository'
+import { deleteSessionWorkingState, loadSessionWorkingState, syncWorkingStateFromMainLoopState } from '@/lib/server/working-state/service'
+import { syncMainLoopToRunContext } from '@/lib/server/run-context'
 
 const LEGACY_META_LINE_RE = /\[(?:MAIN_LOOP_META|MAIN_LOOP_PLAN|MAIN_LOOP_REVIEW|AGENT_HEARTBEAT_META)\]\s*(\{[^\n]*\})?/i
 const HEARTBEAT_META_RE = /\[AGENT_HEARTBEAT_META\]\s*(\{[^\n]*\})/i
@@ -19,7 +21,7 @@ const MAX_PENDING_EVENTS = 16
 const MAX_TIMELINE_ITEMS = 40
 const MAX_WORKING_MEMORY_NOTES = 12
 const DEFAULT_FOLLOWUP_DELAY_MS = 1500
-const DEFAULT_MAX_FOLLOWUP_CHAIN = 4
+const DEFAULT_MAX_FOLLOWUP_CHAIN = 3
 const MAX_LIFETIME_ITERATIONS = 200
 
 export interface MainLoopState {
@@ -440,21 +442,48 @@ function hydrateStateFromSession(sessionId: string): MainLoopState | null {
     }
   }
 
-  return normalizeState(hydrated)
+  return mergeWorkingStateIntoMainLoopState(sessionId, normalizeState(hydrated))
 }
 
 function persistState(sessionId: string, state: MainLoopState): void {
-  upsertPersistedMainLoopState(sessionId, state as unknown as Record<string, unknown>)
+  const normalized = clampState(state)
+  upsertPersistedMainLoopState(sessionId, normalized as unknown as Record<string, unknown>)
+  const session = getSession(sessionId)
+  if (!session) return
+  const mission = getMissionForSession(session)
+  void syncWorkingStateFromMainLoopState({
+    sessionId,
+    mission,
+    goal: normalized.goal,
+    summary: normalized.summary,
+    status: normalized.status === 'ok'
+      ? 'completed'
+      : normalized.status === 'blocked'
+        ? 'blocked'
+        : normalized.status === 'progress'
+          ? 'progress'
+          : 'idle',
+    nextAction: normalized.nextAction,
+    planSteps: normalized.planSteps,
+    blockers: normalized.skillBlocker ? [{
+      summary: normalized.skillBlocker.summary,
+      kind: normalized.skillBlocker.status === 'approval_requested' ? 'approval' : 'other',
+    }] : undefined,
+  })
 }
 
 function getOrCreateState(sessionId: string): MainLoopState | null {
   const existing = stateMap.get(sessionId)
-  if (existing) return existing
+  if (existing) {
+    const merged = mergeWorkingStateIntoMainLoopState(sessionId, existing)
+    stateMap.set(sessionId, merged)
+    return merged
+  }
 
   // Try disk (survives full restart)
   const persisted = loadPersistedMainLoopState(sessionId) as Partial<MainLoopState> | null
   if (persisted) {
-    const restored = normalizeState(persisted)
+    const restored = mergeWorkingStateIntoMainLoopState(sessionId, normalizeState(persisted))
     stateMap.set(sessionId, restored)
     return restored
   }
@@ -465,6 +494,43 @@ function getOrCreateState(sessionId: string): MainLoopState | null {
   stateMap.set(sessionId, hydrated)
   persistState(sessionId, hydrated)
   return hydrated
+}
+
+function mergeWorkingStateIntoMainLoopState(sessionId: string, current: MainLoopState): MainLoopState {
+  const workingState = loadSessionWorkingState(sessionId)
+  if (!workingState) return clampState(current)
+  const next = normalizeState(current)
+  if (workingState.objective) next.goal = cleanMultiline(workingState.objective, 900)
+  if (workingState.summary) next.summary = cleanText(workingState.summary, 1000)
+  if (workingState.nextAction) next.nextAction = cleanText(workingState.nextAction, 240)
+  if (workingState.status === 'completed') next.status = 'ok'
+  else if (workingState.status === 'blocked' || workingState.status === 'waiting') next.status = 'blocked'
+  else if (workingState.status === 'progress') next.status = 'progress'
+
+  const planSteps = (workingState.planSteps || [])
+    .map((step) => cleanText(step.text, 240))
+    .filter((step): step is string => Boolean(step))
+  if (planSteps.length > 0) {
+    next.planSteps = uniqueStrings(planSteps, 8)
+    next.completedPlanSteps = uniqueStrings(
+      (workingState.planSteps || [])
+        .filter((step) => step.status === 'resolved')
+        .map((step) => cleanText(step.text, 240))
+        .filter((step): step is string => Boolean(step)),
+      16,
+    )
+    const activeStep = (workingState.planSteps || []).find((step) => step.status === 'active')
+    if (activeStep?.text) next.currentPlanStep = cleanText(activeStep.text, 240)
+  }
+
+  const noteCandidates = [
+    ...(workingState.confirmedFacts || []).filter((item) => item.status === 'active').map((item) => `Fact: ${item.statement}`),
+    ...(workingState.blockers || []).filter((item) => item.status === 'active').map((item) => `Blocker: ${item.summary}`),
+  ]
+  if (noteCandidates.length > 0) {
+    next.workingMemoryNotes = uniqueStrings([...(next.workingMemoryNotes || []), ...noteCandidates], MAX_WORKING_MEMORY_NOTES)
+  }
+  return clampState(next)
 }
 
 function summarizePendingEvents(events: MainLoopState['pendingEvents']): string {
@@ -768,6 +834,12 @@ export function buildMainLoopHeartbeatPrompt(session: unknown, fallbackPrompt: s
     : ''
   const boundedFallbackPrompt = cleanMultiline(fallbackPrompt, 500)
   const boundedSummary = cleanMultiline(state.summary, 500)
+  const workingState = loadSessionWorkingState(String(candidate.id))
+  const activeWorkingBlockers = (workingState?.blockers || [])
+    .filter((item) => item.status === 'active')
+    .map((item) => item.nextAction ? `${item.summary} | next: ${item.nextAction}` : item.summary)
+    .slice(0, 4)
+    .join('\n')
 
   return [
     'MAIN_AGENT_HEARTBEAT_TICK',
@@ -779,6 +851,7 @@ export function buildMainLoopHeartbeatPrompt(session: unknown, fallbackPrompt: s
     state.currentPlanStep ? `Current plan step: ${state.currentPlanStep}` : '',
     planLines ? `Plan:\n${planLines}` : '',
     state.pendingEvents.length > 0 ? `Pending external events:\n${summarizePendingEvents(state.pendingEvents)}` : '',
+    activeWorkingBlockers ? `Active blockers:\n${activeWorkingBlockers}` : '',
     state.skillBlocker ? `Active skill blocker:\n${summarizeSkillBlocker(state.skillBlocker)}` : '',
     summarizeSelectedSkillRuntime(candidate),
     boundedSummary ? `Latest summary:\n${boundedSummary}` : '',
@@ -827,6 +900,7 @@ export function getMainLoopStateForSession(sessionId: string): MainLoopState | n
 
 export function clearMainLoopStateForSession(sessionId: string): boolean {
   deletePersistedMainLoopState(sessionId)
+  deleteSessionWorkingState(sessionId)
   return stateMap.delete(sessionId)
 }
 
@@ -840,6 +914,7 @@ export function pruneMainLoopState(liveSessionIds: Set<string>): number {
     if (!liveSessionIds.has(sessionId)) {
       stateMap.delete(sessionId)
       deletePersistedMainLoopState(sessionId)
+      deleteSessionWorkingState(sessionId)
       removed++
     }
   }
@@ -1096,5 +1171,11 @@ export function handleMainLoopRunResult(input: HandleMainLoopRunResultInput): Ma
   const finalClamped = clampState(state)
   stateMap.set(input.sessionId, finalClamped)
   persistState(input.sessionId, finalClamped)
+
+  // Project orchestrator state into session RunContext (non-critical)
+  try {
+    syncMainLoopToRunContext(input.sessionId, finalClamped)
+  } catch { /* non-critical — main loop continues even if sync fails */ }
+
   return followup
 }

@@ -553,5 +553,24 @@ function normalizeStoredRecordInner(
   if (!session.injectedMemoryIds || typeof session.injectedMemoryIds !== 'object') {
     session.injectedMemoryIds = {}
   }
+  // Validate runContext if present — leave null/undefined alone (created on demand)
+  if (session.runContext != null) {
+    if (typeof session.runContext !== 'object' || Array.isArray(session.runContext)) {
+      session.runContext = null
+    } else {
+      const rc = session.runContext as Record<string, unknown>
+      if (typeof rc.objective !== 'string' && rc.objective !== null) rc.objective = null
+      if (!Array.isArray(rc.constraints)) rc.constraints = []
+      if (!Array.isArray(rc.keyFacts)) rc.keyFacts = []
+      if (!Array.isArray(rc.discoveries)) rc.discoveries = []
+      if (!Array.isArray(rc.failedApproaches)) rc.failedApproaches = []
+      if (!Array.isArray(rc.currentPlan)) rc.currentPlan = []
+      if (!Array.isArray(rc.completedSteps)) rc.completedSteps = []
+      if (!Array.isArray(rc.blockers)) rc.blockers = []
+      if (typeof rc.parentContext !== 'string' && rc.parentContext !== null) rc.parentContext = null
+      if (typeof rc.updatedAt !== 'number') rc.updatedAt = Date.now()
+      if (typeof rc.version !== 'number') rc.version = 0
+    }
+  }
   return session
 }

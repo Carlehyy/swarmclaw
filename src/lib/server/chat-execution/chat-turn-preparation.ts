@@ -69,6 +69,7 @@ import {
   resetSessionRuntime,
   resolveSessionResetPolicy,
 } from '@/lib/server/session-reset-policy'
+import { buildWorkingStatePromptBlock } from '@/lib/server/working-state/service'
 import { checkAgentBudgetLimits } from '@/lib/server/cost'
 import {
   filterRuntimeCapabilityIds,
@@ -445,6 +446,7 @@ export interface PreparedExecutableChatTurn {
   lifecycleRunId: string
   agentForSession: ReturnType<typeof getAgent>
   mission: Awaited<ReturnType<typeof resolveMissionForTurn>>
+  workingStateContextBlock?: string
   missionContextBlock?: string
   extensionsForRun: string[]
   effectiveMessage: string
@@ -615,12 +617,13 @@ export async function prepareChatTurn(input: ExecuteChatTurnInput): Promise<Prep
   if (isHeartbeatRun && input.modelOverride) {
     sessionForRun = { ...sessionForRun, model: input.modelOverride }
   }
+  const workingStateContextBlock = buildWorkingStatePromptBlock(sessionId, { mission })
   const missionContextBlock = buildMissionContextBlock(mission)
 
   if (extensionsForRun.length > 0) {
     const modelResolvePrompt = heartbeatLightContext
-      ? (joinSystemPromptBlocks(buildLightHeartbeatSystemPrompt(sessionForRun), missionContextBlock) || '')
-      : (joinSystemPromptBlocks(buildAgentSystemPrompt(sessionForRun), missionContextBlock) || '')
+      ? (joinSystemPromptBlocks(buildLightHeartbeatSystemPrompt(sessionForRun), workingStateContextBlock, missionContextBlock) || '')
+      : (joinSystemPromptBlocks(buildAgentSystemPrompt(sessionForRun), workingStateContextBlock, missionContextBlock) || '')
     const modelResolve = await runCapabilityBeforeModelResolve(
       {
         session: sessionForRun,
@@ -781,8 +784,8 @@ export async function prepareChatTurn(input: ExecuteChatTurnInput): Promise<Prep
     && !useLocalOpenClawNativeRuntime
 
   const systemPrompt = heartbeatLightContext
-    ? joinSystemPromptBlocks(buildLightHeartbeatSystemPrompt(sessionForRun), missionContextBlock)
-    : (hasExtensions ? undefined : joinSystemPromptBlocks(buildAgentSystemPrompt(sessionForRun), missionContextBlock))
+    ? joinSystemPromptBlocks(buildLightHeartbeatSystemPrompt(sessionForRun), workingStateContextBlock, missionContextBlock)
+    : (hasExtensions ? undefined : joinSystemPromptBlocks(buildAgentSystemPrompt(sessionForRun), workingStateContextBlock, missionContextBlock))
 
   return {
     kind: 'ready',
@@ -797,6 +800,7 @@ export async function prepareChatTurn(input: ExecuteChatTurnInput): Promise<Prep
     lifecycleRunId,
     agentForSession,
     mission,
+    workingStateContextBlock: workingStateContextBlock || undefined,
     missionContextBlock: missionContextBlock || undefined,
     extensionsForRun,
     effectiveMessage,

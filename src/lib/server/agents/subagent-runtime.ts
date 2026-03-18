@@ -49,6 +49,7 @@ import { logExecution } from '@/lib/server/execution-log'
 import { enqueueSystemEvent } from '@/lib/server/runtime/system-events'
 import { getEnabledCapabilityIds, splitCapabilityIds } from '@/lib/capability-selection'
 import { getSession, loadSessions, saveSession } from '@/lib/server/sessions/session-repository'
+import { ensureRunContext, serializeParentContext } from '@/lib/server/run-context'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -277,6 +278,16 @@ async function spawnSubagentImpl(
     browserProfileId,
   }
   sessions[sid] = applyResolvedRoute(nextSession, resolvePrimaryAgentRoute(agent))
+
+  // Enrich child session with parent's RunContext for delegation handoff
+  const parentRunContext = parent?.runContext as import('@/types').RunContext | null | undefined
+  if (parentRunContext) {
+    const childCtx = ensureRunContext(null)
+    childCtx.parentContext = serializeParentContext(parentRunContext)
+    childCtx.objective = input.message.slice(0, 900)
+    sessions[sid].runContext = childCtx
+  }
+
   saveSession(sid, sessions[sid])
 
   log.info('subagent', 'Spawning', { agentId: agent.id, agentName: agent.name, depth: depth + 1, jobId: job.id, sessionId: sid })

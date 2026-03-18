@@ -33,6 +33,8 @@ import { log } from '@/lib/server/logger'
 import { logExecution } from '@/lib/server/execution-log'
 import { logActivity } from '@/lib/server/storage'
 import { createNotification } from '@/lib/server/create-notification'
+import { foldReflectionIntoRunContext } from '@/lib/server/run-context'
+import { getSession, saveSession } from '@/lib/server/sessions/session-repository'
 
 const TAG = 'supervisor-reflection'
 
@@ -1094,6 +1096,17 @@ export async function observeAutonomyRunOutcome(
   const reflections = loadRunReflections()
   reflections[reflection.id] = reflection
   saveRunReflections(reflections)
+
+  // Fold reflection notes into session RunContext (non-critical)
+  try {
+    const freshSession = getSession(input.sessionId) as Session | undefined
+    if (freshSession) {
+      freshSession.runContext = foldReflectionIntoRunContext(freshSession.runContext, reflection)
+      saveSession(input.sessionId, freshSession)
+    }
+  } catch (err: unknown) {
+    log.warn(TAG, 'RunContext reflection folding failed:', err instanceof Error ? err.message : String(err))
+  }
 
   // Quality degradation alert — if recent quality trend drops below 0.5
   if (typeof reflection.qualityScore === 'number' && input.agentId) {
