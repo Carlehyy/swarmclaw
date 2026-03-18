@@ -2,8 +2,19 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { api } from '@/lib/app/api-client'
-import { useWs } from '@/hooks/use-ws'
+import { useAgentsQuery } from '@/features/agents/queries'
+import { useChatroomsQuery } from '@/features/chatrooms/queries'
+import { useMissionsQuery } from '@/features/missions/queries'
+import {
+  useCreateProtocolRunMutation,
+  useDeleteProtocolTemplateMutation,
+  useProtocolRunActionMutation,
+  useProtocolRunDetailQuery,
+  useProtocolRunsQuery,
+  useProtocolTemplatesQuery,
+  useUpsertProtocolTemplateMutation,
+} from '@/features/protocols/queries'
+import { useTasksQuery } from '@/features/tasks/queries'
 import { MainContent } from '@/components/layout/main-content'
 import { StructuredSessionLauncher } from '@/components/protocols/structured-session-launcher'
 import { timeAgo } from '@/lib/time-format'
@@ -67,10 +78,6 @@ const DEFAULT_TEMPLATE_DRAFT: TemplateDraft = {
   entryStepId: 'present',
 }
 
-async function postRunAction(runId: string, payload: RunActionPayload) {
-  await api('POST', `/protocols/runs/${runId}/actions`, payload)
-}
-
 function toTemplateDraft(template: ProtocolTemplate | null): TemplateDraft {
   if (!template) return DEFAULT_TEMPLATE_DRAFT
   return {
@@ -125,16 +132,7 @@ function splitCsv(value: string): string[] {
 export default function ProtocolsPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const [templates, setTemplates] = useState<ProtocolTemplate[]>([])
-  const [runs, setRuns] = useState<ProtocolRun[]>([])
-  const [detail, setDetail] = useState<ProtocolRunDetail | null>(null)
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null)
-  const [agents, setAgents] = useState<AgentList>({})
-  const [chatrooms, setChatrooms] = useState<Record<string, Chatroom>>({})
-  const [missions, setMissions] = useState<Mission[]>([])
-  const [tasks, setTasks] = useState<Record<string, BoardTask>>({})
-  const [loading, setLoading] = useState(true)
-  const [detailLoading, setDetailLoading] = useState(false)
   const [actionPending, setActionPending] = useState<string | null>(null)
   const [templatePending, setTemplatePending] = useState<string | null>(null)
   const [templateEditorOpen, setTemplateEditorOpen] = useState(false)
@@ -160,66 +158,55 @@ export default function ProtocolsPage() {
     autoStart: true,
   })
   const requestedRunId = searchParams.get('runId')
-
-  const loadRuns = useCallback(async () => {
-    const [templateList, runList, agentList, roomList, missionList, taskList] = await Promise.all([
-      api<ProtocolTemplate[]>('GET', '/protocols/templates'),
-      api<ProtocolRun[]>('GET', '/protocols/runs?limit=120'),
-      api<AgentList>('GET', '/agents'),
-      api<Record<string, Chatroom>>('GET', '/chatrooms'),
-      api<Mission[]>('GET', '/missions?limit=80'),
-      api<Record<string, BoardTask>>('GET', '/tasks'),
-    ])
-    setTemplates(Array.isArray(templateList) ? templateList : [])
-    const normalizedRuns = Array.isArray(runList) ? runList : []
-    setRuns(normalizedRuns)
-    setAgents(agentList || {})
-    setChatrooms(roomList || {})
-    setMissions(Array.isArray(missionList) ? missionList : [])
-    setTasks(taskList || {})
-    setSelectedRunId((current) => {
-      if (current && normalizedRuns.some((run) => run.id === current)) return current
-      return normalizedRuns[0]?.id || null
-    })
-    setLoading(false)
-  }, [])
+  const templatesQuery = useProtocolTemplatesQuery()
+  const runsQuery = useProtocolRunsQuery({ limit: 120 })
+  const agentsQuery = useAgentsQuery()
+  const chatroomsQuery = useChatroomsQuery()
+  const missionsQuery = useMissionsQuery({ limit: 80 })
+  const tasksQuery = useTasksQuery({ includeArchived: true })
+  const detailQuery = useProtocolRunDetailQuery(selectedRunId, { enabled: Boolean(selectedRunId) })
+  const createRunMutation = useCreateProtocolRunMutation()
+  const runActionMutation = useProtocolRunActionMutation()
+  const upsertTemplateMutation = useUpsertProtocolTemplateMutation()
+  const deleteTemplateMutation = useDeleteProtocolTemplateMutation()
+  const templates = templatesQuery.data ?? []
+  const runs = runsQuery.data ?? []
+  const detail = detailQuery.data ?? null
+  const agents = agentsQuery.data ?? {}
+  const chatrooms = chatroomsQuery.data ?? {}
+  const missions = missionsQuery.data ?? []
+  const tasks = tasksQuery.data ?? {}
+  const loading = (
+    templatesQuery.isLoading
+    || runsQuery.isLoading
+    || agentsQuery.isLoading
+    || chatroomsQuery.isLoading
+    || missionsQuery.isLoading
+    || tasksQuery.isLoading
+  )
+  const detailLoading = detailQuery.isLoading || detailQuery.isFetching
+  const queryError = [
+    templatesQuery.error,
+    runsQuery.error,
+    agentsQuery.error,
+    chatroomsQuery.error,
+    missionsQuery.error,
+    tasksQuery.error,
+    detailQuery.error,
+  ].find(Boolean)
+  const resolvedError = error || (queryError instanceof Error ? queryError.message : null)
 
   // Apply URL-requested run selection separately so WS refreshes don't snap back
   useEffect(() => {
     if (requestedRunId) setSelectedRunId(requestedRunId)
   }, [requestedRunId])
 
-  const loadDetail = useCallback(async (runId: string | null) => {
-    if (!runId) {
-      setDetail(null)
-      return
-    }
-    setDetailLoading(true)
-    try {
-      const value = await api<ProtocolRunDetail>('GET', `/protocols/runs/${runId}`)
-      setDetail(value)
-      setError(null)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Unable to load structured session.')
-      setDetail(null)
-    } finally {
-      setDetailLoading(false)
-    }
-  }, [])
-
   useEffect(() => {
-    void loadRuns().catch((err) => {
-      setError(err instanceof Error ? err.message : 'Unable to load structured sessions.')
-      setLoading(false)
+    setSelectedRunId((current) => {
+      if (current && runs.some((run) => run.id === current)) return current
+      return runs[0]?.id || null
     })
-  }, [loadRuns])
-
-  useEffect(() => {
-    void loadDetail(selectedRunId)
-  }, [loadDetail, selectedRunId])
-
-  useWs('protocol_runs', loadRuns, 2000)
-  useWs('protocol_templates', loadRuns, 2000)
+  }, [runs])
 
   const selectedTemplate = useMemo(() => templates.find((template) => template.id === form.templateId) || null, [form.templateId, templates])
   const customTemplates = useMemo(() => templates.filter((template) => !template.builtIn), [templates])
@@ -244,7 +231,7 @@ export default function ProtocolsPage() {
       return
     }
     try {
-      const run = await api<ProtocolRun>('POST', '/protocols/runs', {
+      const run = await createRunMutation.mutateAsync({
         title: form.title.trim(),
         templateId: form.templateId,
         participantAgentIds: form.participantAgentIds,
@@ -269,37 +256,34 @@ export default function ProtocolsPage() {
         decisionMode: '',
       }))
       setSelectedRunId(run.id)
-      await loadRuns()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unable to create structured session.')
     }
-  }, [form, loadRuns])
+  }, [createRunMutation, form])
 
   const handleAction = useCallback(async (payload: RunActionPayload) => {
     if (!detail?.run.id) return
     setActionPending(payload.action)
     try {
-      await postRunAction(detail.run.id, payload)
-      await Promise.all([loadRuns(), loadDetail(detail.run.id)])
+      await runActionMutation.mutateAsync({ runId: detail.run.id, payload })
       if (payload.action === 'inject_context') setContextDraft('')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unable to update structured session.')
     } finally {
       setActionPending(null)
     }
-  }, [detail, loadDetail, loadRuns])
+  }, [detail, runActionMutation])
 
   const handleBranchAction = useCallback(async (runId: string, payload: RunActionPayload) => {
     setActionPending(`${payload.action}:${runId}`)
     try {
-      await postRunAction(runId, payload)
-      await Promise.all([loadRuns(), detail?.run.id ? loadDetail(detail.run.id) : Promise.resolve()])
+      await runActionMutation.mutateAsync({ runId, payload })
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unable to update branch run.')
     } finally {
       setActionPending(null)
     }
-  }, [detail?.run.id, loadDetail, loadRuns])
+  }, [runActionMutation])
 
   const openTemplateEditor = useCallback((template: ProtocolTemplate | null = null) => {
     setEditingTemplateId(template?.builtIn ? null : template?.id || null)
@@ -328,27 +312,27 @@ export default function ProtocolsPage() {
         return
       }
       setTemplatePending(editingTemplateId ? 'save-edit' : 'save-new')
-      if (editingTemplateId) {
-        await api('PATCH', `/protocols/templates/${editingTemplateId}`, payload)
-      } else {
-        const created = await api<ProtocolTemplate>('POST', '/protocols/templates', payload)
+      const created = await upsertTemplateMutation.mutateAsync({
+        templateId: editingTemplateId,
+        payload,
+      })
+      if (!editingTemplateId) {
         setForm((current) => ({ ...current, templateId: created.id }))
       }
       setTemplateEditorOpen(false)
       setEditingTemplateId(null)
       setTemplateDraft(DEFAULT_TEMPLATE_DRAFT)
-      await loadRuns()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unable to save structured-session template.')
     } finally {
       setTemplatePending(null)
     }
-  }, [editingTemplateId, loadRuns, templateDraft])
+  }, [editingTemplateId, templateDraft, upsertTemplateMutation])
 
   const handleDeleteTemplate = useCallback(async (templateId: string) => {
     setTemplatePending(`delete:${templateId}`)
     try {
-      await api('DELETE', `/protocols/templates/${templateId}`)
+      await deleteTemplateMutation.mutateAsync(templateId)
       setTemplateEditorOpen(false)
       setEditingTemplateId(null)
       setTemplateDraft(DEFAULT_TEMPLATE_DRAFT)
@@ -356,13 +340,12 @@ export default function ProtocolsPage() {
         ...current,
         templateId: current.templateId === templateId ? 'facilitated_discussion' : current.templateId,
       }))
-      await loadRuns()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unable to delete structured-session template.')
     } finally {
       setTemplatePending(null)
     }
-  }, [loadRuns])
+  }, [deleteTemplateMutation])
 
   const handleSelectRun = useCallback((runId: string) => {
     setSelectedRunId(runId)
@@ -715,9 +698,9 @@ export default function ProtocolsPage() {
                 )}
               </div>
             </div>
-            {error && (
+            {resolvedError && (
               <div className="mt-4 rounded-[14px] border border-red-500/20 bg-red-500/10 px-4 py-3 text-[13px] text-red-200">
-                {error}
+                {resolvedError}
               </div>
             )}
           </section>
@@ -1272,9 +1255,8 @@ export default function ProtocolsPage() {
         open={launcherOpen}
         onClose={() => setLauncherOpen(false)}
         onCreated={(run) => {
+          setLauncherOpen(false)
           setSelectedRunId(run.id)
-          void loadRuns()
-          void loadDetail(run.id)
           router.push(`/protocols?runId=${encodeURIComponent(run.id)}`)
         }}
         allowContextSelection

@@ -1,12 +1,20 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { useAppStore } from '@/stores/use-app-store'
-import { api } from '@/lib/app/api-client'
-import { createTask, updateTask, archiveTask, unarchiveTask } from '@/lib/tasks'
+import { useAgentsQuery } from '@/features/agents/queries'
+import {
+  useAppendTaskCommentMutation,
+  useCreateTaskMutation,
+  useTasksQuery,
+  useUpdateTaskMutation,
+} from '@/features/tasks/queries'
+import { useProjectsQuery } from '@/features/projects/queries'
+import { useAppSettingsQuery } from '@/features/settings/queries'
+import { useProtocolRunsQuery } from '@/features/protocols/queries'
 import { getMissionPath } from '@/lib/app/navigation'
 import { BottomSheet } from '@/components/shared/bottom-sheet'
 import { AgentPickerList } from '@/components/shared/agent-picker-list'
@@ -43,20 +51,17 @@ export function TaskSheet() {
   const setOpen = useAppStore((s) => s.setTaskSheetOpen)
   const editingId = useAppStore((s) => s.editingTaskId)
   const setEditingId = useAppStore((s) => s.setEditingTaskId)
-  const tasks = useAppStore((s) => s.tasks)
-  const loadTasks = useAppStore((s) => s.loadTasks)
-  const agents = useAppStore((s) => s.agents)
-  const loadAgents = useAppStore((s) => s.loadAgents)
-
-  const projects = useAppStore((s) => s.projects)
-  const loadProjects = useAppStore((s) => s.loadProjects)
   const activeProjectFilter = useAppStore((s) => s.activeProjectFilter)
 
   const viewOnly = useAppStore((s) => s.taskSheetViewOnly)
   const setViewOnly = useAppStore((s) => s.setTaskSheetViewOnly)
-
-  const appSettings = useAppStore((s) => s.appSettings)
-  const loadSettings = useAppStore((s) => s.loadSettings)
+  const { data: tasks = {}, isLoading: tasksLoading } = useTasksQuery({ includeArchived: true, enabled: open })
+  const { data: agents = {}, isLoading: agentsLoading } = useAgentsQuery({ enabled: open })
+  const { data: projects = {}, isLoading: projectsLoading } = useProjectsQuery({ enabled: open })
+  const { data: appSettings = {}, isLoading: settingsLoading } = useAppSettingsQuery({ enabled: open })
+  const createTaskMutation = useCreateTaskMutation()
+  const updateTaskMutation = useUpdateTaskMutation()
+  const appendCommentMutation = useAppendTaskCommentMutation()
 
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
@@ -82,69 +87,90 @@ export function TaskSheet() {
   const [qualityGateRequireArtifact, setQualityGateRequireArtifact] = useState(false)
   const [qualityGateRequireReport, setQualityGateRequireReport] = useState(false)
   const [structuredSessionOpen, setStructuredSessionOpen] = useState(false)
-  const [activeStructuredRunId, setActiveStructuredRunId] = useState<string | null>(null)
 
   const editing = editingId ? tasks[editingId] : null
-  const agentList = Object.values(agents).sort((a, b) => a.name.localeCompare(b.name))
+  const agentList = useMemo(
+    () => Object.values(agents).sort((a, b) => a.name.localeCompare(b.name)),
+    [agents],
+  )
+  const { data: linkedProtocolRuns = [] } = useProtocolRunsQuery({
+    taskId: editing?.id || null,
+    limit: 6,
+    enabled: open && !!editing?.id,
+  })
+  const activeStructuredRunId =
+    linkedProtocolRuns.find((run) => !['completed', 'failed', 'cancelled', 'archived'].includes(run.status))?.id || null
 
   useEffect(() => {
-    if (open) {
-      loadAgents()
-      loadProjects()
-      loadSettings()
-      const defaultGateEnabled = appSettings.taskQualityGateEnabled ?? true
-      const defaultGateMinResult = normalizeGateNumber(appSettings.taskQualityGateMinResultChars, 80, 10, 2000)
-      const defaultGateMinEvidence = normalizeGateNumber(appSettings.taskQualityGateMinEvidenceItems, 2, 0, 8)
-      const defaultGateRequireVerification = appSettings.taskQualityGateRequireVerification ?? false
-      const defaultGateRequireArtifact = appSettings.taskQualityGateRequireArtifact ?? false
-      const defaultGateRequireReport = appSettings.taskQualityGateRequireReport ?? false
-      if (editing) {
-        setTitle(editing.title)
-        setDescription(editing.description)
-        setAgentId(editing.agentId)
-        setProjectId(editing.projectId || '')
-        setImages(editing.images || [])
-        setCwd(editing.cwd || '')
-        setFile(editing.file || null)
-        setTags(editing.tags || [])
-        setBlockedBy(editing.blockedBy || [])
-        setDepSearch('')
-        setDepError(null)
-        setDueAt(editing.dueAt ? new Date(editing.dueAt).toISOString().slice(0, 10) : '')
-        setCustomFields(editing.customFields || {})
-        setPriority(editing.priority || '')
-        const gate = (editing.qualityGate || null) as TaskQualityGateConfig | null
-        setQualityGateEnabled(gate?.enabled ?? defaultGateEnabled)
-        setQualityGateMinResultChars(normalizeGateNumber(gate?.minResultChars, defaultGateMinResult, 10, 2000))
-        setQualityGateMinEvidenceItems(normalizeGateNumber(gate?.minEvidenceItems, defaultGateMinEvidence, 0, 8))
-        setQualityGateRequireVerification(gate?.requireVerification ?? defaultGateRequireVerification)
-        setQualityGateRequireArtifact(gate?.requireArtifact ?? defaultGateRequireArtifact)
-        setQualityGateRequireReport(gate?.requireReport ?? defaultGateRequireReport)
-      } else {
-        setTitle('')
-        setDescription('')
-        setAgentId(agentList[0]?.id || '')
-        setProjectId(activeProjectFilter || '')
-        setImages([])
-        setCwd('')
-        setFile(null)
-        setTags([])
-        setBlockedBy([])
-        setDepSearch('')
-        setDepError(null)
-        setDueAt('')
-        setCustomFields({})
-        setPriority('')
-        setQualityGateEnabled(defaultGateEnabled)
-        setQualityGateMinResultChars(defaultGateMinResult)
-        setQualityGateMinEvidenceItems(defaultGateMinEvidence)
-        setQualityGateRequireVerification(defaultGateRequireVerification)
-        setQualityGateRequireArtifact(defaultGateRequireArtifact)
-        setQualityGateRequireReport(defaultGateRequireReport)
-      }
+    if (!open) return
+    if (tasksLoading || agentsLoading || projectsLoading || settingsLoading) return
+
+    const defaultGateEnabled = appSettings.taskQualityGateEnabled ?? true
+    const defaultGateMinResult = normalizeGateNumber(appSettings.taskQualityGateMinResultChars, 80, 10, 2000)
+    const defaultGateMinEvidence = normalizeGateNumber(appSettings.taskQualityGateMinEvidenceItems, 2, 0, 8)
+    const defaultGateRequireVerification = appSettings.taskQualityGateRequireVerification ?? false
+    const defaultGateRequireArtifact = appSettings.taskQualityGateRequireArtifact ?? false
+    const defaultGateRequireReport = appSettings.taskQualityGateRequireReport ?? false
+
+    if (editingId && !editing) return
+
+    if (editing) {
+      setTitle(editing.title)
+      setDescription(editing.description)
+      setAgentId(editing.agentId)
+      setProjectId(editing.projectId || '')
+      setImages(editing.images || [])
+      setCwd(editing.cwd || '')
+      setFile(editing.file || null)
+      setTags(editing.tags || [])
+      setBlockedBy(editing.blockedBy || [])
+      setDepSearch('')
+      setDepError(null)
+      setDueAt(editing.dueAt ? new Date(editing.dueAt).toISOString().slice(0, 10) : '')
+      setCustomFields(editing.customFields || {})
+      setPriority(editing.priority || '')
+      const gate = (editing.qualityGate || null) as TaskQualityGateConfig | null
+      setQualityGateEnabled(gate?.enabled ?? defaultGateEnabled)
+      setQualityGateMinResultChars(normalizeGateNumber(gate?.minResultChars, defaultGateMinResult, 10, 2000))
+      setQualityGateMinEvidenceItems(normalizeGateNumber(gate?.minEvidenceItems, defaultGateMinEvidence, 0, 8))
+      setQualityGateRequireVerification(gate?.requireVerification ?? defaultGateRequireVerification)
+      setQualityGateRequireArtifact(gate?.requireArtifact ?? defaultGateRequireArtifact)
+      setQualityGateRequireReport(gate?.requireReport ?? defaultGateRequireReport)
+      return
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, editingId])
+
+    setTitle('')
+    setDescription('')
+    setAgentId(agentList[0]?.id || '')
+    setProjectId(activeProjectFilter || '')
+    setImages([])
+    setCwd('')
+    setFile(null)
+    setTags([])
+    setBlockedBy([])
+    setDepSearch('')
+    setDepError(null)
+    setDueAt('')
+    setCustomFields({})
+    setPriority('')
+    setQualityGateEnabled(defaultGateEnabled)
+    setQualityGateMinResultChars(defaultGateMinResult)
+    setQualityGateMinEvidenceItems(defaultGateMinEvidence)
+    setQualityGateRequireVerification(defaultGateRequireVerification)
+    setQualityGateRequireArtifact(defaultGateRequireArtifact)
+    setQualityGateRequireReport(defaultGateRequireReport)
+  }, [
+    activeProjectFilter,
+    agentList,
+    agentsLoading,
+    appSettings,
+    editing,
+    editingId,
+    open,
+    projectsLoading,
+    settingsLoading,
+    tasksLoading,
+  ])
 
   // Update default agent when agents load (only if no agent selected yet)
   useEffect(() => {
@@ -152,26 +178,6 @@ export function TaskSheet() {
       setAgentId(agentList[0].id)
     }
   }, [open, editing, agentId, agentList])
-
-  useEffect(() => {
-    if (!editing?.id || !open) {
-      setActiveStructuredRunId(null)
-      return
-    }
-    let cancelled = false
-    void api<Array<{ id: string; status: string }>>('GET', `/protocols/runs?taskId=${encodeURIComponent(editing.id)}&limit=6`)
-      .then((runs) => {
-        if (cancelled) return
-        const active = (Array.isArray(runs) ? runs : []).find((run) => !['completed', 'failed', 'cancelled', 'archived'].includes(run.status))
-        setActiveStructuredRunId(active?.id || null)
-      })
-      .catch(() => {
-        if (!cancelled) setActiveStructuredRunId(null)
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [editing?.id, open])
 
   const onClose = () => {
     setOpen(false)
@@ -202,13 +208,13 @@ export function TaskSheet() {
     } as Partial<BoardTask> & { title: string; description: string; agentId: string }
     try {
       if (editing) {
-        const res = await updateTask(editing.id, payload)
+        const res = await updateTaskMutation.mutateAsync({ id: editing.id, patch: payload })
         if (res && typeof res === 'object' && 'error' in res) {
           setDepError(String((res as unknown as Record<string, unknown>).error))
           return
         }
       } else {
-        const res = await createTask(payload)
+        const res = await createTaskMutation.mutateAsync(payload)
         if (res && typeof res === 'object' && 'error' in res) {
           setDepError(String((res as unknown as Record<string, unknown>).error))
           return
@@ -219,7 +225,6 @@ export function TaskSheet() {
       return
     }
     setDepError(null)
-    await loadTasks()
     onClose()
   }
 
@@ -244,24 +249,21 @@ export function TaskSheet() {
 
   const handleArchive = async () => {
     if (editing) {
-      await archiveTask(editing.id)
-      await loadTasks()
+      await updateTaskMutation.mutateAsync({ id: editing.id, patch: { status: 'archived' } })
       onClose()
     }
   }
 
   const handleUnarchive = async () => {
     if (editing) {
-      await unarchiveTask(editing.id)
-      await loadTasks()
+      await updateTaskMutation.mutateAsync({ id: editing.id, patch: { status: 'backlog' } })
       onClose()
     }
   }
 
   const handleQueue = async () => {
     if (editing && editing.status === 'backlog') {
-      await updateTask(editing.id, { status: 'queued' })
-      await loadTasks()
+      await updateTaskMutation.mutateAsync({ id: editing.id, patch: { status: 'queued' } })
       onClose()
     }
   }
@@ -275,8 +277,7 @@ export function TaskSheet() {
       createdAt: Date.now(),
     }
     // Use atomic append to avoid race conditions with queue-added comments
-    await updateTask(editing.id, { appendComment: c } as Partial<BoardTask> & { appendComment: TaskComment })
-    await loadTasks()
+    await appendCommentMutation.mutateAsync({ id: editing.id, comment: c })
     setCommentText('')
   }
 

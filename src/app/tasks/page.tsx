@@ -2,8 +2,15 @@
 
 import { useEffect, useCallback, useState, useRef, useMemo } from 'react'
 import { useAppStore } from '@/stores/use-app-store'
-import { useWs } from '@/hooks/use-ws'
-import { updateTask, bulkUpdateTasks, importGitHubIssues, type GitHubIssueImportResult } from '@/lib/tasks'
+import { useAgentsQuery } from '@/features/agents/queries'
+import { useProjectsQuery } from '@/features/projects/queries'
+import {
+  useBulkUpdateTasksMutation,
+  useImportGitHubIssuesMutation,
+  useTasksQuery,
+  useUpdateTaskMutation,
+  type GitHubIssueImportResult,
+} from '@/features/tasks/queries'
 import { TaskColumn } from '@/components/tasks/task-column'
 import { TaskCard } from '@/components/tasks/task-card'
 import { Skeleton } from '@/components/shared/skeleton'
@@ -63,18 +70,18 @@ function attentionRank(task: BoardTask, now: number | null): number {
 
 export default function TasksPage() {
   const now = useNow()
-  const tasks = useAppStore((s) => s.tasks)
-  const loadTasks = useAppStore((s) => s.loadTasks)
-  const loadAgents = useAppStore((s) => s.loadAgents)
   const setTaskSheetOpen = useAppStore((s) => s.setTaskSheetOpen)
   const setEditingTaskId = useAppStore((s) => s.setEditingTaskId)
-  const agents = useAppStore((s) => s.agents)
-  const projects = useAppStore((s) => s.projects)
-  const loadProjects = useAppStore((s) => s.loadProjects)
   const activeProjectFilter = useAppStore((s) => s.activeProjectFilter)
   const setActiveProjectFilter = useAppStore((s) => s.setActiveProjectFilter)
   const showArchived = useAppStore((s) => s.showArchivedTasks)
   const setShowArchived = useAppStore((s) => s.setShowArchivedTasks)
+  const { data: tasks = {}, isLoading: tasksLoading } = useTasksQuery({ includeArchived: true })
+  const { data: agents = {}, isLoading: agentsLoading } = useAgentsQuery()
+  const { data: projects = {}, isLoading: projectsLoading } = useProjectsQuery()
+  const bulkUpdateTasksMutation = useBulkUpdateTasksMutation()
+  const updateTaskMutation = useUpdateTaskMutation()
+  const importGitHubIssuesMutation = useImportGitHubIssuesMutation()
 
   // Bulk selection
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
@@ -97,8 +104,7 @@ export default function TasksPage() {
     if (selectedIds.size === 0) return
     setBulkActing(true)
     try {
-      await bulkUpdateTasks([...selectedIds], { status })
-      await loadTasks()
+      await bulkUpdateTasksMutation.mutateAsync({ ids: [...selectedIds], patch: { status } })
       toast.success(`Moved ${selectedIds.size} task(s) to ${status}`)
       clearSelection()
     } catch {
@@ -106,15 +112,13 @@ export default function TasksPage() {
     } finally {
       setBulkActing(false)
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedIds])
+  }, [bulkUpdateTasksMutation, clearSelection, selectedIds])
 
   const handleBulkAgent = useCallback(async (agentId: string) => {
     if (selectedIds.size === 0) return
     setBulkActing(true)
     try {
-      await bulkUpdateTasks([...selectedIds], { agentId })
-      await loadTasks()
+      await bulkUpdateTasksMutation.mutateAsync({ ids: [...selectedIds], patch: { agentId } })
       const name = agents[agentId]?.name || 'agent'
       toast.success(`Assigned ${selectedIds.size} task(s) to ${name}`)
       clearSelection()
@@ -123,15 +127,13 @@ export default function TasksPage() {
     } finally {
       setBulkActing(false)
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedIds, agents])
+  }, [agents, bulkUpdateTasksMutation, clearSelection, selectedIds])
 
   const handleBulkProject = useCallback(async (projectId: string | null) => {
     if (selectedIds.size === 0) return
     setBulkActing(true)
     try {
-      await bulkUpdateTasks([...selectedIds], { projectId })
-      await loadTasks()
+      await bulkUpdateTasksMutation.mutateAsync({ ids: [...selectedIds], patch: { projectId } })
       toast.success(projectId ? `Assigned ${selectedIds.size} task(s) to project` : `Cleared project from ${selectedIds.size} task(s)`)
       clearSelection()
     } catch {
@@ -139,8 +141,7 @@ export default function TasksPage() {
     } finally {
       setBulkActing(false)
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedIds])
+  }, [bulkUpdateTasksMutation, clearSelection, selectedIds])
 
   // Bulk action bar dropdowns
   const [bulkAgentOpen, setBulkAgentOpen] = useState(false)
@@ -196,11 +197,7 @@ export default function TasksPage() {
     window.history.replaceState(null, '', newUrl)
   }, [activeProjectFilter, filterAgentId, filterTag, filtersHydrated, taskScopeFilter])
 
-  const [loaded, setLoaded] = useState(Object.keys(tasks).length > 0)
-  useEffect(() => {
-    Promise.all([loadTasks(), loadAgents(), loadProjects()]).then(() => setLoaded(true))
-  }, [loadAgents, loadProjects, loadTasks])
-  useWs('tasks', loadTasks, 5000)
+  const loaded = !tasksLoading && !agentsLoading && !projectsLoading
 
   // Collect all unique tags across tasks
   const allTags = dedup(Object.values(tasks).flatMap((t) => t.tags || [])).sort()
@@ -259,10 +256,8 @@ export default function TasksPage() {
   const handleDrop = useCallback(async (taskId: string, newStatus: BoardTaskStatus) => {
     const task = tasks[taskId]
     if (!task || task.status === newStatus) return
-    await updateTask(taskId, { status: newStatus })
-    await loadTasks()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tasks])
+    await updateTaskMutation.mutateAsync({ id: taskId, patch: { status: newStatus } })
+  }, [tasks, updateTaskMutation])
 
   const archivedCount = Object.values(tasks).filter((t) => t.status === 'archived').length
 
@@ -284,7 +279,7 @@ export default function TasksPage() {
     try {
       const rawLimit = Number.parseInt(githubLimit, 10)
       const limit = Number.isFinite(rawLimit) ? Math.max(1, Math.min(rawLimit, 200)) : 25
-      const result = await importGitHubIssues({
+      const result = await importGitHubIssuesMutation.mutateAsync({
         repo: githubRepo.trim(),
         token: githubToken.trim() || undefined,
         state: githubState,
@@ -296,7 +291,6 @@ export default function TasksPage() {
         projectId: activeProjectFilter,
       })
       setGitHubImportResult(result)
-      await loadTasks()
       const summary = result.created.length > 0
         ? `Imported ${result.created.length} issue(s) from ${result.repo}`
         : `No new issues imported from ${result.repo}`
@@ -316,7 +310,7 @@ export default function TasksPage() {
     githubRepo,
     githubState,
     githubToken,
-    loadTasks,
+    importGitHubIssuesMutation,
   ])
 
   // Task counts per project (non-archived)
@@ -759,6 +753,9 @@ export default function TasksPage() {
                 <TaskColumn
                   status={status}
                   tasks={tasksByStatus(status)}
+                  agents={agents}
+                  projects={projects}
+                  tasksById={tasks}
                   onDrop={handleDrop}
                   selectionMode={selectionMode}
                   selectedIds={selectedIds}
@@ -804,6 +801,9 @@ export default function TasksPage() {
                   <TaskCard
                     key={task.id}
                     task={task}
+                    agents={agents}
+                    projects={projects}
+                    tasksById={tasks}
                     index={idx}
                     selectionMode={selectionMode}
                     selected={selectedIds.has(task.id)}

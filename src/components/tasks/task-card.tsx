@@ -4,30 +4,40 @@ import { useState, useCallback, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAppStore } from '@/stores/use-app-store'
 import { getMissionPath, useNavigate } from '@/lib/app/navigation'
-import { updateTask, archiveTask } from '@/lib/tasks'
+import { useUpdateTaskMutation } from '@/features/tasks/queries'
 import { ConfirmDialog } from '@/components/shared/confirm-dialog'
 import { AgentAvatar } from '@/components/agents/agent-avatar'
 import { timeAgo } from '@/lib/time-format'
 import { InfoChip } from '@/components/ui/info-chip'
-import type { BoardTask } from '@/types'
+import type { Agent, BoardTask, Project } from '@/types'
 
 interface TaskCardProps {
   task: BoardTask
+  agents: Record<string, Agent>
+  projects: Record<string, Project>
+  tasksById: Record<string, BoardTask>
   selectionMode?: boolean
   selected?: boolean
   onToggleSelect?: (id: string) => void
   index?: number
 }
 
-export function TaskCard({ task, selectionMode, selected, onToggleSelect, index = 0 }: TaskCardProps) {
-  const agents = useAppStore((s) => s.agents)
-  const projects = useAppStore((s) => s.projects)
+export function TaskCard({
+  task,
+  agents,
+  projects,
+  tasksById,
+  selectionMode,
+  selected,
+  onToggleSelect,
+  index = 0,
+}: TaskCardProps) {
   const setEditingTaskId = useAppStore((s) => s.setEditingTaskId)
   const setTaskSheetOpen = useAppStore((s) => s.setTaskSheetOpen)
-  const loadTasks = useAppStore((s) => s.loadTasks)
   const setCurrentAgent = useAppStore((s) => s.setCurrentAgent)
   const navigateTo = useNavigate()
   const router = useRouter()
+  const updateTaskMutation = useUpdateTaskMutation()
   const [dragging, setDragging] = useState(false)
   const [confirmArchive, setConfirmArchive] = useState(false)
   const [allowDrag, setAllowDrag] = useState(false)
@@ -48,7 +58,6 @@ export function TaskCard({ task, selectionMode, selected, onToggleSelect, index 
     }
   }, [])
 
-  const tasks = useAppStore((s) => s.tasks)
   const agent = agents[task.agentId]
   const project = task.projectId ? projects[task.projectId] : null
   const creatorAgent = task.createdByAgentId ? agents[task.createdByAgentId] : null
@@ -78,14 +87,12 @@ export function TaskCard({ task, selectionMode, selected, onToggleSelect, index 
 
   const handleQueue = async (e: React.MouseEvent) => {
     e.stopPropagation()
-    await updateTask(task.id, { status: 'queued' })
-    await loadTasks()
+    await updateTaskMutation.mutateAsync({ id: task.id, patch: { status: 'queued' } })
   }
 
   const handleArchive = async (e: React.MouseEvent) => {
     e.stopPropagation()
-    await archiveTask(task.id)
-    await loadTasks()
+    await updateTaskMutation.mutateAsync({ id: task.id, patch: { status: 'archived' } })
   }
 
   const handleViewSession = (e: React.MouseEvent) => {
@@ -147,7 +154,7 @@ export function TaskCard({ task, selectionMode, selected, onToggleSelect, index 
         )}
         {isBlocked && (
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="text-rose-400 shrink-0 mt-0.5">
-            <title>{`Blocked by: ${(task.blockedBy || []).map((bid) => tasks[bid]?.title || bid).join(', ')}`}</title>
+            <title>{`Blocked by: ${(task.blockedBy || []).map((bid) => tasksById[bid]?.title || bid).join(', ')}`}</title>
             <rect x="3" y="11" width="18" height="11" rx="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" />
           </svg>
         )}
@@ -325,7 +332,7 @@ export function TaskCard({ task, selectionMode, selected, onToggleSelect, index 
         {Array.isArray(task.blocks) && task.blocks.length > 0 && (
           <span
             className="px-1.5 py-0.5 rounded-[5px] bg-amber-500/10 text-amber-400 text-[10px] font-600"
-            title={`Blocks: ${task.blocks.map((bid) => tasks[bid]?.title || bid).join(', ')}`}
+            title={`Blocks: ${task.blocks.map((bid) => tasksById[bid]?.title || bid).join(', ')}`}
           >
             blocks {task.blocks.length}
           </span>

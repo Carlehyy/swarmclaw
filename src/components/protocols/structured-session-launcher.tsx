@@ -1,7 +1,11 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { api } from '@/lib/app/api-client'
+import { useAgentsQuery } from '@/features/agents/queries'
+import { useChatroomsQuery } from '@/features/chatrooms/queries'
+import { useMissionsQuery } from '@/features/missions/queries'
+import { useCreateProtocolRunMutation, useProtocolTemplatesQuery } from '@/features/protocols/queries'
+import { useTasksQuery } from '@/features/tasks/queries'
 import { BottomSheet } from '@/components/shared/bottom-sheet'
 import { SheetFooter } from '@/components/shared/sheet-footer'
 import type { BoardTask, Chatroom, Mission, ProtocolRun, ProtocolTemplate } from '@/types'
@@ -97,16 +101,28 @@ export function StructuredSessionLauncher({
   allowContextSelection = false,
   variant = 'default',
 }: Props) {
-  const [templates, setTemplates] = useState<ProtocolTemplate[]>([])
-  const [agents, setAgents] = useState<AgentList>({})
-  const [chatrooms, setChatrooms] = useState<Record<string, Chatroom>>({})
-  const [missions, setMissions] = useState<Mission[]>([])
-  const [tasks, setTasks] = useState<TaskList>({})
-  const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [advancedOpen, setAdvancedOpen] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [form, setForm] = useState<FormState>(() => buildInitialState(initialContext))
+  const templatesQuery = useProtocolTemplatesQuery({ enabled: open })
+  const agentsQuery = useAgentsQuery({ enabled: open })
+  const chatroomsQuery = useChatroomsQuery({ enabled: open && allowContextSelection })
+  const missionsQuery = useMissionsQuery({ enabled: open && allowContextSelection, limit: 80 })
+  const tasksQuery = useTasksQuery({ includeArchived: true, enabled: open && allowContextSelection })
+  const createRunMutation = useCreateProtocolRunMutation()
+  const templates = templatesQuery.data ?? []
+  const agents = agentsQuery.data ?? {}
+  const chatrooms = chatroomsQuery.data ?? {}
+  const missions = missionsQuery.data ?? []
+  const tasks = tasksQuery.data ?? {}
+  const loading = (
+    templatesQuery.isLoading
+    || agentsQuery.isLoading
+    || chatroomsQuery.isLoading
+    || missionsQuery.isLoading
+    || tasksQuery.isLoading
+  )
   const breakoutMode = variant === 'breakout'
 
   useEffect(() => {
@@ -116,43 +132,6 @@ export function StructuredSessionLauncher({
     setAdvancedOpen(false)
     setSaving(false)
   }, [initialContext, open])
-
-  useEffect(() => {
-    if (!open) return
-    let cancelled = false
-    setLoading(true)
-    void (async () => {
-      try {
-        const requests: Promise<unknown>[] = [
-          api<ProtocolTemplate[]>('GET', '/protocols/templates'),
-          api<AgentList>('GET', '/agents'),
-        ]
-        if (allowContextSelection) {
-          requests.push(
-            api<Record<string, Chatroom>>('GET', '/chatrooms'),
-            api<Mission[]>('GET', '/missions?limit=80'),
-            api<TaskList>('GET', '/tasks'),
-          )
-        }
-        const result = await Promise.all(requests)
-        if (cancelled) return
-        setTemplates(Array.isArray(result[0]) ? (result[0] as ProtocolTemplate[]) : [])
-        setAgents((result[1] as AgentList) || {})
-        if (allowContextSelection) {
-          setChatrooms((result[2] as Record<string, Chatroom>) || {})
-          setMissions(Array.isArray(result[3]) ? (result[3] as Mission[]) : [])
-          setTasks((result[4] as TaskList) || {})
-        }
-      } catch (err) {
-        if (!cancelled) setError(err instanceof Error ? err.message : 'Unable to load structured-session options.')
-      } finally {
-        if (!cancelled) setLoading(false)
-      }
-    })()
-    return () => {
-      cancelled = true
-    }
-  }, [allowContextSelection, open])
 
   const agentOptions = useMemo(
     () => Object.values(agents).sort((a, b) => a.name.localeCompare(b.name)),
@@ -194,7 +173,7 @@ export function StructuredSessionLauncher({
     }
     setSaving(true)
     try {
-      const run = await api<ProtocolRun>('POST', '/protocols/runs', {
+      const run = await createRunMutation.mutateAsync({
         title: form.title.trim(),
         templateId: form.templateId,
         participantAgentIds: form.participantAgentIds,

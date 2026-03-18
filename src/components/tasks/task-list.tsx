@@ -1,9 +1,9 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useAppStore } from '@/stores/use-app-store'
-import { useWs } from '@/hooks/use-ws'
-import { api } from '@/lib/app/api-client'
+import { useAgentsQuery } from '@/features/agents/queries'
+import { useClearDoneTasksMutation, useTasksQuery } from '@/features/tasks/queries'
 import type { BoardTaskStatus } from '@/types'
 import { EmptyState } from '@/components/shared/empty-state'
 import { SearchInput } from '@/components/ui/search-input'
@@ -20,20 +20,18 @@ const STATUS_DOT: Record<BoardTaskStatus, string> = {
 }
 
 export function TaskList({ inSidebar }: { inSidebar?: boolean }) {
-  const tasks = useAppStore((s) => s.tasks)
-  const loadTasks = useAppStore((s) => s.loadTasks)
-  const agents = useAppStore((s) => s.agents)
   const setEditingTaskId = useAppStore((s) => s.setEditingTaskId)
   const setTaskSheetOpen = useAppStore((s) => s.setTaskSheetOpen)
   const activeProjectFilter = useAppStore((s) => s.activeProjectFilter)
+  const { data: tasks = {} } = useTasksQuery({ includeArchived: true })
+  const { data: agents = {} } = useAgentsQuery()
+  const clearDoneMutation = useClearDoneTasksMutation()
   const [search, setSearch] = useState('')
   const [clearing, setClearing] = useState(false)
 
-  useEffect(() => { loadTasks() }, [loadTasks])
-  useWs('tasks', loadTasks, 5000)
-
   const sorted = useMemo(() =>
     Object.values(tasks)
+      .filter((t) => t.status !== 'archived')
       .filter((t) => !activeProjectFilter || t.projectId === activeProjectFilter)
       .sort((a, b) => b.updatedAt - a.updatedAt),
     [tasks, activeProjectFilter],
@@ -58,8 +56,7 @@ export function TaskList({ inSidebar }: { inSidebar?: boolean }) {
   const handleClearDone = async () => {
     setClearing(true)
     try {
-      await api('DELETE', '/tasks?filter=done')
-      await loadTasks()
+      await clearDoneMutation.mutateAsync()
     } catch { /* silent */ }
     setClearing(false)
   }

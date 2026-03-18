@@ -2,9 +2,8 @@
 
 import { useState, useCallback } from 'react'
 import { TaskCard } from './task-card'
-import { createTask } from '@/lib/tasks'
-import { useAppStore } from '@/stores/use-app-store'
-import type { BoardTask, BoardTaskStatus } from '@/types'
+import { useCreateTaskMutation } from '@/features/tasks/queries'
+import type { Agent, BoardTask, BoardTaskStatus, Project } from '@/types'
 
 const COLUMN_CONFIG: Record<BoardTaskStatus, { label: string; color: string; dot: string }> = {
   backlog: { label: 'Backlog', color: 'text-text-3', dot: 'bg-white/20' },
@@ -20,6 +19,9 @@ const COLUMN_CONFIG: Record<BoardTaskStatus, { label: string; color: string; dot
 interface Props {
   status: BoardTaskStatus
   tasks: BoardTask[]
+  agents: Record<string, Agent>
+  projects: Record<string, Project>
+  tasksById: Record<string, BoardTask>
   onDrop: (taskId: string, newStatus: BoardTaskStatus) => void
   selectionMode?: boolean
   selectedIds?: Set<string>
@@ -27,12 +29,23 @@ interface Props {
   onSelectAll?: () => void
 }
 
-export function TaskColumn({ status, tasks, onDrop, selectionMode, selectedIds, onToggleSelect, onSelectAll }: Props) {
+export function TaskColumn({
+  status,
+  tasks,
+  agents,
+  projects,
+  tasksById,
+  onDrop,
+  selectionMode,
+  selectedIds,
+  onToggleSelect,
+  onSelectAll,
+}: Props) {
   const config = COLUMN_CONFIG[status]
   const [dragOver, setDragOver] = useState(false)
   const [quickAddValue, setQuickAddValue] = useState('')
   const [adding, setAdding] = useState(false)
-  const loadTasks = useAppStore((s) => s.loadTasks)
+  const createTaskMutation = useCreateTaskMutation()
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault()
@@ -58,8 +71,7 @@ export function TaskColumn({ status, tasks, onDrop, selectionMode, selectedIds, 
     if (!title || adding) return
     setAdding(true)
     try {
-      await createTask({ title, description: '', agentId: '', status })
-      await loadTasks()
+      await createTaskMutation.mutateAsync({ title, description: '', agentId: '', status })
       setQuickAddValue('')
     } finally {
       setAdding(false)
@@ -116,6 +128,9 @@ export function TaskColumn({ status, tasks, onDrop, selectionMode, selectedIds, 
           <TaskCard
             key={task.id}
             task={task}
+            agents={agents}
+            projects={projects}
+            tasksById={tasksById}
             index={idx}
             selectionMode={selectionMode}
             selected={selectedIds?.has(task.id)}

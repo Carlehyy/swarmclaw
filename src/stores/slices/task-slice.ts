@@ -56,8 +56,5 @@ export const createTaskSlice: StateCreator<AppState, [], [], TaskSlice> = (set, 
     }
   },
   showArchivedTasks: false,
-  setShowArchivedTasks: (show) => {
-    set({ showArchivedTasks: show })
-    get().loadTasks(show)
-  }
+  setShowArchivedTasks: (show) => set({ showArchivedTasks: show })
 })
