@@ -26,6 +26,7 @@ import {
   senderMatchesAnyEntry,
 } from '@/lib/server/connectors/pairing'
 import { ensureDaemonStarted } from '@/lib/server/runtime/daemon-state'
+import { log } from '@/lib/server/logger'
 import { notify } from '@/lib/server/ws-hub'
 import { errorMessage } from '@/lib/shared-utils'
 import type {
@@ -121,7 +122,7 @@ export async function listConnectorsWithRuntime(): Promise<Record<string, Connec
       }
     }
   } catch (err: unknown) {
-    console.warn('[connectors] Failed to load connector manager for runtime status:', errorMessage(err))
+    log.warn('connectors', 'Failed to load connector manager for runtime status', errorMessage(err))
   }
   return connectors
 }
@@ -160,7 +161,7 @@ export async function getConnectorWithRuntime(id: string): Promise<Connector | n
     current.hasCredentials = hasConnectorCredentials(id)
     if (current.status === 'running') current.presence = getConnectorPresence(id)
   } catch (err: unknown) {
-    console.warn(`[connectors] Failed to load connector manager for ${id}:`, errorMessage(err))
+    log.warn('connectors', `Failed to load connector manager for ${id}`, errorMessage(err))
   }
   return current
 }
@@ -198,7 +199,7 @@ export async function autoStartConnectorIfNeeded(connector: Connector, body: Rec
     const { startConnector } = await import('@/lib/server/connectors/manager')
     await startConnector(connector.id)
   } catch (err: unknown) {
-    console.warn(`[connectors] Auto-start failed for connector ${connector.id}:`, errorMessage(err))
+    log.warn('connectors', `Auto-start failed for connector ${connector.id}`, errorMessage(err))
   }
 }
 
@@ -223,7 +224,7 @@ export async function updateConnectorFromRoute(id: string, body: Record<string, 
         logActivity({ entityType: 'connector', entityId: id, action: 'started', actor: 'user', summary: `Connector repaired: "${connector.name}"` })
       }
     } catch (err: unknown) {
-      console.error(`[connectors] Action failed for connector ${id}:`, errorMessage(err))
+      log.error('connectors', `Action failed for connector ${id}`, errorMessage(err))
       const fresh = loadConnector(id)
       return {
         ok: false as const,
@@ -264,7 +265,7 @@ export async function updateConnectorFromRoute(id: string, body: Record<string, 
       await manager.startConnector(id)
     }
   } catch (err: unknown) {
-    console.warn(`[connectors] Failed to reload connector ${id} after update:`, errorMessage(err))
+    log.warn('connectors', `Failed to reload connector ${id} after update`, errorMessage(err))
   }
 
   notify('connectors')
@@ -278,13 +279,13 @@ export async function deleteConnectorFromRoute(id: string) {
     const { stopConnector } = await import('@/lib/server/connectors/manager')
     await stopConnector(id)
   } catch (err: unknown) {
-    console.warn(`[connectors] Failed to stop connector ${id} during delete:`, errorMessage(err))
+    log.warn('connectors', `Failed to stop connector ${id} during delete`, errorMessage(err))
   }
   try {
     const { clearConnectorPairingState } = await import('@/lib/server/connectors/pairing')
     clearConnectorPairingState(id)
   } catch (err: unknown) {
-    console.warn(`[connectors] Failed to clear pairing state for ${id}:`, errorMessage(err))
+    log.warn('connectors', `Failed to clear pairing state for ${id}`, errorMessage(err))
   }
   deleteConnector(id)
   notify('connectors')
