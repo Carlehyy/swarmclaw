@@ -5,11 +5,11 @@ import {
   buildConnectorAccessSnapshot,
 } from '@/lib/server/connectors/access'
 import { loadConnectors } from '@/lib/server/connectors/connector-repository'
-import { ensureDaemonStarted } from '@/lib/server/runtime/daemon-state'
+import { ensureDaemonProcessRunning } from '@/lib/server/daemon/controller'
 import { updateConnectorAccess } from '@/lib/server/connectors/connector-service'
 
 export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  ensureDaemonStarted('api/connectors/[id]/access:get')
+  await ensureDaemonProcessRunning('api/connectors/[id]/access:get')
   const { id } = await params
   const connectors = loadConnectors()
   const connector = connectors[id]

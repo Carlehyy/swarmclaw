@@ -4,6 +4,7 @@ import { log } from '@/lib/server/logger'
 import { getAccessKey, validateAccessKey, isFirstTimeSetup, markSetupComplete, replaceAccessKey } from '@/lib/server/storage-auth'
 import { AUTH_COOKIE_NAME, getCookieValue } from '@/lib/auth'
 import { isProductionRuntime } from '@/lib/runtime/runtime-env'
+import { ensureDaemonProcessRunning } from '@/lib/server/daemon/controller'
 import { hmrSingleton } from '@/lib/shared-utils'
 export const dynamic = 'force-dynamic'
 
@@ -79,16 +80,9 @@ function pruneExpiredEntries() {
 }
 
 function startDaemonAfterAuth() {
-  void import('@/lib/server/runtime/daemon-state')
-    .then(({ ensureDaemonStarted }) => {
-      try {
-        ensureDaemonStarted('api/auth:post')
-      } catch (err: unknown) {
-        log.error(TAG, 'Deferred daemon start failed', err)
-      }
-    })
+  void ensureDaemonProcessRunning('api/auth:post')
     .catch((err: unknown) => {
-      log.error(TAG, 'Failed to load daemon-state for deferred start', err)
+      log.error(TAG, 'Deferred daemon start failed', err)
     })
 }
 

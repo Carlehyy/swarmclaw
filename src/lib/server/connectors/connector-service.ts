@@ -25,7 +25,12 @@ import {
   setSenderAddressingOverride,
   senderMatchesAnyEntry,
 } from '@/lib/server/connectors/pairing'
-import { ensureDaemonStarted } from '@/lib/server/runtime/daemon-state'
+import {
+  ensureDaemonProcessRunning,
+  getDaemonConnectorRuntime,
+  listDaemonConnectorRuntime,
+  runDaemonConnectorAction,
+} from '@/lib/server/daemon/controller'
 import { log } from '@/lib/server/logger'
 import { notify } from '@/lib/server/ws-hub'
 import { errorMessage } from '@/lib/shared-utils'
@@ -35,6 +40,7 @@ import type {
   ConnectorAccessMutationResponse,
   ConnectorHealthEvent,
 } from '@/types'
+import type { DaemonConnectorRuntimeState } from '@/lib/server/daemon/types'
 
 function cloneConnector<T extends Connector>(connector: T): T {
   return {
@@ -46,6 +52,37 @@ function cloneConnector<T extends Connector>(connector: T): T {
 function persistConnector(connector: Connector): void {
   connector.updatedAt = Date.now()
   upsertConnector(connector.id, connector)
+}
+
+function applyRuntimeFields(connector: Connector, runtime: DaemonConnectorRuntimeState | null): Connector {
+  connector.status = runtime?.status
+    ? runtime.status
+    : connector.lastError
+      ? 'error'
+      : 'stopped'
+
+  if (connector.platform === 'whatsapp') {
+    connector.authenticated = runtime?.authenticated
+    connector.hasCredentials = runtime?.hasCredentials
+    if (runtime?.qrDataUrl) connector.qrDataUrl = runtime.qrDataUrl
+    else delete connector.qrDataUrl
+  }
+
+  if (runtime?.reconnectAttempts !== undefined) {
+    const ext = connector as unknown as Record<string, unknown>
+    ext.reconnectAttempts = runtime.reconnectAttempts
+    ext.nextRetryAt = runtime.nextRetryAt
+    ext.reconnectError = runtime.reconnectError
+    ext.reconnectExhausted = runtime.reconnectExhausted
+  }
+
+  if (runtime?.presence && connector.status === 'running') {
+    connector.presence = runtime.presence
+  } else {
+    delete connector.presence
+  }
+
+  return connector
 }
 
 function setConnectorSenderList(connector: Connector, key: string, values: string[]): void {
@@ -83,87 +120,23 @@ function requireSenderId(body: Record<string, unknown>): string {
 }
 
 export async function listConnectorsWithRuntime(): Promise<Record<string, Connector>> {
-  ensureDaemonStarted('api/connectors:get')
+  await ensureDaemonProcessRunning('api/connectors:get')
   const connectors = Object.fromEntries(
     Object.entries(loadConnectors()).map(([id, connector]) => [id, cloneConnector(connector)]),
   ) as Record<string, Connector>
-  try {
-    const {
-      getConnectorStatus,
-      isConnectorAuthenticated,
-      hasConnectorCredentials,
-      getConnectorQR,
-      getReconnectState,
-      getConnectorPresence,
-    } = await import('@/lib/server/connectors/manager')
-    for (const connector of Object.values(connectors)) {
-      const runtimeStatus = getConnectorStatus(connector.id)
-      connector.status = runtimeStatus === 'running'
-        ? 'running'
-        : connector.lastError
-          ? 'error'
-          : 'stopped'
-      if (connector.platform === 'whatsapp') {
-        connector.authenticated = isConnectorAuthenticated(connector.id)
-        connector.hasCredentials = hasConnectorCredentials(connector.id)
-        const qr = getConnectorQR(connector.id)
-        if (qr) connector.qrDataUrl = qr
-      }
-      const reconnectState = getReconnectState(connector.id)
-      if (reconnectState) {
-        const ext = connector as unknown as Record<string, unknown>
-        ext.reconnectAttempts = reconnectState.attempts
-        ext.nextRetryAt = reconnectState.nextRetryAt
-        ext.reconnectError = reconnectState.error
-        ext.reconnectExhausted = reconnectState.exhausted
-      }
-      if (connector.status === 'running') {
-        connector.presence = getConnectorPresence(connector.id)
-      }
-    }
-  } catch (err: unknown) {
-    log.warn('connectors', 'Failed to load connector manager for runtime status', errorMessage(err))
+  const runtimeByConnector = await listDaemonConnectorRuntime()
+  for (const connector of Object.values(connectors)) {
+    applyRuntimeFields(connector, runtimeByConnector[connector.id] || null)
   }
   return connectors
 }
 
 export async function getConnectorWithRuntime(id: string): Promise<Connector | null> {
-  ensureDaemonStarted('api/connectors/[id]:get')
+  await ensureDaemonProcessRunning('api/connectors/[id]:get')
   const connector = loadConnector(id)
   if (!connector) return null
   const current = cloneConnector(connector)
-  try {
-    const {
-      getConnectorStatus,
-      getConnectorQR,
-      isConnectorAuthenticated,
-      hasConnectorCredentials,
-      getConnectorPresence,
-      getReconnectState,
-    } = await import('@/lib/server/connectors/manager')
-    const runtimeStatus = getConnectorStatus(id)
-    current.status = runtimeStatus === 'running'
-      ? 'running'
-      : current.lastError
-        ? 'error'
-        : 'stopped'
-    const reconnectState = getReconnectState(id)
-    if (reconnectState) {
-      const ext = current as unknown as Record<string, unknown>
-      ext.reconnectAttempts = reconnectState.attempts
-      ext.nextRetryAt = reconnectState.nextRetryAt
-      ext.reconnectError = reconnectState.error
-      ext.reconnectExhausted = reconnectState.exhausted
-    }
-    const qr = getConnectorQR(id)
-    if (qr) current.qrDataUrl = qr
-    current.authenticated = isConnectorAuthenticated(id)
-    current.hasCredentials = hasConnectorCredentials(id)
-    if (current.status === 'running') current.presence = getConnectorPresence(id)
-  } catch (err: unknown) {
-    log.warn('connectors', `Failed to load connector manager for ${id}`, errorMessage(err))
-  }
-  return current
+  return applyRuntimeFields(current, await getDaemonConnectorRuntime(id))
 }
 
 export function createConnector(body: Record<string, unknown>): Connector {
@@ -196,31 +169,27 @@ export async function autoStartConnectorIfNeeded(connector: Connector, body: Rec
     || !!connector.credentialId
   if (!hasCredentials || body.autoStart === false) return
   try {
-    const { startConnector } = await import('@/lib/server/connectors/manager')
-    await startConnector(connector.id)
+    await runDaemonConnectorAction(connector.id, 'start', 'connectors:auto-start')
   } catch (err: unknown) {
     log.warn('connectors', `Auto-start failed for connector ${connector.id}`, errorMessage(err))
   }
 }
 
 export async function updateConnectorFromRoute(id: string, body: Record<string, unknown>) {
-  ensureDaemonStarted('api/connectors/[id]:put')
+  await ensureDaemonProcessRunning('api/connectors/[id]:put')
   const connector = loadConnector(id)
   if (!connector) return { ok: false as const, status: 404 as const }
 
   if (body.action === 'start' || body.action === 'stop' || body.action === 'repair') {
     try {
-      const manager = await import('@/lib/server/connectors/manager')
       if (body.action === 'start') {
-        manager.clearReconnectState(id)
-        await manager.startConnector(id)
+        await runDaemonConnectorAction(id, 'start', 'api/connectors/[id]:action:start')
         logActivity({ entityType: 'connector', entityId: id, action: 'started', actor: 'user', summary: `Connector started: "${connector.name}"` })
       } else if (body.action === 'stop') {
-        await manager.stopConnector(id)
+        await runDaemonConnectorAction(id, 'stop', 'api/connectors/[id]:action:stop')
         logActivity({ entityType: 'connector', entityId: id, action: 'stopped', actor: 'user', summary: `Connector stopped: "${connector.name}"` })
       } else {
-        manager.clearReconnectState(id)
-        await manager.repairConnector(id)
+        await runDaemonConnectorAction(id, 'repair', 'api/connectors/[id]:action:repair')
         logActivity({ entityType: 'connector', entityId: id, action: 'started', actor: 'user', summary: `Connector repaired: "${connector.name}"` })
       }
     } catch (err: unknown) {
@@ -233,7 +202,7 @@ export async function updateConnectorFromRoute(id: string, body: Record<string, 
       }
     }
     notify('connectors')
-    return { ok: true as const, payload: loadConnector(id) }
+    return { ok: true as const, payload: await getConnectorWithRuntime(id) }
   }
 
   const next = cloneConnector(connector)
@@ -246,8 +215,8 @@ export async function updateConnectorFromRoute(id: string, body: Record<string, 
   persistConnector(next)
 
   try {
-    const manager = await import('@/lib/server/connectors/manager')
-    const wasRunning = manager.getConnectorStatus(id) === 'running'
+    const runtime = await getDaemonConnectorRuntime(id)
+    const wasRunning = runtime?.status === 'running'
     const shouldStop = body.isEnabled === false
     const shouldReload = wasRunning && (
       body.name !== undefined
@@ -259,25 +228,23 @@ export async function updateConnectorFromRoute(id: string, body: Record<string, 
     )
     const shouldStart = body.isEnabled === true && !wasRunning
     if (shouldStop) {
-      await manager.stopConnector(id)
+      await runDaemonConnectorAction(id, 'stop', 'api/connectors/[id]:reload:stop')
     } else if (shouldReload || shouldStart) {
-      manager.clearReconnectState(id)
-      await manager.startConnector(id)
+      await runDaemonConnectorAction(id, 'start', 'api/connectors/[id]:reload:start')
     }
   } catch (err: unknown) {
     log.warn('connectors', `Failed to reload connector ${id} after update`, errorMessage(err))
   }
 
   notify('connectors')
-  return { ok: true as const, payload: loadConnector(id) || next }
+  return { ok: true as const, payload: await getConnectorWithRuntime(id) || next }
 }
 
 export async function deleteConnectorFromRoute(id: string) {
   const connector = loadConnector(id)
   if (!connector) return { ok: false as const }
   try {
-    const { stopConnector } = await import('@/lib/server/connectors/manager')
-    await stopConnector(id)
+    await runDaemonConnectorAction(id, 'stop', 'api/connectors/[id]:delete')
   } catch (err: unknown) {
     log.warn('connectors', `Failed to stop connector ${id} during delete`, errorMessage(err))
   }
@@ -333,7 +300,7 @@ export async function updateConnectorAccess(
   connectorId: string,
   body: Record<string, unknown>,
 ): Promise<{ ok: false; status: 404 | 400; payload?: Record<string, unknown> } | { ok: true; payload: ConnectorAccessMutationResponse }> {
-  ensureDaemonStarted('api/connectors/[id]/access:put')
+  await ensureDaemonProcessRunning('api/connectors/[id]/access:put')
   const connector = loadConnector(connectorId)
   if (!connector) return { ok: false, status: 404 }
   const current = cloneConnector(connector)

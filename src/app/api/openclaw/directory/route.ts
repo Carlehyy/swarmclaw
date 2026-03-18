@@ -1,10 +1,10 @@
 import { NextResponse } from 'next/server'
+import { listDaemonRunningConnectors } from '@/lib/server/daemon/controller'
 export const dynamic = 'force-dynamic'
 
 export async function GET() {
   try {
-    const { listRunningConnectors } = await import('@/lib/server/connectors/manager')
-    const openclawConnectors = listRunningConnectors('openclaw')
+    const openclawConnectors = await listDaemonRunningConnectors('openclaw')
 
     if (!openclawConnectors.length) {
       return NextResponse.json({ devices: [], note: 'No running OpenClaw connector.' })

@@ -2,14 +2,10 @@ import { NextResponse } from 'next/server'
 import { perf } from '@/lib/server/runtime/perf'
 import { listAgentsForApi, createAgent } from '@/lib/server/agents/agent-service'
 import { AgentCreateSchema, formatZodError } from '@/lib/validation/schemas'
+import { ensureDaemonProcessRunning } from '@/lib/server/daemon/controller'
 import { z } from 'zod'
 import { safeParseBody } from '@/lib/server/safe-parse-body'
 export const dynamic = 'force-dynamic'
-
-async function ensureDaemonIfNeeded(source: string) {
-  const { ensureDaemonStarted } = await import('@/lib/server/runtime/daemon-state')
-  ensureDaemonStarted(source)
-}
 
 
 export async function GET(req: Request) {
@@ -32,7 +28,7 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
-  await ensureDaemonIfNeeded('api/agents:post')
+  await ensureDaemonProcessRunning('api/agents:post')
   const { data: raw, error } = await safeParseBody(req)
   if (error) return error
   const rawRecord = raw && typeof raw === 'object' ? raw as Record<string, unknown> : null

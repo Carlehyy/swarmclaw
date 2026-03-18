@@ -8,13 +8,9 @@ import {
   createConnector,
   listConnectorsWithRuntime,
 } from '@/lib/server/connectors/connector-service'
+import { ensureDaemonProcessRunning } from '@/lib/server/daemon/controller'
 import { loadConnector } from '@/lib/server/connectors/connector-repository'
 export const dynamic = 'force-dynamic'
-
-async function ensureDaemonIfNeeded(source: string) {
-  const { ensureDaemonStarted } = await import('@/lib/server/runtime/daemon-state')
-  ensureDaemonStarted(source)
-}
 
 export async function GET() {
   const endPerf = perf.start('api', 'GET /api/connectors')
@@ -24,7 +20,7 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
-  await ensureDaemonIfNeeded('api/connectors:post')
+  await ensureDaemonProcessRunning('api/connectors:post')
   const { data: raw, error } = await safeParseBody<Record<string, unknown>>(req)
   if (error) return error
   const parsed = ConnectorCreateSchema.safeParse(raw)

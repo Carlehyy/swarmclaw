@@ -1,9 +1,9 @@
 import { NextResponse } from 'next/server'
-import { getDaemonHealthSummary } from '@/lib/server/runtime/daemon-state'
+import { getDaemonHealthSummarySnapshot } from '@/lib/server/daemon/controller'
 import packageJson from '../../../../../package.json'
 
 export async function GET() {
-  const summary = getDaemonHealthSummary()
+  const summary = await getDaemonHealthSummarySnapshot()
   return NextResponse.json({
     ...summary,
     version: packageJson.version,

@@ -157,6 +157,7 @@ const COLLECTIONS = [
   'provider_health',
   'swarm_snapshots',
   'main_loop_states',
+  'daemon_status',
 ] as const
 
 export type StorageCollection = (typeof COLLECTIONS)[number]

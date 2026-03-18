@@ -5,6 +5,7 @@ import { normalizeWhatsAppApprovedContacts } from '@/lib/server/connectors/pairi
 import { loadPublicSettings, loadSettings, saveSettings } from '@/lib/server/storage'
 import { normalizeRuntimeSettingFields } from '@/lib/runtime/runtime-loop'
 import { normalizeSupervisorSettings } from '@/lib/autonomy/supervisor-settings'
+import { ensureDaemonProcessRunning } from '@/lib/server/daemon/controller'
 export const dynamic = 'force-dynamic'
 
 
@@ -166,9 +167,9 @@ export async function PUT(req: Request) {
   saveSettings(settings)
 
   if ('daemonAutostartEnabled' in sanitizedBody && settings.daemonAutostartEnabled) {
-    import('@/lib/server/runtime/daemon-state').then(({ startDaemon }) => {
-      startDaemon({ source: 'api/settings:put:daemon-autostart', manualStart: true })
-    }).catch(() => { /* daemon runtime may not be initialized yet */ })
+    void ensureDaemonProcessRunning('api/settings:put:daemon-autostart', { manualStart: true }).catch(() => {
+      // The daemon launcher may not be available during early bootstrap.
+    })
   }
 
   // Restart heartbeat service when heartbeat-related settings change

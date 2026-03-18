@@ -5,12 +5,8 @@ import {
   deleteChats,
   listChatsForApi,
 } from '@/lib/server/chats/chat-session-service'
+import { ensureDaemonProcessRunning } from '@/lib/server/daemon/controller'
 export const dynamic = 'force-dynamic'
-
-async function ensureDaemonIfNeeded(source: string) {
-  const { ensureDaemonStarted } = await import('@/lib/server/runtime/daemon-state')
-  ensureDaemonStarted(source)
-}
 
 
 export async function GET(req: Request) {
@@ -33,7 +29,7 @@ export async function GET(req: Request) {
 }
 
 export async function DELETE(req: Request) {
-  await ensureDaemonIfNeeded('api/chats:delete')
+  await ensureDaemonProcessRunning('api/chats:delete')
   const { ids } = await req.json().catch(() => ({ ids: [] })) as { ids: string[] }
   if (!Array.isArray(ids) || !ids.length) {
     return new NextResponse('Missing ids', { status: 400 })
@@ -42,7 +38,7 @@ export async function DELETE(req: Request) {
 }
 
 export async function POST(req: Request) {
-  await ensureDaemonIfNeeded('api/chats:post')
+  await ensureDaemonProcessRunning('api/chats:post')
   const body = await req.json().catch(() => ({}))
   const result = createChatSession(body as Record<string, unknown>)
   if (!result.session) return NextResponse.json({ error: result.error }, { status: result.status })

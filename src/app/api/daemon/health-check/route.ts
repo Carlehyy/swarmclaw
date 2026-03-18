@@ -1,11 +1,10 @@
 import { NextResponse } from 'next/server'
-import { ensureDaemonStarted, getDaemonStatus, runDaemonHealthCheckNow } from '@/lib/server/runtime/daemon-state'
+import { runDaemonHealthCheckViaAdmin } from '@/lib/server/daemon/controller'
 
 export async function POST() {
-  ensureDaemonStarted('api/daemon/health-check:post')
-  await runDaemonHealthCheckNow()
+  const snapshot = await runDaemonHealthCheckViaAdmin('api/daemon/health-check:post')
   return NextResponse.json({
     ok: true,
-    status: getDaemonStatus(),
+    status: snapshot.status,
   })
 }

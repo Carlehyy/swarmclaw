@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { cancelAllRuns } from '@/lib/server/runtime/session-run-manager'
-import { startDaemon, stopDaemon } from '@/lib/server/runtime/daemon-state'
+import { ensureDaemonProcessRunning, stopDaemonProcess } from '@/lib/server/daemon/controller'
 import {
   areEstopResumeApprovalsEnabled,
   engageEstop,
@@ -37,7 +37,7 @@ export async function POST(req: Request) {
         reason: typeof body.reason === 'string' ? body.reason : null,
         engagedBy: typeof body.engagedBy === 'string' ? body.engagedBy : 'user',
       })
-      await stopDaemon({ source: `api/autonomy/estop:${level}` })
+      await stopDaemonProcess({ source: `api/autonomy/estop:${level}` })
       const cancelled = level === 'all'
         ? cancelAllRuns('Cancelled because all estop is engaged.')
         : { cancelledQueued: 0, abortedRunning: 0 }
@@ -55,7 +55,7 @@ export async function POST(req: Request) {
 
       if (!requiresApproval) {
         const resumed = resumeEstop({ bypassApproval: true })
-        startDaemon({ source: 'api/autonomy/estop:resume', manualStart: true })
+        await ensureDaemonProcessRunning('api/autonomy/estop:resume', { manualStart: true })
         return NextResponse.json({ ok: true, state: buildStateResponse(resumed) })
       }
 
@@ -63,7 +63,7 @@ export async function POST(req: Request) {
         const existingApproval = state.resumeApprovalId ? findEstopResumeApproval(state.resumeApprovalId) : null
         if (existingApproval?.status === 'approved') {
           const resumed = resumeEstop({ approvalId: existingApproval.id })
-          startDaemon({ source: 'api/autonomy/estop:resume', manualStart: true })
+          await ensureDaemonProcessRunning('api/autonomy/estop:resume', { manualStart: true })
           return NextResponse.json({ ok: true, state: buildStateResponse(resumed) })
         }
 
@@ -79,7 +79,7 @@ export async function POST(req: Request) {
       }
 
       const resumed = resumeEstop({ approvalId })
-      startDaemon({ source: 'api/autonomy/estop:resume', manualStart: true })
+      await ensureDaemonProcessRunning('api/autonomy/estop:resume', { manualStart: true })
       return NextResponse.json({ ok: true, state: buildStateResponse(resumed) })
     }
 

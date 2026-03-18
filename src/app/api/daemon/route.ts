@@ -1,11 +1,15 @@
 import { NextResponse } from 'next/server'
+import {
+  ensureDaemonProcessRunning,
+  getDaemonStatusSnapshot,
+  stopDaemonProcess,
+} from '@/lib/server/daemon/controller'
 import { notify } from '@/lib/server/ws-hub'
 export const dynamic = 'force-dynamic'
 
 
 export async function GET() {
-  const { getDaemonStatus } = await import('@/lib/server/runtime/daemon-state')
-  return NextResponse.json(getDaemonStatus())
+  return NextResponse.json(await getDaemonStatusSnapshot())
 }
 
 export async function POST(req: Request) {
@@ -13,15 +17,13 @@ export async function POST(req: Request) {
   const action = body.action
 
   if (action === 'start') {
-    const { startDaemon } = await import('@/lib/server/runtime/daemon-state')
-    startDaemon({ source: 'api/daemon:post:start', manualStart: true })
+    await ensureDaemonProcessRunning('api/daemon:post:start', { manualStart: true })
     notify('daemon')
-    return NextResponse.json({ ok: true, status: 'running' })
+    return NextResponse.json(await getDaemonStatusSnapshot())
   } else if (action === 'stop') {
-    const { stopDaemon } = await import('@/lib/server/runtime/daemon-state')
-    await stopDaemon({ source: 'api/daemon:post:stop', manualStop: true })
+    await stopDaemonProcess({ source: 'api/daemon:post:stop', manualStop: true })
     notify('daemon')
-    return NextResponse.json({ ok: true, status: 'stopped' })
+    return NextResponse.json(await getDaemonStatusSnapshot())
   }
 
   return NextResponse.json({ error: 'Invalid action. Use "start" or "stop".' }, { status: 400 })

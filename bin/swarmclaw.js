@@ -131,6 +131,10 @@ async function runHelp(argv) {
     await require('./server-cmd.js').main(['--help'])
     return
   }
+  if (target === 'daemon') {
+    await require('./daemon-cmd.js').main(['--help'])
+    return
+  }
   if (target === 'worker') {
     require('./worker-cmd.js').main(['--help'])
     return
@@ -187,6 +191,13 @@ async function main() {
   if (top === 'server') {
     await require('./server-cmd.js').main(argv.slice(1))
     return
+  }
+  if (top === 'daemon') {
+    const subcommand = argv[1]
+    if (!subcommand || subcommand === 'run' || subcommand === 'help' || subcommand === '--help' || subcommand === '-h') {
+      await require('./daemon-cmd.js').main(argv.slice(1))
+      return
+    }
   }
   if (top === 'run' || top === 'start') {
     await require('./server-cmd.js').main(argv.slice(1))
