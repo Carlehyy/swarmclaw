@@ -150,7 +150,7 @@ export function ProviderList({ inSidebar }: { inSidebar?: boolean }) {
           ...(existing?.deployment || {}),
           ...(deployDraft.deployment || {}),
           managedBy: 'swarmclaw',
-          lastVerifiedAt: verify.verify ? Date.now() : (existing?.deployment?.lastVerifiedAt || null),
+          lastVerifiedAt: verify.verify ? +new Date() : (existing?.deployment?.lastVerifiedAt || null),
           lastVerifiedOk: verify.verify ? verifiedOk : (existing?.deployment?.lastVerifiedOk ?? null),
           lastVerifiedMessage: verify.verify
             ? (verifiedOk

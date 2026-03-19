@@ -50,7 +50,7 @@ export function ConnectorList({ inSidebar }: { inSidebar?: boolean }) {
   const agentsQuery = useAgentsQuery()
   const chatroomsQuery = useChatroomsQuery()
   const connectorActionMutation = useConnectorActionMutation()
-  const connectors = connectorsQuery.data ?? {}
+  const connectors = useMemo(() => connectorsQuery.data ?? {}, [connectorsQuery.data])
   const agents = agentsQuery.data ?? {}
   const chatrooms = chatroomsQuery.data ?? {}
   const [toggling, setToggling] = useState<string | null>(null)

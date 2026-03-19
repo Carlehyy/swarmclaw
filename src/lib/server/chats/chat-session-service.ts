@@ -20,9 +20,11 @@ import {
 import { deleteSession, getSession, listSessions, saveSession } from '@/lib/server/sessions/session-repository'
 import { deleteSessionWorkingState } from '@/lib/server/working-state/service'
 import { normalizeProviderEndpoint } from '@/lib/openclaw/openclaw-endpoint'
+import { serviceFail, serviceOk } from '@/lib/server/service-result'
 import { WORKSPACE_DIR } from '@/lib/server/data-dir'
 import { buildSessionListSummary } from '@/lib/chat/session-summary'
 import type { Session } from '@/types'
+import type { ServiceResult } from '@/lib/server/service-result'
 import { notify } from '@/lib/server/ws-hub'
 
 function normalizeCwd(value: unknown): string {
@@ -67,15 +69,15 @@ export function getChatSessionForApi(sessionId: string): Session | null {
   return enrichSessionWithMissionSummary(session)
 }
 
-export function createChatSession(input: Record<string, unknown>): { status: 200 | 409; session?: Session; error?: string } {
+export function createChatSession(input: Record<string, unknown>): ServiceResult<Session> {
   const id = typeof input.id === 'string' && input.id.trim() ? input.id.trim() : genId()
   const sessions = listSessions()
   if (typeof input.id === 'string' && sessions[id]) {
-    return { status: 200, session: sessions[id] }
+    return serviceOk(sessions[id])
   }
   const agent = typeof input.agentId === 'string' ? loadAgent(input.agentId) : null
   if (isAgentDisabled(agent)) {
-    return { status: 409, error: buildAgentDisabledMessage(agent, 'start chats') }
+    return serviceFail(409, buildAgentDisabledMessage(agent, 'start chats'))
   }
   const explicitOllamaMode = input.ollamaMode === 'cloud' ? 'cloud' : input.ollamaMode === 'local' ? 'local' : null
   const routePreferredGatewayTags = Array.isArray(input.routePreferredGatewayTags)
@@ -152,7 +154,7 @@ export function createChatSession(input: Record<string, unknown>): { status: 200
     : applyResolvedRoute(baseSession, resolvedRoute)
   saveSession(id, session)
   notify('sessions')
-  return { status: 200, session }
+  return serviceOk(session)
 }
 
 export function deleteChats(ids: string[]): { deleted: number; requested: number } {
@@ -292,9 +294,9 @@ export function getQueueSnapshot(sessionId: string) {
   return getSessionQueueSnapshot(sessionId)
 }
 
-export function queueChatMessage(sessionId: string, body: Record<string, unknown>) {
+export function queueChatMessage(sessionId: string, body: Record<string, unknown>): ServiceResult<Record<string, unknown>> {
   const session = getSession(sessionId)
-  if (!session) return { status: 404 as const, error: 'Not found' }
+  if (!session) return serviceFail(404, 'Not found')
   const message = typeof body.message === 'string' ? body.message : ''
   const imagePath = typeof body.imagePath === 'string' ? body.imagePath : undefined
   const imageUrl = typeof body.imageUrl === 'string' ? body.imageUrl : undefined
@@ -304,7 +306,7 @@ export function queueChatMessage(sessionId: string, body: Record<string, unknown
   const replyToId = typeof body.replyToId === 'string' ? body.replyToId : undefined
   const hasFiles = !!(imagePath || imageUrl || attachedFiles?.length)
   if (!message.trim() && !hasFiles) {
-    return { status: 400 as const, error: 'message or file is required' }
+    return serviceFail(400, 'message or file is required')
   }
   const queued = enqueueSessionRun({
     sessionId,
@@ -317,38 +319,29 @@ export function queueChatMessage(sessionId: string, body: Record<string, unknown
     mode: 'followup',
     replyToId,
   })
-  return {
-    status: 202 as const,
-    payload: {
-      queued: {
-        runId: queued.runId,
-        position: queued.position,
-      },
-      snapshot: getSessionQueueSnapshot(sessionId),
+  return serviceOk({
+    queued: {
+      runId: queued.runId,
+      position: queued.position,
     },
-  }
+    snapshot: getSessionQueueSnapshot(sessionId),
+  })
 }
 
-export function cancelQueuedChatMessages(sessionId: string, runId?: string): { status: 200 | 404; payload: Record<string, unknown> } | null {
+export function cancelQueuedChatMessages(sessionId: string, runId?: string): ServiceResult<Record<string, unknown>> | null {
   const session = getSession(sessionId)
   if (!session) return null
   const normalizedRunId = typeof runId === 'string' ? runId.trim() : ''
   if (normalizedRunId) {
     const snapshot = getSessionQueueSnapshot(sessionId)
     if (!snapshot.items.some((item) => item.runId === normalizedRunId)) {
-      return { status: 404, payload: { error: 'Queued run not found' } }
+      return serviceFail(404, 'Queued run not found')
     }
     cancelQueuedRunById(normalizedRunId, 'Removed from queue')
-    return {
-      status: 200,
-      payload: { cancelled: 1, snapshot: getSessionQueueSnapshot(sessionId) },
-    }
+    return serviceOk({ cancelled: 1, snapshot: getSessionQueueSnapshot(sessionId) })
   }
   const cancelled = cancelQueuedRunsForSession(sessionId, 'Cleared queued messages')
-  return {
-    status: 200,
-    payload: { cancelled, snapshot: getSessionQueueSnapshot(sessionId) },
-  }
+  return serviceOk({ cancelled, snapshot: getSessionQueueSnapshot(sessionId) })
 }
 
 export function clearChatMessages(sessionId: string): boolean {
@@ -363,31 +356,31 @@ export function clearChatMessages(sessionId: string): boolean {
   return true
 }
 
-export function retryChatTurn(sessionId: string): { ok: false } | { ok: true; message: string; imagePath: string | null } {
+export function retryChatTurn(sessionId: string): ServiceResult<{ message: string; imagePath: string | null }> {
   const session = getSession(sessionId)
-  if (!session) return { ok: false }
+  if (!session) return serviceFail(404, 'Session not found')
   const msgs = session.messages
   while (msgs.length && msgs[msgs.length - 1].role === 'assistant') {
     msgs.pop()
   }
   if (!msgs.length) {
-    return { ok: true, message: '', imagePath: null }
+    return serviceOk({ message: '', imagePath: null })
   }
   const lastUser = msgs[msgs.length - 1]
   const message = lastUser.text
   const imagePath = lastUser.imagePath || null
   msgs.pop()
   saveSession(sessionId, session)
-  return { ok: true, message, imagePath }
+  return serviceOk({ message, imagePath })
 }
 
-export function editAndResendChatTurn(sessionId: string, messageIndex: number, newText: string): { ok: false; status: 404 | 400; error: string } | { ok: true; message: string } {
+export function editAndResendChatTurn(sessionId: string, messageIndex: number, newText: string): ServiceResult<{ message: string }> {
   const session = getSession(sessionId)
-  if (!session) return { ok: false, status: 404, error: 'Not found' }
+  if (!session) return serviceFail(404, 'Not found')
   if (typeof messageIndex !== 'number' || messageIndex < 0 || messageIndex >= session.messages.length) {
-    return { ok: false, status: 400, error: 'Invalid message index' }
+    return serviceFail(400, 'Invalid message index')
   }
   session.messages = session.messages.slice(0, messageIndex)
   saveSession(sessionId, session)
-  return { ok: true, message: newText }
+  return serviceOk({ message: newText })
 }

@@ -35,14 +35,13 @@ import { logActivity } from '@/lib/server/storage'
 import { createNotification } from '@/lib/server/create-notification'
 import { foldReflectionIntoRunContext } from '@/lib/server/run-context'
 import { getSession, saveSession } from '@/lib/server/sessions/session-repository'
+import { cleanText } from '@/lib/server/text-normalization'
 
 const TAG = 'supervisor-reflection'
 
 const MAIN_LOOP_META_LINE_RE = /\[(?:MAIN_LOOP_META|MAIN_LOOP_PLAN|MAIN_LOOP_REVIEW|AGENT_HEARTBEAT_META)\]\s*(\{[^\n]*\})?/i
 const DEFAULT_TRANSCRIPT_MESSAGES = 12
 const DEFAULT_SNIPPET_CHARS = 800
-const HUMAN_SIGNAL_RE = /\b(?:prefer|please|call me|don't call me|do not call me|i like|i dislike|i hate|i love|my pronouns|my partner|my wife|my husband|my kid|my child|my mom|my dad|my sister|my brother|birthday|anniversary|wedding|married|divorc|pregnan|baby|moved|moving|relocat|promotion|promoted|laid off|new job|job change|graduat|hospital|sick|illness|diagnos|passed away|funeral|grief|bereave|deadline|launch|fundraising|closing|house|home|travel)\b/i
-const SIGNIFICANT_EVENT_RE = /\b(?:birthday|anniversary|wedding|married|divorc|pregnan|baby|moved|moving|relocat|promotion|promoted|laid off|new job|job change|graduat|hospital|sick|illness|diagnos|passed away|funeral|grief|bereave|deadline|launch|fundraising|closing|house|home|travel)\b/i
 
 export interface SupervisorStateSnapshot {
   followupChainCount?: number | null
@@ -81,13 +80,6 @@ export interface ObserveAutonomyRunInput {
 
 function now(): number {
   return Date.now()
-}
-
-function cleanText(value: unknown, max = 320): string | null {
-  if (typeof value !== 'string') return null
-  const compact = value.replace(/\s+/g, ' ').trim()
-  if (!compact) return null
-  return compact.slice(0, max)
 }
 
 function looksLikeHtmlErrorPayload(value: string): boolean {
@@ -545,10 +537,21 @@ function normalizeNoteArray(value: unknown, limit = 4): string[] {
   return out
 }
 
-function transcriptHasHumanSignals(session: Session | null): boolean {
+function transcriptHasSemanticSignal(
+  session: Session | null,
+  signal: 'hasHumanSignals' | 'hasSignificantEvent',
+): boolean {
   if (!session || !Array.isArray(session.messages)) return false
   const recentMessages = session.messages.slice(-8)
-  return recentMessages.some((message) => HUMAN_SIGNAL_RE.test(stripMainLoopMeta(String(message?.text || ''))))
+  return recentMessages.some((message) => message?.role === 'user' && message?.semantics?.[signal] === true)
+}
+
+function transcriptHasHumanSignals(session: Session | null): boolean {
+  return transcriptHasSemanticSignal(session, 'hasHumanSignals')
+}
+
+function transcriptHasSignificantEvents(session: Session | null): boolean {
+  return transcriptHasSemanticSignal(session, 'hasSignificantEvent')
 }
 
 function parseReflectionResponse(raw: string): {
@@ -664,6 +667,7 @@ function shouldReflectRun(params: {
     ? params.session.messages.filter((message) => message && !message.suppressed && (message.text || message.toolEvents?.length)).length
     : 0
   if (transcriptHasHumanSignals(params.session)) return true
+  if (transcriptHasSignificantEvents(params.session)) return true
   if (params.incidents.length > 0) return true
   if (params.toolEvents.length > 0) return true
   if (params.resultText.trim().length >= 180) return true
@@ -790,7 +794,7 @@ function writeReflectionMemories(params: {
       }
       if (group.kind === 'significant_event') {
         metadata.memoryFacet = 'event'
-        metadata.eventSalience = SIGNIFICANT_EVENT_RE.test(note) ? 'high' : 'medium'
+        metadata.eventSalience = 'high'
       }
       if (group.kind === 'open_loop') {
         metadata.memoryFacet = 'followup'

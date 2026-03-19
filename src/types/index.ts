@@ -7,6 +7,25 @@ export interface MessageToolEvent {
   toolCallId?: string
 }
 
+export type MessageTaskIntent = 'coding' | 'research' | 'browsing' | 'outreach' | 'scheduling' | 'general'
+export type MessageWorkType = 'coding' | 'research' | 'writing' | 'review' | 'operations' | 'general'
+
+export interface MessageSemanticsSummary {
+  taskIntent: MessageTaskIntent
+  workType: MessageWorkType
+  walletIntent: 'none' | 'read_only' | 'transactional'
+  isDeliverableTask: boolean
+  isBroadGoal: boolean
+  isResearchSynthesis: boolean
+  hasHumanSignals: boolean
+  hasSignificantEvent: boolean
+  wantsScreenshots?: boolean
+  wantsOutboundDelivery?: boolean
+  wantsVoiceDelivery?: boolean
+  explicitToolRequests: string[]
+  confidence: number
+}
+
 export interface Message {
   role: 'user' | 'assistant'
   text: string
@@ -30,6 +49,8 @@ export interface Message {
   streaming?: boolean
   /** Run ID that produced this message — used to scope streaming artifact replacement. */
   runId?: string
+  /** Cached turn semantics used for routing, delegation, and reflection. */
+  semantics?: MessageSemanticsSummary
 }
 
 export type SessionResetMode = 'idle' | 'daily' | 'isolated'
@@ -236,6 +257,31 @@ export interface SessionWorkingState {
   createdAt: number
   updatedAt: number
   lastCompactedAt?: number | null
+}
+
+export interface ExecutionBriefPlanStep {
+  text: string
+  status: WorkingStateItemStatus
+}
+
+export interface ExecutionBrief {
+  sessionId?: string | null
+  missionId?: string | null
+  objective: string | null
+  summary: string | null
+  status: WorkingStateStatus
+  nextAction: string | null
+  plan: ExecutionBriefPlanStep[]
+  blockers: string[]
+  facts: string[]
+  artifacts: string[]
+  constraints: string[]
+  successCriteria: string[]
+  missionStatus?: MissionStatus | null
+  missionPhase?: MissionPhase | null
+  waitState?: MissionWaitState | null
+  evidenceRefs: EvidenceRef[]
+  parentContext: string | null
 }
 
 export type MissionSource =
@@ -943,17 +989,6 @@ export interface ExtensionToolPlanning {
    * this tool is enabled.
    */
   disciplineGuidance?: string[]
-  /**
-   * Optional natural-language cues that indicate when this tool should be
-   * preferred or explicitly invoked. These are declarative hints so the harness
-   * does not need to hard-code every extension-specific workflow centrally.
-   */
-  requestMatchers?: Array<{
-    capability?: string
-    patterns?: string[]
-    requireLiteralUrl?: boolean
-    forbidLiteralUrl?: boolean
-  }>
 }
 
 export interface ExtensionToolDef {
@@ -1808,6 +1843,8 @@ export interface Chatroom {
   pinnedMessageIds?: string[]
   chatMode?: 'sequential' | 'parallel'
   autoAddress?: boolean
+  routingGuidance?: string | null
+  /** Legacy deterministic routing config kept only for migration/read compatibility. */
   routingRules?: ChatroomRoutingRule[]
   temporary?: boolean
   topic?: string

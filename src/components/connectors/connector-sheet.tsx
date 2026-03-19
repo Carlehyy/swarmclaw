@@ -69,11 +69,6 @@ interface ConnectorDoctorPolicyPreview {
   typingIndicators?: boolean
 }
 
-interface ConnectorDoctorResponse {
-  warnings?: string[]
-  policy?: ConnectorDoctorPolicyPreview | null
-}
-
 interface ConnectorConfigOption {
   value: string
   label: string

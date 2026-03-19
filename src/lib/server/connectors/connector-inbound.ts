@@ -22,7 +22,10 @@ import {
   resolveApiKey as resolveApiKeyHelper,
 } from '@/lib/server/chatrooms/chatroom-helpers'
 import { filterHealthyChatroomAgents } from '@/lib/server/chatrooms/chatroom-health'
-import { evaluateRoutingRules } from '@/lib/server/chatrooms/chatroom-routing'
+import {
+  ensureChatroomRoutingGuidance,
+  selectChatroomRecipients,
+} from '@/lib/server/chatrooms/chatroom-routing'
 import { markProviderFailure, markProviderSuccess } from '../provider-health'
 import { buildIdentityContinuityContext } from '../identity-continuity'
 import { buildRuntimeSkillPromptBlocks, resolveRuntimeSkills } from '@/lib/server/skills/runtime-skill-resolver'
@@ -630,11 +633,14 @@ async function routeMessageToChatroom(connector: Connector, msg: InboundMessage)
   const threadContextBlock = buildConnectorThreadContextBlock(msg)
 
   // Parse mentions from the message text
+  ensureChatroomRoutingGuidance(chatroom, agents)
   let mentions = parseMentions(msg.text || '', agents, chatroom.agentIds)
-  // Routing rules: if no explicit mentions, evaluate keyword/capability rules
-  if (mentions.length === 0 && chatroom.routingRules?.length) {
-    const agentList = chatroom.agentIds.map((id) => agents[id]).filter(Boolean)
-    mentions = evaluateRoutingRules(msg.text || '', chatroom.routingRules, agentList)
+  if (mentions.length === 0 && !chatroom.autoAddress) {
+    mentions = await selectChatroomRecipients({
+      text: msg.text || '',
+      chatroom,
+      agentsById: agents,
+    })
   }
   // Auto-address: if enabled and still no mentions, address all agents
   if (chatroom.autoAddress && mentions.length === 0) {

@@ -37,6 +37,14 @@ const RUN_CONTEXT_SECTION_BUDGET = 3000
 /** Return the existing RunContext or create a fresh empty one. */
 export function ensureRunContext(existing: RunContext | null | undefined): RunContext {
   if (existing && typeof existing === 'object' && typeof existing.version === 'number') {
+    // Backfill any missing array fields from malformed persisted data
+    if (!Array.isArray(existing.constraints)) existing.constraints = []
+    if (!Array.isArray(existing.keyFacts)) existing.keyFacts = []
+    if (!Array.isArray(existing.discoveries)) existing.discoveries = []
+    if (!Array.isArray(existing.failedApproaches)) existing.failedApproaches = []
+    if (!Array.isArray(existing.currentPlan)) existing.currentPlan = []
+    if (!Array.isArray(existing.completedSteps)) existing.completedSteps = []
+    if (!Array.isArray(existing.blockers)) existing.blockers = []
     return existing
   }
   return {

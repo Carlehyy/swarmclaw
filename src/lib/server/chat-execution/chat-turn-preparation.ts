@@ -2,7 +2,7 @@ import fs from 'fs'
 import os from 'os'
 
 import { getProvider } from '@/lib/providers'
-import type { Message, Session } from '@/types'
+import type { ExecutionBrief, Message, Session } from '@/types'
 import {
   decryptKey,
   loadCredentials,
@@ -45,7 +45,6 @@ import {
 import { normalizeProviderEndpoint, isLocalOpenClawEndpoint } from '@/lib/openclaw/openclaw-endpoint'
 import { NON_LANGGRAPH_PROVIDER_IDS } from '@/lib/provider-sets'
 import {
-  buildMissionContextBlock,
   resolveMissionForTurn,
 } from '@/lib/server/missions/mission-service'
 import {
@@ -69,8 +68,15 @@ import {
   resetSessionRuntime,
   resolveSessionResetPolicy,
 } from '@/lib/server/session-reset-policy'
-import { buildWorkingStatePromptBlock } from '@/lib/server/working-state/service'
+import {
+  buildExecutionBrief,
+  buildExecutionBriefContextBlock,
+} from '@/lib/server/execution-brief'
 import { checkAgentBudgetLimits } from '@/lib/server/cost'
+import {
+  classifyMessage,
+  toMessageSemanticsSummary,
+} from '@/lib/server/chat-execution/message-classifier'
 import {
   filterRuntimeCapabilityIds,
   getTodaySpendUsd,
@@ -446,8 +452,8 @@ export interface PreparedExecutableChatTurn {
   lifecycleRunId: string
   agentForSession: ReturnType<typeof getAgent>
   mission: Awaited<ReturnType<typeof resolveMissionForTurn>>
-  workingStateContextBlock?: string
-  missionContextBlock?: string
+  executionBrief: ExecutionBrief
+  executionBriefContextBlock?: string
   extensionsForRun: string[]
   effectiveMessage: string
   providerType: string
@@ -617,13 +623,16 @@ export async function prepareChatTurn(input: ExecuteChatTurnInput): Promise<Prep
   if (isHeartbeatRun && input.modelOverride) {
     sessionForRun = { ...sessionForRun, model: input.modelOverride }
   }
-  const workingStateContextBlock = buildWorkingStatePromptBlock(sessionId, { mission })
-  const missionContextBlock = buildMissionContextBlock(mission)
+  const executionBrief = buildExecutionBrief({
+    session: sessionForRun,
+    mission,
+  })
+  const executionBriefContextBlock = buildExecutionBriefContextBlock(executionBrief)
 
   if (extensionsForRun.length > 0) {
     const modelResolvePrompt = heartbeatLightContext
-      ? (joinSystemPromptBlocks(buildLightHeartbeatSystemPrompt(sessionForRun), workingStateContextBlock, missionContextBlock) || '')
-      : (joinSystemPromptBlocks(buildAgentSystemPrompt(sessionForRun), workingStateContextBlock, missionContextBlock) || '')
+      ? (joinSystemPromptBlocks(buildLightHeartbeatSystemPrompt(sessionForRun), executionBriefContextBlock) || '')
+      : (joinSystemPromptBlocks(buildAgentSystemPrompt(sessionForRun), executionBriefContextBlock) || '')
     const modelResolve = await runCapabilityBeforeModelResolve(
       {
         session: sessionForRun,
@@ -713,7 +722,17 @@ export async function prepareChatTurn(input: ExecuteChatTurnInput): Promise<Prep
 
   const shouldPersistUserMessage = shouldPersistInboundUserMessage(internal, source)
   if (shouldPersistUserMessage) {
-    const linkAnalysis = !internal ? await runLinkUnderstanding(message) : []
+    const [linkAnalysis, semantics] = await Promise.all([
+      !internal ? runLinkUnderstanding(message) : Promise.resolve([]),
+      classifyMessage({
+        sessionId,
+        agentId: session.agentId || null,
+        message,
+        history: session.messages,
+      })
+        .then((classification) => toMessageSemanticsSummary(classification))
+        .catch(() => undefined),
+    ])
     const guardedUserText = guardUntrustedText({
       text: message,
       source,
@@ -730,6 +749,7 @@ export async function prepareChatTurn(input: ExecuteChatTurnInput): Promise<Prep
         imageUrl: imageUrl || undefined,
         attachedFiles: attachedFiles?.length ? attachedFiles : undefined,
         replyToId: input.replyToId || undefined,
+        ...(semantics ? { semantics } : {}),
       },
       enabledIds: extensionsForRun,
       phase: 'user',
@@ -784,8 +804,8 @@ export async function prepareChatTurn(input: ExecuteChatTurnInput): Promise<Prep
     && !useLocalOpenClawNativeRuntime
 
   const systemPrompt = heartbeatLightContext
-    ? joinSystemPromptBlocks(buildLightHeartbeatSystemPrompt(sessionForRun), workingStateContextBlock, missionContextBlock)
-    : (hasExtensions ? undefined : joinSystemPromptBlocks(buildAgentSystemPrompt(sessionForRun), workingStateContextBlock, missionContextBlock))
+    ? joinSystemPromptBlocks(buildLightHeartbeatSystemPrompt(sessionForRun), executionBriefContextBlock)
+    : (hasExtensions ? undefined : joinSystemPromptBlocks(buildAgentSystemPrompt(sessionForRun), executionBriefContextBlock))
 
   return {
     kind: 'ready',
@@ -800,8 +820,8 @@ export async function prepareChatTurn(input: ExecuteChatTurnInput): Promise<Prep
     lifecycleRunId,
     agentForSession,
     mission,
-    workingStateContextBlock: workingStateContextBlock || undefined,
-    missionContextBlock: missionContextBlock || undefined,
+    executionBrief,
+    executionBriefContextBlock: executionBriefContextBlock || undefined,
     extensionsForRun,
     effectiveMessage,
     providerType,

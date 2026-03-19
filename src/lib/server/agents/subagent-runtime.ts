@@ -49,7 +49,8 @@ import { logExecution } from '@/lib/server/execution-log'
 import { enqueueSystemEvent } from '@/lib/server/runtime/system-events'
 import { getEnabledCapabilityIds, splitCapabilityIds } from '@/lib/capability-selection'
 import { getSession, loadSessions, saveSession } from '@/lib/server/sessions/session-repository'
-import { ensureRunContext, serializeParentContext } from '@/lib/server/run-context'
+import { ensureRunContext } from '@/lib/server/run-context'
+import { buildExecutionBrief, serializeExecutionBriefForDelegation } from '@/lib/server/execution-brief'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -280,10 +281,10 @@ async function spawnSubagentImpl(
   sessions[sid] = applyResolvedRoute(nextSession, resolvePrimaryAgentRoute(agent))
 
   // Enrich child session with parent's RunContext for delegation handoff
-  const parentRunContext = parent?.runContext as import('@/types').RunContext | null | undefined
-  if (parentRunContext) {
+  const delegationContext = parent ? serializeExecutionBriefForDelegation(buildExecutionBrief({ sessionId: context.sessionId })) : null
+  if (delegationContext) {
     const childCtx = ensureRunContext(null)
-    childCtx.parentContext = serializeParentContext(parentRunContext)
+    childCtx.parentContext = delegationContext
     childCtx.objective = input.message.slice(0, 900)
     sessions[sid].runContext = childCtx
   }

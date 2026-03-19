@@ -74,8 +74,8 @@ export async function executePreparedChatTurn(params: {
     resolvedImagePath,
     heartbeatLightContext,
     isAutoRunNoHistory,
-    workingStateContextBlock,
-    missionContextBlock,
+    executionBrief,
+    executionBriefContextBlock,
   } = prepared
 
   const emit = partialPersistence.emit
@@ -145,7 +145,8 @@ export async function executePreparedChatTurn(params: {
         attachedFiles,
         apiKey,
         systemPrompt,
-        extraSystemContext: [workingStateContextBlock, missionContextBlock].filter((value): value is string => typeof value === 'string' && value.trim().length > 0),
+        executionBrief,
+        extraSystemContext: [executionBriefContextBlock].filter((value): value is string => typeof value === 'string' && value.trim().length > 0),
         write: (raw) => parseAndEmit(raw),
         history: heartbeatHistory ?? applyContextClearBoundary(getSessionMessages(sessionId)),
         signal: abortController.signal,
