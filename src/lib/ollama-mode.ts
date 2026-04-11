@@ -18,6 +18,14 @@ export function isOllamaCloudEndpoint(endpoint: string | null | undefined): bool
   return /^https?:\/\/(?:www\.|api\.)?ollama\.com(?:\/|$)/i.test(normalized)
 }
 
+/**
+ * Normalize an Ollama Cloud endpoint to avoid the api.ollama.com -> ollama.com
+ * 301 redirect which drops the Authorization header.
+ */
+export function normalizeOllamaCloudEndpoint(endpoint: string): string {
+  return endpoint.replace(/^(https?:\/\/)(?:www\.|api\.)?ollama\.com/i, '$1ollama.com')
+}
+
 export function resolveStoredOllamaMode(input: {
   ollamaMode?: string | null
   apiEndpoint?: string | null

@@ -165,7 +165,11 @@ export function streamOpenAiChat({ session, message, imagePath, imageUrl, apiKey
               if (data === '[DONE]') continue
               try {
                 const parsed = JSON.parse(data)
-                const delta = parsed.choices?.[0]?.delta?.content
+                const choice = parsed.choices?.[0]?.delta
+                const delta = choice?.content
+                  // Thinking/reasoning models (kimi-k2, etc.) put output in reasoning fields
+                  || choice?.reasoning_content
+                  || choice?.reasoning
                 if (delta) {
                   fullResponse += delta
                   writeSSE(write, 'd', delta)

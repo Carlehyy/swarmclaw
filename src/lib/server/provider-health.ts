@@ -305,8 +305,10 @@ export async function pingAnthropic(apiKey: string): Promise<{ ok: boolean; mess
 }
 
 export async function pingOllama(endpoint: string, apiKey?: string): Promise<{ ok: boolean; message: string }> {
-  const normalizedEndpoint = (endpoint || 'http://localhost:11434').replace(/\/+$/, '')
+  let normalizedEndpoint = (endpoint || 'http://localhost:11434').replace(/\/+$/, '')
   const useCloud = isOllamaCloudEndpoint(normalizedEndpoint)
+  // Normalize api.ollama.com -> ollama.com to avoid 301 redirect that drops auth
+  if (useCloud) normalizedEndpoint = normalizedEndpoint.replace(/^(https?:\/\/)(?:www\.|api\.)?ollama\.com/i, '$1ollama.com')
   if (useCloud && !apiKey) {
     return { ok: false, message: 'Ollama Cloud requires an API key.' }
   }

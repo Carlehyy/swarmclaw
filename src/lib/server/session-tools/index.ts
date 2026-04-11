@@ -6,6 +6,8 @@ import { loadSettings, loadSession, loadAgent, loadMcpServers, patchAgent, patch
 import { loadRuntimeSettings } from '@/lib/server/runtime/runtime-settings'
 import { log } from '../logger'
 import { resolveSessionToolPolicy } from '../tool-capability-policy'
+import { truncateToolResultText, calculateMaxToolResultChars } from '../chat-execution/tool-result-guard'
+import { getContextWindowSize } from '../context-manager'
 import { expandExtensionIds } from '../tool-aliases'
 import type { ToolContext, SessionToolsResult, ToolBuildContext, AbortSignalRef } from './context'
 
@@ -455,9 +457,17 @@ export async function buildSessionTools(cwd: string, enabledExtensions: string[]
             }
             const effectiveArgs = hookResult.input ?? guardedArgs
             const result = await candidate.invoke(effectiveArgs ?? {})
-            const outputText = typeof result === 'string' ? result : JSON.stringify(result)
+            const rawOutput = typeof result === 'string' ? result : JSON.stringify(result)
+            // Truncate oversized tool outputs before LangGraph feeds them back to
+            // the LLM.  Without this, a single large tool result (e.g. shell dump,
+            // large web fetch) can blow out the context window inside LangGraph's
+            // internal state, which the auto-compaction system cannot observe.
+            const currentSession = resolveCurrentSession()
+            const maxChars = calculateMaxToolResultChars(getContextWindowSize(currentSession?.provider || '', currentSession?.model || ''))
+            const outputText = truncateToolResultText(rawOutput, maxChars)
             setSpanAttributes(span, {
               'swarmclaw.tool.output_bytes': Buffer.byteLength(outputText, 'utf-8'),
+              ...(rawOutput.length !== outputText.length ? { 'swarmclaw.tool.truncated_from': rawOutput.length } : {}),
             })
             await runCapabilityHook(
               'afterToolExec',

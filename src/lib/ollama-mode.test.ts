@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { isOllamaCloudEndpoint, normalizeOllamaMode, resolveStoredOllamaMode } from './ollama-mode'
+import { isOllamaCloudEndpoint, normalizeOllamaCloudEndpoint, normalizeOllamaMode, resolveStoredOllamaMode } from './ollama-mode'
 
 test('normalizeOllamaMode only accepts explicit local and cloud values', () => {
   assert.equal(normalizeOllamaMode('local'), 'local')
@@ -30,4 +30,21 @@ test('resolveStoredOllamaMode falls back to endpoint only for legacy records', (
   assert.equal(resolveStoredOllamaMode({ apiEndpoint: 'https://ollama.com' }), 'cloud')
   assert.equal(resolveStoredOllamaMode({ apiEndpoint: 'http://localhost:11434' }), 'local')
   assert.equal(resolveStoredOllamaMode({}), 'local')
+})
+
+test('normalizeOllamaCloudEndpoint rewrites api.ollama.com to ollama.com', () => {
+  assert.equal(normalizeOllamaCloudEndpoint('https://api.ollama.com'), 'https://ollama.com')
+  assert.equal(normalizeOllamaCloudEndpoint('https://api.ollama.com/v1'), 'https://ollama.com/v1')
+  assert.equal(normalizeOllamaCloudEndpoint('http://api.ollama.com'), 'http://ollama.com')
+  assert.equal(normalizeOllamaCloudEndpoint('https://www.ollama.com'), 'https://ollama.com')
+})
+
+test('normalizeOllamaCloudEndpoint preserves correct ollama.com URLs', () => {
+  assert.equal(normalizeOllamaCloudEndpoint('https://ollama.com'), 'https://ollama.com')
+  assert.equal(normalizeOllamaCloudEndpoint('https://ollama.com/v1'), 'https://ollama.com/v1')
+})
+
+test('normalizeOllamaCloudEndpoint does not mangle non-Ollama endpoints', () => {
+  assert.equal(normalizeOllamaCloudEndpoint('http://localhost:11434'), 'http://localhost:11434')
+  assert.equal(normalizeOllamaCloudEndpoint('https://api.openai.com/v1'), 'https://api.openai.com/v1')
 })

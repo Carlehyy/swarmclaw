@@ -695,7 +695,7 @@ async function streamAgentChatCore(opts: StreamAgentChatOpts): Promise<StreamAge
         (result.summaryAdded ? ' (LLM summary)' : ' (sliding window fallback)'),
       )
     }
-  } catch { /* non-critical */ }
+  } catch (compactErr) { log.warn(TAG, `Auto-compaction failed for ${session.id}:`, compactErr) }
 
   // Truncate oversized assistant messages in history to prevent context blowout
   const HISTORY_MSG_MAX_CHARS = 8_000
@@ -787,7 +787,7 @@ async function streamAgentChatCore(opts: StreamAgentChatOpts): Promise<StreamAge
     if (warning) {
       prompt = joinPromptSegments(warning, prompt)
     }
-  } catch { /* non-critical */ }
+  } catch (degradeErr) { log.warn(TAG, `Context degradation check failed for ${session.id}:`, degradeErr) }
 
   await runCapabilityHook(
     'llmInput',

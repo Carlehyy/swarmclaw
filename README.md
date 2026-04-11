@@ -375,6 +375,12 @@ Operational docs: https://swarmclaw.ai/docs/observability
 
 ## Releases
 
+### v1.5.34 Highlights
+
+- **Ollama Cloud auth fix**: SwarmClaw now normalizes `api.ollama.com` and `www.ollama.com` to `ollama.com` before making authenticated requests, avoiding the redirect that was dropping authorization headers and causing false provider-health/runtime failures.
+- **Chat execution context hardening**: tool invocation now resolves names case-insensitively, oversized tool results are truncated before they are fed back into the model, and proactive grounding/heartbeat prompts stay smaller under pressure to reduce avoidable context blowouts.
+- **API compatibility fixes**: OpenAI-compatible streaming now captures reasoning deltas from providers that emit them outside `delta.content`, and A2A endpoints are exempt from the main proxy access-key gate so they can rely on their own auth scheme.
+
 ### v1.5.33 Highlights
 
 - **CLI global flag compatibility**: legacy-routed commands now honor the documented `--access-key` and `--base-url` aliases even when they appear after the subcommand, so authenticated CLI automation works the same across binary entry points.

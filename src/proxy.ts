@@ -87,13 +87,19 @@ export function proxy(request: NextRequest) {
     })
   }
 
-  // Only protect API routes (not auth or inbound webhooks)
+  // A2A endpoints use their own authentication (Authorization: Bearer / x-a2a-access-key)
+  const isA2ARoute = pathname === '/api/a2a'
+    || pathname.startsWith('/api/a2a/')
+    || pathname === '/api/.well-known/agent-card'
+
+  // Only protect API routes (not auth, inbound webhooks, or A2A)
   if (
     !pathname.startsWith('/api/')
     || pathname === '/api/auth'
     || pathname === '/api/healthz'
     || isWebhookTrigger
     || isConnectorWebhook
+    || isA2ARoute
   ) {
     return NextResponse.next()
   }

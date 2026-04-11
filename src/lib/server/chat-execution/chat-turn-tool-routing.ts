@@ -453,12 +453,13 @@ async function invokeSessionTool(
   })
 
   try {
-    const directTool = tools.find((t) => t?.name === toolName) as StructuredToolInterface | undefined
+    const lowerName = toolName.toLowerCase()
+    const directTool = tools.find((t) => t?.name === toolName || t?.name?.toLowerCase() === lowerName) as StructuredToolInterface | undefined
     const availableToolNames = tools.map((candidate) => candidate?.name).filter(Boolean)
     const translated = directTool
-      ? { toolName, args }
+      ? { toolName: directTool.name, args }
       : translateRequestedToolInvocation(toolName, args, ctx.message, availableToolNames)
-    const selectedTool = directTool || tools.find((t) => t?.name === translated.toolName) as StructuredToolInterface | undefined
+    const selectedTool = directTool || tools.find((t) => t?.name === translated.toolName || t?.name?.toLowerCase() === translated.toolName.toLowerCase()) as StructuredToolInterface | undefined
     if (!selectedTool?.invoke) {
       const resolvedName = translated.toolName !== toolName ? translated.toolName : null
       const unavailableReason = resolvedName === 'delegate'
@@ -469,18 +470,19 @@ async function invokeSessionTool(
       return { invoked: false, responseOverride: null, unavailableReason }
     }
 
+    const resolvedToolName = selectedTool.name
     const toolCallId = genId()
-    ctx.emit({ t: 'tool_call', toolName, toolInput: JSON.stringify(translated.args), toolCallId })
+    ctx.emit({ t: 'tool_call', toolName: resolvedToolName, toolInput: JSON.stringify(translated.args), toolCallId })
     const toolOutput = await selectedTool.invoke(translated.args)
     const outputText = typeof toolOutput === 'string' ? toolOutput : JSON.stringify(toolOutput)
-    ctx.emit({ t: 'tool_result', toolName, toolOutput: outputText, toolCallId })
+    ctx.emit({ t: 'tool_result', toolName: resolvedToolName, toolOutput: outputText, toolCallId })
 
     const delegateResponse = (
-      toolName === 'delegate'
-      || toolName.startsWith('delegate_to_')
+      resolvedToolName === 'delegate'
+      || resolvedToolName.startsWith('delegate_to_')
     ) ? extractDelegateResponse(outputText) : null
 
-    calledNames.add(toolName)
+    calledNames.add(resolvedToolName)
 
     if (delegateResponse) {
       return { invoked: true, responseOverride: delegateResponse, toolOutputText: outputText }

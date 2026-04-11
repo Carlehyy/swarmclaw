@@ -319,10 +319,11 @@ export function buildAgentHeartbeatPrompt(
   agent: HeartbeatPromptAgent | null | undefined,
   fallbackPrompt: string,
   heartbeatFileContent: string,
-  opts?: { approvals?: Record<string, ApprovalRequest>; chatrooms?: Record<string, Chatroom> },
+  opts?: { approvals?: Record<string, ApprovalRequest>; chatrooms?: Record<string, Chatroom>; lightContext?: boolean },
 ): string {
   if (!agent) return fallbackPrompt
 
+  const light = opts?.lightContext === true
   const sections: string[] = []
 
   // ── Phase 1: Identity context ──
@@ -331,11 +332,11 @@ export function buildAgentHeartbeatPrompt(
   const identityContext = buildIdentityContext(session, agent)
   const continuityContext = buildIdentityContinuityContext(session, agent)
   if (identityContext) sections.push(identityContext)
-  if (continuityContext) sections.push(continuityContext)
+  if (!light && continuityContext) sections.push(continuityContext)
   const description = agent.description || ''
   const soul = agent.soul || ''
   if (description) sections.push(`Description: ${description}`)
-  if (soul) sections.push(`Persona: ${soul.slice(0, 300)}`)
+  if (!light && soul) sections.push(`Persona: ${soul.slice(0, 300)}`)
 
   // ── Phase 2: Pending approvals ──
   const agentId = agent.id || session.agentId || ''
@@ -346,7 +347,7 @@ export function buildAgentHeartbeatPrompt(
         (a) => a.status === 'pending' && a.agentId === agentId,
       )
       if (pending.length > 0) {
-        const approvalLines = pending.slice(0, 5).map(
+        const approvalLines = pending.slice(0, light ? 2 : 5).map(
           (a) => `- [${a.category}] ${a.title}${a.description ? `: ${a.description.slice(0, 100)}` : ''}`,
         )
         sections.push(`### Pending Approvals (${pending.length})\n${approvalLines.join('\n')}`)
@@ -366,7 +367,7 @@ export function buildAgentHeartbeatPrompt(
   const dynamicGoal = agent.heartbeatGoal || ''
   const dynamicNextAction = agent.heartbeatNextAction || ''
   const systemPrompt = agent.systemPrompt || ''
-  const goalSummary = systemPrompt.slice(0, 500)
+  const goalSummary = systemPrompt.slice(0, light ? 200 : 500)
 
   if (dynamicGoal) {
     sections.push(`Current goal (self-set): ${dynamicGoal}`)
@@ -377,12 +378,13 @@ export function buildAgentHeartbeatPrompt(
 
   const strippedContent = stripBlockedItems(heartbeatFileContent)
   const effectiveFileContent = isHeartbeatContentEffectivelyEmpty(strippedContent) ? '' : strippedContent
-  if (effectiveFileContent) sections.push(`\nHEARTBEAT.md contents:\n${effectiveFileContent.slice(0, 2000)}`)
+  if (effectiveFileContent) sections.push(`\nHEARTBEAT.md contents:\n${effectiveFileContent.slice(0, light ? 500 : 2000)}`)
 
+  const messageCount = light ? 2 : 5
   const recentMessages = (
     Array.isArray(session.messages)
-      ? session.messages.slice(-5)
-      : (session.id ? getRecentMessages(session.id, 5) : [])
+      ? session.messages.slice(-messageCount)
+      : (session.id ? getRecentMessages(session.id, messageCount) : [])
   ) as HeartbeatPromptMessage[]
   const recentContext = recentMessages
     .map((m) => {
@@ -395,8 +397,8 @@ export function buildAgentHeartbeatPrompt(
     .join('\n')
   if (recentContext) sections.push(`Recent conversation:\n${recentContext}`)
 
-  // ── Phase 4b: Chatroom mentions since last heartbeat ──
-  try {
+  // ── Phase 4b: Chatroom mentions since last heartbeat (skip in light mode) ──
+  if (!light) try {
     const chatrooms = Object.values(opts?.chatrooms ?? loadChatrooms()) as Chatroom[]
     const myChatrooms = chatrooms.filter((c) => !c.archivedAt && c.agentIds?.includes(agentId))
     if (myChatrooms.length > 0) {
@@ -718,6 +720,7 @@ export async function tickHeartbeats() {
     const baseHeartbeatMessage = buildAgentHeartbeatPrompt(session, agent, cfg.prompt, heartbeatFileContent, {
       approvals: sharedApprovals,
       chatrooms: sharedChatrooms,
+      lightContext: cfg.lightContext,
     })
     let heartbeatMessage = isMainSession(session)
       ? buildMainLoopHeartbeatPrompt(session, baseHeartbeatMessage)

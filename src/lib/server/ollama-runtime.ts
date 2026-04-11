@@ -1,5 +1,5 @@
 import { stripOllamaCloudModelSuffix } from '@/lib/ollama-model'
-import { isOllamaCloudEndpoint, resolveStoredOllamaMode } from '@/lib/ollama-mode'
+import { isOllamaCloudEndpoint, normalizeOllamaCloudEndpoint, resolveStoredOllamaMode } from '@/lib/ollama-mode'
 import { PROVIDER_DEFAULTS } from '@/lib/providers/provider-defaults'
 
 const OLLAMA_CLOUD_KEY_ENV_VARS = ['OLLAMA_API_KEY', 'OLLAMA_CLOUD_API_KEY'] as const
@@ -41,7 +41,7 @@ export function resolveOllamaRuntimeConfig(input: {
   const cloudApiKey = resolveOllamaCloudApiKey(explicitApiKey)
   const useCloud = ollamaMode === 'cloud'
   const endpoint = useCloud
-    ? (isOllamaCloudEndpoint(explicitEndpoint) ? explicitEndpoint! : PROVIDER_DEFAULTS.ollamaCloud)
+    ? normalizeOllamaCloudEndpoint(isOllamaCloudEndpoint(explicitEndpoint) ? explicitEndpoint! : PROVIDER_DEFAULTS.ollamaCloud)
     : (explicitEndpoint && !isOllamaCloudEndpoint(explicitEndpoint) ? explicitEndpoint : PROVIDER_DEFAULTS.ollama)
 
   return {

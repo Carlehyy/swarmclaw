@@ -475,7 +475,7 @@ export async function buildProactiveMemorySection(
       )
       sections.push(`## Recalled Context\nRelevant memories from previous interactions:\n${recalledLines.join('\n')}`)
       if (knowledgeTrace?.hits.length) {
-        const groundingLines = knowledgeTrace.hits.map((hit) =>
+        const groundingLines = knowledgeTrace.hits.slice(0, 10).map((hit) =>
           `- [${hit.chunkIndex + 1}/${hit.chunkCount}] ${hit.sourceTitle}: ${hit.snippet}`,
         )
         sections.push(`## Source Grounding\nSource-backed knowledge retrieved for this turn:\n${groundingLines.join('\n')}`)
@@ -488,7 +488,7 @@ export async function buildProactiveMemorySection(
     }
 
     if (knowledgeTrace?.hits.length) {
-      const groundingLines = knowledgeTrace.hits.map((hit) =>
+      const groundingLines = knowledgeTrace.hits.slice(0, 10).map((hit) =>
         `- [${hit.chunkIndex + 1}/${hit.chunkCount}] ${hit.sourceTitle}: ${hit.snippet}`,
       )
       return {
