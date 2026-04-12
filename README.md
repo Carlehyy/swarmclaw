@@ -389,6 +389,15 @@ Operational docs: https://swarmclaw.ai/docs/observability
 
 ## Releases
 
+### v1.5.40 Highlights
+
+- **Current-thread recall routing**: the message classifier now emits four explicit flags (`isCurrentThreadRecall`, `isGreeting`, `isAcknowledgement`, `isMemoryWriteIntent`) so the chat router stops treating in-thread pronouns ("your last reply", "both answers", "what I just said") as durable-memory queries. Previously small OSS models (`devstral-small-2:24b` and similar) would run `memory_search` for these, come back empty, and truthfully report "no memories found" even when the answer was three messages up.
+- **`memory_search` short-circuits thread-recall queries**: when the search query itself contains phrases like "just", "last reply", "my last", "both answers", the tool now returns a redirect pointing the model back to the visible chat history instead of executing a pointless vector search. Explicit cross-session phrasing ("yesterday", "last week", "in a previous conversation") still runs the normal search path.
+- **Explicit Routing Matrix in the system prompt**: spells out the boundary between "read the thread above" and "call a memory tool" in plain language, so routing doesn't depend on the model extrapolating a terse rule. Memory-tool lines are now tagged `(not this thread)` so the distinction is unmissable.
+- **Tool-summary retry threshold tightened**: the "trivial response" threshold used to decide whether to force a redundant `tool_summary` continuation dropped from 150 → 80 characters. A 119-char response like "I wrote X, stored Y, and confirmed both." is substantive; the old threshold forced the model to re-stream the same answer twice.
+- **Classifier timeout raised to 10 s**: 2 s was too tight for Ollama Cloud with a fully-configured agent (observed 4–6 s calls). Result caching means the latency tax only applies to first-seen messages.
+- **Reflection memories dedup across runs**: the supervisor reflection writer now compares candidate notes against recent (last 7 days) reflection memories for the same agent and skips ones that have already been stored, stopping the ~7-per-turn rediscovery churn on top of the within-run dedup shipped in v1.5.38.
+
 ### v1.5.39 Highlights
 
 - **Agents default to scoped tool access**: new agents (and existing agents whose `tools` list is non-empty) now only see the tools they've been given in the system prompt. This trims ~3 k input tokens per turn — an observed CEO/coordinator agent with 14 tools and 4 loaded skills went from 62 k to 38 k chars of system prompt. Opt back into the old firehose by toggling **Universal tool access** in the agent sheet's new "Context & Tool Access" section. Memory, context management, and `ask_human` are always included regardless of the scoped list.
@@ -422,14 +431,6 @@ Operational docs: https://swarmclaw.ai/docs/observability
 - **Desktop app (Electron)**: SwarmClaw now ships as a native desktop app for macOS (Apple Silicon + Intel), Windows, and Linux (AppImage + .deb). Download from [swarmclaw.ai/downloads](https://swarmclaw.ai/downloads). The app wraps the existing standalone server inside an Electron shell, stores data in the OS app-data directory, and auto-updates via GitHub Releases (notify-only on unsigned macOS builds).
 - **Desktop release CI**: new `desktop-release.yml` workflow builds and publishes installers for all three platforms to GitHub Releases on every version tag.
 - **UI cleanup**: removed sibling-product navigation links from the in-app sidebar rail and login gate so the open-source app focuses on SwarmClaw itself. Those links remain in the project README and on swarmclaw.ai.
-
-### v1.5.35 Highlights
-
-- **Update safety: prevent DB corruption on Linux**: `npm run update:easy`, `swarmclaw update`, and the in-app update endpoint now stop the running server (or checkpoint the SQLite WAL) before rebuilding native modules, preventing the WAL journal corruption that forced some Linux users back to the setup wizard.
-- **SQLite graceful shutdown**: the server now checkpoints and closes the database on SIGTERM/SIGINT, eliminating stale WAL state after any clean stop.
-- **Doctor: detect dangling gateway credentials**: the setup doctor now flags gateway profiles that reference deleted or missing credentials, explaining the "gateway token missing" connection errors.
-- **Gateway credential resolution logging**: when a gateway credential can't be resolved, the server now logs a clear warning identifying the missing credential ID.
-- **Credential decryption error logging**: when a stored credential can't be decrypted (e.g. after `CREDENTIAL_SECRET` changes), the server now logs the credential ID and provider so users know which key to re-add.
 
 Older releases: https://swarmclaw.ai/docs/release-notes
 

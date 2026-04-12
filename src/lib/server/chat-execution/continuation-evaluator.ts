@@ -370,8 +370,14 @@ function checkToolSummary(ctx: ContinuationContext): ContinuationDecision | null
     isConnectorSession: ctx.isConnectorSession,
   })
   if (skipToolSummaryForShortResponse) return null
+  // A 119-char response like "I wrote X, stored Y, and confirmed both." is
+  // substantive after two tool calls — it names each action. The prior
+  // 150-char threshold treated such responses as trivial preambles and
+  // forced a redundant retry that streamed the same answer twice. Tightened
+  // to 80 so only genuinely short preambles ("Done.", "Let me do that…")
+  // trigger the summary continuation.
   const textIsTrivial = !ctx.state.fullText.trim() || (
-    !ctx.isConnectorSession && ctx.state.fullText.trim().length < 150
+    !ctx.isConnectorSession && ctx.state.fullText.trim().length < 80
     && (
       ctx.state.streamedToolEvents.length >= 2
       || ctx.likelyResearchSynthesisTask
