@@ -18,6 +18,9 @@ const eslintConfig = defineConfig([
     ".workbench/**",
     // Git worktrees (created by parallel agent workflows)
     ".worktrees/**",
+    // Electron build output (compiled from electron/*.ts)
+    "electron-dist/**",
+    "release/**",
   ]),
   // Prevent console.* in server-side code — use `import { log } from '@/lib/server/logger'` instead.
   {

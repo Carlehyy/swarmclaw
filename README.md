@@ -69,6 +69,19 @@ Extension tutorial: https://swarmclaw.ai/docs/extension-tutorial
 
 ## Quick Start
 
+### Desktop app (recommended for non-technical users)
+
+Download the one-click installer from [swarmclaw.ai/downloads](https://swarmclaw.ai/downloads).
+Available for macOS (Apple Silicon & Intel), Windows, and Linux (AppImage + .deb).
+
+Current builds are unsigned, so on first launch:
+- **macOS:** right-click the app in Finder → **Open** → **Open** to bypass Gatekeeper.
+- **Windows:** if SmartScreen appears, click **More info** → **Run anyway**.
+- **Linux (AppImage):** `chmod +x` the downloaded file, then run it.
+
+Data lives in your OS app-data directory (`~/Library/Application Support/SwarmClaw`,
+`%APPDATA%\SwarmClaw`, or `~/.config/SwarmClaw`), separate from any CLI or Docker install.
+
 ### Global install
 
 ```bash
@@ -374,6 +387,12 @@ If you need a trace-specific endpoint, set `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` 
 Operational docs: https://swarmclaw.ai/docs/observability
 
 ## Releases
+
+### v1.5.36 Highlights
+
+- **Desktop app (Electron)**: SwarmClaw now ships as a native desktop app for macOS (Apple Silicon + Intel), Windows, and Linux (AppImage + .deb). Download from [swarmclaw.ai/downloads](https://swarmclaw.ai/downloads). The app wraps the existing standalone server inside an Electron shell, stores data in the OS app-data directory, and auto-updates via GitHub Releases (notify-only on unsigned macOS builds).
+- **Desktop release CI**: new `desktop-release.yml` workflow builds and publishes installers for all three platforms to GitHub Releases on every version tag.
+- **UI cleanup**: removed sibling-product navigation links from the in-app sidebar rail and login gate so the open-source app focuses on SwarmClaw itself. Those links remain in the project README and on swarmclaw.ai.
 
 ### v1.5.35 Highlights
 

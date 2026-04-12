@@ -63,6 +63,11 @@ next-env.d.ts
 # CI artifacts
 /artifacts/
 
+# electron
+/electron-dist/
+/release/
+/dist-electron/
+
 # local scratch files
 todo.html
 IMPROVEMENTS.md

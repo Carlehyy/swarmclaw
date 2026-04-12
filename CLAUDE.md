@@ -112,6 +112,29 @@ For single-item updates, use `upsertCollectionItem()` instead — it doesn't tri
 
 **Normalization on load:** `storage-normalization.ts` auto-migrates records when they're loaded, applying default values for new fields. When you add a new field to a stored type, add its default to the normalization function — don't rely on `undefined` checks scattered across the codebase.
 
+### Desktop App (Electron)
+
+SwarmClaw also ships as a desktop app via Electron. The wrapper lives in `electron/`
+and spawns the existing Next.js standalone server as a child process. **The web
+app code is not modified for Electron.**
+
+- **Wrapper model:** `electron/main.ts` spawns `.next/standalone/server.js` using
+  `process.execPath` + `ELECTRON_RUN_AS_NODE=1` (no separate Node runtime shipped).
+  The child binds to `127.0.0.1` only, never `0.0.0.0` from the desktop path.
+- **Data directory:** Electron sets `SWARMCLAW_HOME = app.getPath('userData') + '/home'`
+  before spawning. `DATA_DIR`, `WORKSPACE_DIR`, and `BROWSER_PROFILES_DIR` are all
+  rooted there. Do not write to `./data` from code reached by the desktop app.
+- **Native modules:** `better-sqlite3` must be ABI-compatible with Electron's Node.
+  `scripts/build-electron.mjs` runs `@electron/rebuild` against
+  `.next/standalone/node_modules` before packaging.
+- **Auto-update:** `electron-updater` + GitHub Releases. Unsigned macOS builds fall
+  back to notify-only (Squirrel.Mac requires a signed bundle). Windows NSIS and
+  Linux AppImage auto-update unsigned.
+- **Build locally:** `npm run electron:build` (current platform only). CI matrix
+  in `.github/workflows/desktop-release.yml` handles all three platforms.
+- **Release gate:** before cutting a tag, run `npm run electron:build` as a smoke
+  test on the maintainer's OS.
+
 ### Preparing a Release
 
 When preparing a new version release, follow this checklist in order:
@@ -122,12 +145,13 @@ When preparing a new version release, follow this checklist in order:
 4. **Update README release notes**: add a new `### vX.Y.Z Highlights` section above the previous version in the `## Release Notes` block in `README.md`. Include concise bullet points for each notable change.
 5. **Update site docs release notes**: add a new `## vX.Y.Z (date)` entry at the top of `../swarmclaw-site/content/docs/release-notes.md` with `### Highlights` and `### Upgrade Guidance` subsections.
 6. **Register new API routes in CLI**: if new API routes were added, add them to the CLI manifest in `src/cli/index.js` (and `src/cli/spec.js` if applicable) so the route-coverage test passes.
-7. **Run CI validation** (all must pass):
+7. **Smoke-test the desktop app**: `npm run electron:build` on the maintainer's OS, launch the packaged artifact, and verify a live agent chat works before tagging.
+8. **Run CI validation** (all must pass):
    - `npm run lint:baseline` — lint gate
    - `NODE_ENV=production npm run build:ci` — production build
    - `npm run test:cli` — CLI tests
    - `npm run test:openclaw` — OpenClaw tests
-8. **Commit**: stage all changes and commit with a release message (e.g., `Release v1.1.6`). Do not push until the user confirms.
+9. **Commit**: stage all changes and commit with a release message (e.g., `Release v1.1.6`). Do not push until the user confirms.
 
 ### Extensions, Not Plugins
 
