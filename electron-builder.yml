@@ -74,3 +74,7 @@ linux:
   synopsis: Build and run autonomous AI agents.
   maintainer: SwarmClaw <noreply@swarmclaw.ai>
   vendor: SwarmClaw
+  # Override artifact name so the npm scope slash (@swarmclawai/) does not
+  # leak into the .deb output path (fpm can't create parent dirs and fails
+  # with "Parent directory does not exist: .../release/@swarmclawai").
+  artifactName: ${productName}-${version}-${arch}.${ext}
