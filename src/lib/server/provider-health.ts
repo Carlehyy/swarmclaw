@@ -5,7 +5,7 @@ import { log } from './logger'
 
 const TAG = 'provider-health'
 
-type DelegateTool = 'delegate_to_claude_code' | 'delegate_to_codex_cli' | 'delegate_to_opencode_cli' | 'delegate_to_gemini_cli' | 'delegate_to_copilot_cli' | 'delegate_to_cursor_cli' | 'delegate_to_qwen_code_cli'
+type DelegateTool = 'delegate_to_claude_code' | 'delegate_to_codex_cli' | 'delegate_to_opencode_cli' | 'delegate_to_gemini_cli' | 'delegate_to_copilot_cli' | 'delegate_to_droid_cli' | 'delegate_to_cursor_cli' | 'delegate_to_qwen_code_cli'
 
 interface ProviderHealthState {
   failures: number
@@ -120,6 +120,7 @@ function delegateBinary(delegateTool: DelegateTool): string {
   if (delegateTool === 'delegate_to_codex_cli') return 'codex'
   if (delegateTool === 'delegate_to_gemini_cli') return 'gemini'
   if (delegateTool === 'delegate_to_copilot_cli') return 'copilot'
+  if (delegateTool === 'delegate_to_droid_cli') return 'droid'
   if (delegateTool === 'delegate_to_cursor_cli') return 'cursor-agent'
   if (delegateTool === 'delegate_to_qwen_code_cli') return 'qwen'
   return 'opencode'
@@ -164,6 +165,7 @@ function delegateProviderId(delegateTool: DelegateTool): string {
   if (delegateTool === 'delegate_to_codex_cli') return 'codex-cli'
   if (delegateTool === 'delegate_to_gemini_cli') return 'gemini-cli'
   if (delegateTool === 'delegate_to_copilot_cli') return 'copilot-cli'
+  if (delegateTool === 'delegate_to_droid_cli') return 'droid-cli'
   if (delegateTool === 'delegate_to_cursor_cli') return 'cursor-cli'
   if (delegateTool === 'delegate_to_qwen_code_cli') return 'qwen-code-cli'
   return 'opencode-cli'
@@ -350,7 +352,7 @@ export async function pingProvider(
   apiKey: string | undefined,
   endpoint: string | undefined,
 ): Promise<{ ok: boolean; message: string }> {
-  const CLI_PROVIDERS = ['claude-cli', 'codex-cli', 'opencode-cli', 'gemini-cli', 'copilot-cli', 'cursor-cli', 'qwen-code-cli', 'goose']
+  const CLI_PROVIDERS = ['claude-cli', 'codex-cli', 'opencode-cli', 'gemini-cli', 'copilot-cli', 'droid-cli', 'cursor-cli', 'qwen-code-cli', 'goose']
   const OPTIONAL_OPENAI_COMPATIBLE_KEY_PROVIDERS = new Set(['hermes'])
   if (CLI_PROVIDERS.includes(provider)) return { ok: true, message: 'CLI provider — skipped.' }
 

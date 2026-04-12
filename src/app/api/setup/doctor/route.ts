@@ -203,6 +203,7 @@ export async function GET(req: Request) {
     { id: 'opencode-cli', label: 'OpenCode CLI', command: 'opencode' },
     { id: 'gemini-cli', label: 'Gemini CLI', command: 'gemini' },
     { id: 'copilot-cli', label: 'GitHub Copilot CLI', command: 'copilot' },
+    { id: 'droid-cli', label: 'Factory Droid CLI', command: 'droid' },
     { id: 'cursor-cli', label: 'Cursor Agent CLI', command: 'cursor-agent' },
     { id: 'qwen-code-cli', label: 'Qwen Code CLI', command: 'qwen' },
     { id: 'goose', label: 'Goose CLI', command: 'goose' },

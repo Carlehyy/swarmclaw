@@ -387,7 +387,7 @@ export interface DelegationJobRecord {
   id: string
   kind: DelegationJobKind
   status: DelegationJobStatus
-  backend?: 'claude' | 'codex' | 'opencode' | 'gemini' | 'copilot' | 'cursor' | 'qwen' | null
+  backend?: 'claude' | 'codex' | 'opencode' | 'gemini' | 'copilot' | 'droid' | 'cursor' | 'qwen' | null
   parentSessionId?: string | null
   childSessionId?: string | null
   agentId?: string | null

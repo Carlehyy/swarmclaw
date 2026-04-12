@@ -649,6 +649,7 @@ function normalizeStoredRecordInner(
   if (session.geminiSessionId === undefined) session.geminiSessionId = null
   // Default copilotSessionId for new field
   if (session.copilotSessionId === undefined) session.copilotSessionId = null
+  if (session.droidSessionId === undefined) session.droidSessionId = null
   if (session.cursorSessionId === undefined) session.cursorSessionId = null
   if (session.qwenSessionId === undefined) session.qwenSessionId = null
   if (session.acpSessionId === undefined) session.acpSessionId = null
@@ -659,12 +660,14 @@ function normalizeStoredRecordInner(
       opencode: null,
       gemini: null,
       copilot: null,
+      droid: null,
       cursor: null,
       qwen: null,
     }
   } else {
     const resumeIds = session.delegateResumeIds as Record<string, unknown>
     if (resumeIds.copilot === undefined) resumeIds.copilot = null
+    if (resumeIds.droid === undefined) resumeIds.droid = null
     if (resumeIds.cursor === undefined) resumeIds.cursor = null
     if (resumeIds.qwen === undefined) resumeIds.qwen = null
   }

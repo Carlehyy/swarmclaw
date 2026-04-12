@@ -47,6 +47,7 @@ function emptyDelegateResumeIds() {
     opencode: null,
     gemini: null,
     copilot: null,
+    droid: null,
     cursor: null,
     qwen: null,
   }
@@ -129,6 +130,7 @@ export function createChatSession(input: Record<string, unknown>): ServiceResult
     opencodeSessionId: null,
     geminiSessionId: null,
     copilotSessionId: null,
+    droidSessionId: null,
     cursorSessionId: null,
     qwenSessionId: null,
     acpSessionId: null,
@@ -289,6 +291,7 @@ export function updateChatSession(sessionId: string, updates: Record<string, unk
   if (updates.opencodeSessionId !== undefined) session.opencodeSessionId = updates.opencodeSessionId
   if (updates.geminiSessionId !== undefined) session.geminiSessionId = updates.geminiSessionId
   if (updates.copilotSessionId !== undefined) session.copilotSessionId = updates.copilotSessionId
+  if (updates.droidSessionId !== undefined) session.droidSessionId = updates.droidSessionId
   if (updates.cursorSessionId !== undefined) session.cursorSessionId = updates.cursorSessionId
   if (updates.qwenSessionId !== undefined) session.qwenSessionId = updates.qwenSessionId
   if (updates.acpSessionId !== undefined) session.acpSessionId = updates.acpSessionId
@@ -375,6 +378,7 @@ export function clearChatMessages(sessionId: string): boolean {
   session.opencodeSessionId = null
   session.geminiSessionId = null
   session.copilotSessionId = null
+  session.droidSessionId = null
   session.cursorSessionId = null
   session.qwenSessionId = null
   session.acpSessionId = null

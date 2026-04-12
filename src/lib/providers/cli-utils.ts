@@ -45,6 +45,13 @@ const KNOWN_BINARY_PATHS: Record<string, string[]> = {
     '/opt/homebrew/bin/copilot',
     path.join(os.homedir(), '.npm-global/bin/copilot'),
   ],
+  droid: [
+    path.join(os.homedir(), '.local/bin/droid'),
+    '/usr/local/bin/droid',
+    '/opt/homebrew/bin/droid',
+    path.join(os.homedir(), '.npm-global/bin/droid'),
+    path.join(os.homedir(), '.factory/bin/droid'),
+  ],
   'cursor-agent': [
     path.join(os.homedir(), '.local/bin/cursor-agent'),
     '/usr/local/bin/cursor-agent',
@@ -166,7 +173,7 @@ export interface AuthProbeResult {
  */
 export function probeCliAuth(
   binary: string,
-  backend: 'claude' | 'codex' | 'opencode' | 'gemini' | 'copilot' | 'cursor' | 'qwen' | 'goose',
+  backend: 'claude' | 'codex' | 'opencode' | 'gemini' | 'copilot' | 'droid' | 'cursor' | 'qwen' | 'goose',
   env: NodeJS.ProcessEnv,
   cwd?: string,
 ): AuthProbeResult {
@@ -272,6 +279,25 @@ export function probeCliAuth(
       return {
         authenticated: false,
         errorMessage: 'Copilot CLI is not authenticated. Run `copilot /login`, `gh auth login`, or set GH_TOKEN and try again.',
+      }
+    }
+    return { authenticated: true }
+  }
+
+  if (backend === 'droid') {
+    if (process.env.FACTORY_API_KEY || env.FACTORY_API_KEY) {
+      return { authenticated: true }
+    }
+    const configPaths = [
+      path.join(os.homedir(), '.factory', 'config.json'),
+      path.join(os.homedir(), '.config', 'factory', 'config.json'),
+      path.join(os.homedir(), '.factory', 'auth.json'),
+    ]
+    const hasConfig = configPaths.some((p) => fs.existsSync(p))
+    if (!hasConfig) {
+      return {
+        authenticated: false,
+        errorMessage: 'Factory Droid CLI is not authenticated. Run `droid` once to sign in via browser, or set FACTORY_API_KEY and try again.',
       }
     }
     return { authenticated: true }
@@ -427,6 +453,7 @@ export const CLI_PROVIDER_CAPABILITIES: Record<string, string> = {
   'opencode-cli': 'code analysis, generation across multiple LLM backends',
   'gemini-cli': 'code generation, analysis with Gemini models',
   'copilot-cli': 'code generation, analysis, multi-model support via GitHub Copilot',
+  'droid-cli': 'code generation, refactoring, and automation via Factory Droid with configurable autonomy',
   'cursor-cli': 'full-agent coding workflows, multi-file edits, project-aware code changes',
   'qwen-code-cli': 'terminal-native coding workflows, code generation, review, and automation',
   goose: 'agentic coding workflows with extensions, tools, and runtime-managed execution',

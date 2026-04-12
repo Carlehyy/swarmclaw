@@ -6,6 +6,7 @@ export const NON_ORCHESTRATOR_PROVIDERS = new Set([
   'opencode-cli',
   'gemini-cli',
   'copilot-cli',
+  'droid-cli',
   'cursor-cli',
   'qwen-code-cli',
   'goose',

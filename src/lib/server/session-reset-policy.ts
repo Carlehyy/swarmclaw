@@ -284,6 +284,7 @@ export function resetSessionRuntime(
   session.opencodeSessionId = null
   session.geminiSessionId = null
   session.copilotSessionId = null
+  session.droidSessionId = null
   session.cursorSessionId = null
   session.qwenSessionId = null
   session.acpSessionId = null
@@ -293,6 +294,7 @@ export function resetSessionRuntime(
     opencode: null,
     gemini: null,
     copilot: null,
+    droid: null,
     cursor: null,
     qwen: null,
   }

@@ -45,6 +45,7 @@ function buildThreadSession(agent: Agent, sessionId: string, user: string, creat
     opencodeSessionId: existing?.opencodeSessionId || null,
     geminiSessionId: existing?.geminiSessionId || null,
     copilotSessionId: existing?.copilotSessionId || null,
+    droidSessionId: existing?.droidSessionId || null,
     cursorSessionId: existing?.cursorSessionId || null,
     qwenSessionId: existing?.qwenSessionId || null,
     acpSessionId: existing?.acpSessionId || null,

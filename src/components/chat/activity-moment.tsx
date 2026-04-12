@@ -14,6 +14,7 @@ const NOTABLE_TOOLS: Record<string, { label: string; color: string; icon: 'brain
   delegate_to_opencode_cli: { label: 'Delegated to OpenCode', color: '#38BDF8', icon: 'delegate' },
   delegate_to_gemini_cli: { label: 'Delegated to Gemini CLI', color: '#38BDF8', icon: 'delegate' },
   delegate_to_cursor_cli: { label: 'Delegated to Cursor CLI', color: '#38BDF8', icon: 'delegate' },
+  delegate_to_droid_cli: { label: 'Delegated to Factory Droid', color: '#38BDF8', icon: 'delegate' },
   delegate_to_qwen_code_cli: { label: 'Delegated to Qwen Code', color: '#38BDF8', icon: 'delegate' },
   delegate_to_agent: { label: 'Delegating task', color: '#6366F1', icon: 'delegate' },
   check_delegation_status: { label: 'Checking delegation', color: '#6366F1', icon: 'delegate' },

@@ -31,6 +31,7 @@ export type DelegateTool =
   | 'delegate_to_opencode_cli'
   | 'delegate_to_gemini_cli'
   | 'delegate_to_copilot_cli'
+  | 'delegate_to_droid_cli'
   | 'delegate_to_cursor_cli'
   | 'delegate_to_qwen_code_cli'
 
@@ -137,6 +138,12 @@ export function translateRequestedToolInvocation(
   }
   if (requestedName === 'delegate_to_gemini_cli') {
     return { toolName: 'delegate', args: { ...rawArgs, backend: 'gemini' } }
+  }
+  if (requestedName === 'delegate_to_copilot_cli') {
+    return { toolName: 'delegate', args: { ...rawArgs, backend: 'copilot' } }
+  }
+  if (requestedName === 'delegate_to_droid_cli') {
+    return { toolName: 'delegate', args: { ...rawArgs, backend: 'droid' } }
   }
   if (requestedName === 'delegate_to_cursor_cli') {
     return { toolName: 'delegate', args: { ...rawArgs, backend: 'cursor' } }
@@ -306,6 +313,8 @@ export function requestedToolNamesFromMessage(message: string): string[] {
     'delegate_to_codex_cli',
     'delegate_to_opencode_cli',
     'delegate_to_gemini_cli',
+    'delegate_to_copilot_cli',
+    'delegate_to_droid_cli',
     'delegate_to_cursor_cli',
     'delegate_to_qwen_code_cli',
     'connector_message_tool',
@@ -372,6 +381,8 @@ export function enabledDelegationTools(session: SessionWithTools): DelegateTool[
   if (hasToolEnabled(session, 'codex_cli')) tools.push('delegate_to_codex_cli')
   if (hasToolEnabled(session, 'opencode_cli')) tools.push('delegate_to_opencode_cli')
   if (hasToolEnabled(session, 'gemini_cli')) tools.push('delegate_to_gemini_cli')
+  if (hasToolEnabled(session, 'copilot_cli')) tools.push('delegate_to_copilot_cli')
+  if (hasToolEnabled(session, 'droid_cli')) tools.push('delegate_to_droid_cli')
   if (hasToolEnabled(session, 'cursor_cli')) tools.push('delegate_to_cursor_cli')
   if (hasToolEnabled(session, 'qwen_code_cli')) tools.push('delegate_to_qwen_code_cli')
   return tools

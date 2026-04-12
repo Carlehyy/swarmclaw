@@ -3,6 +3,7 @@ import { streamCodexCliChat } from './codex-cli'
 import { streamOpenCodeCliChat } from './opencode-cli'
 import { streamGeminiCliChat } from './gemini-cli'
 import { streamCopilotCliChat } from './copilot-cli'
+import { streamDroidCliChat } from './droid-cli'
 import { streamCursorCliChat } from './cursor-cli'
 import { streamQwenCodeCliChat } from './qwen-code-cli'
 import { streamGooseChat } from './goose'
@@ -150,6 +151,15 @@ export const PROVIDERS: Record<string, BuiltinProviderConfig> = {
     requiresApiKey: false,
     requiresEndpoint: false,
     handler: { streamChat: streamCopilotCliChat },
+  },
+  'droid-cli': {
+    id: 'droid-cli',
+    name: 'Factory Droid CLI',
+    models: ['default'],
+    requiresApiKey: false,
+    optionalApiKey: true,
+    requiresEndpoint: false,
+    handler: { streamChat: streamDroidCliChat },
   },
   'cursor-cli': {
     id: 'cursor-cli',
@@ -383,7 +393,7 @@ export function getProviderList(): ProviderInfo[] {
         ...info,
         models: overrides[info.id] || info.models,
         defaultModels: info.models,
-        supportsModelDiscovery: !['claude-cli', 'codex-cli', 'opencode-cli', 'gemini-cli', 'copilot-cli', 'cursor-cli', 'qwen-code-cli', 'goose', 'fireworks'].includes(info.id),
+        supportsModelDiscovery: !['claude-cli', 'codex-cli', 'opencode-cli', 'gemini-cli', 'copilot-cli', 'droid-cli', 'cursor-cli', 'qwen-code-cli', 'goose', 'fireworks'].includes(info.id),
       }
     })
   

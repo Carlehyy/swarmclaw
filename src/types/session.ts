@@ -71,6 +71,7 @@ export interface Session {
   opencodeSessionId?: string | null
   geminiSessionId?: string | null
   copilotSessionId?: string | null
+  droidSessionId?: string | null
   cursorSessionId?: string | null
   qwenSessionId?: string | null
   acpSessionId?: string | null
@@ -80,6 +81,7 @@ export interface Session {
     opencode?: string | null
     gemini?: string | null
     copilot?: string | null
+    droid?: string | null
     cursor?: string | null
     qwen?: string | null
   }
@@ -206,6 +208,7 @@ export type SessionTool =
   | 'opencode_cli'
   | 'gemini_cli'
   | 'copilot_cli'
+  | 'droid_cli'
   | 'cursor_cli'
   | 'qwen_code_cli'
   | 'web_search'

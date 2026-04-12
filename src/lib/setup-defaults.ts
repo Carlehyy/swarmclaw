@@ -9,6 +9,7 @@ export type SetupProvider =
   | 'opencode-cli'
   | 'gemini-cli'
   | 'copilot-cli'
+  | 'droid-cli'
   | 'cursor-cli'
   | 'qwen-code-cli'
   | 'goose'
@@ -96,6 +97,19 @@ export const SETUP_PROVIDERS: SetupProviderOption[] = [
     supportsEndpoint: false,
     badge: 'CLI',
     icon: 'P',
+  },
+  {
+    id: 'droid-cli',
+    name: 'Factory Droid CLI',
+    description: 'Factory.ai’s terminal coding agent with headless exec mode, session resume, and autonomy controls.',
+    requiresKey: false,
+    supportsEndpoint: false,
+    optionalKey: true,
+    keyUrl: 'https://app.factory.ai/settings/api-keys',
+    keyLabel: 'app.factory.ai',
+    keyPlaceholder: 'FACTORY_API_KEY (optional if signed in via `droid`)',
+    badge: 'CLI',
+    icon: 'F',
   },
   {
     id: 'cursor-cli',
@@ -741,6 +755,13 @@ export const DEFAULT_AGENTS: Record<SetupProvider, DefaultAgentConfig> = {
     description: 'A helpful assistant powered by GitHub Copilot CLI.',
     systemPrompt: SWARMCLAW_ASSISTANT_PROMPT,
     model: 'claude-sonnet-4-5',
+    tools: STARTER_AGENT_TOOLS,
+  },
+  'droid-cli': {
+    name: 'Factory Droid',
+    description: 'A helpful assistant powered by Factory Droid CLI.',
+    systemPrompt: SWARMCLAW_ASSISTANT_PROMPT,
+    model: 'default',
     tools: STARTER_AGENT_TOOLS,
   },
   'cursor-cli': {

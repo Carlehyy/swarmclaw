@@ -1,9 +1,14 @@
 {
   "name": "@swarmclawai/swarmclaw",
-  "version": "1.5.36",
+  "version": "1.5.37",
   "description": "Build and run autonomous AI agents with OpenClaw, Hermes, multiple model providers, orchestration, delegation, memory, skills, schedules, and chat connectors.",
   "main": "electron-dist/main.js",
   "license": "MIT",
+  "author": {
+    "name": "SwarmClaw",
+    "email": "noreply@swarmclaw.ai",
+    "url": "https://swarmclaw.ai"
+  },
   "publishConfig": {
     "access": "public",
     "registry": "https://registry.npmjs.org/"

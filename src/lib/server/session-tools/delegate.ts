@@ -25,7 +25,7 @@ import { markProviderFailure, markProviderSuccess } from '../provider-health'
 import { loadRuntimeSettings } from '../runtime/runtime-settings'
 import { getSessionDepth } from '../agents/subagent-runtime'
 
-const DELEGATE_BACKEND_ORDER: DelegateBackend[] = ['claude', 'codex', 'opencode', 'gemini', 'copilot', 'cursor', 'qwen']
+const DELEGATE_BACKEND_ORDER: DelegateBackend[] = ['claude', 'codex', 'opencode', 'gemini', 'copilot', 'droid', 'cursor', 'qwen']
 
 interface DelegateContext {
   id?: string
@@ -34,8 +34,8 @@ interface DelegateContext {
   jobId?: string | null
   cwd?: string
   claudeTimeoutMs?: number
-  readStoredDelegateResumeId?: (key: 'claudeCode' | 'codex' | 'opencode' | 'gemini' | 'copilot' | 'cursor' | 'qwen') => string | null
-  persistDelegateResumeId?: (key: 'claudeCode' | 'codex' | 'opencode' | 'gemini' | 'copilot' | 'cursor' | 'qwen', id: string | null | undefined) => void
+  readStoredDelegateResumeId?: (key: 'claudeCode' | 'codex' | 'opencode' | 'gemini' | 'copilot' | 'droid' | 'cursor' | 'qwen') => string | null
+  persistDelegateResumeId?: (key: 'claudeCode' | 'codex' | 'opencode' | 'gemini' | 'copilot' | 'droid' | 'cursor' | 'qwen', id: string | null | undefined) => void
   ctx?: {
     delegationEnabled?: boolean
     delegationTargetMode?: 'all' | 'selected'
@@ -48,7 +48,7 @@ interface DelegateContext {
   hasTool?: (name: string) => boolean
 }
 
-type DelegateBackend = 'claude' | 'codex' | 'opencode' | 'gemini' | 'copilot' | 'cursor' | 'qwen'
+type DelegateBackend = 'claude' | 'codex' | 'opencode' | 'gemini' | 'copilot' | 'droid' | 'cursor' | 'qwen'
 
 interface DelegateRuntimeState {
   child?: ChildProcess | null
@@ -129,10 +129,11 @@ function buildDelegateResumePatch(bctx: DelegateContext) {
     opencode: bctx.readStoredDelegateResumeId?.('opencode') || null,
     gemini: bctx.readStoredDelegateResumeId?.('gemini') || null,
     copilot: bctx.readStoredDelegateResumeId?.('copilot') || null,
+    droid: bctx.readStoredDelegateResumeId?.('droid') || null,
     cursor: bctx.readStoredDelegateResumeId?.('cursor') || null,
     qwen: bctx.readStoredDelegateResumeId?.('qwen') || null,
   }
-  const resumeId = resumeIds.claudeCode || resumeIds.codex || resumeIds.opencode || resumeIds.gemini || resumeIds.copilot || resumeIds.cursor || resumeIds.qwen || null
+  const resumeId = resumeIds.claudeCode || resumeIds.codex || resumeIds.opencode || resumeIds.gemini || resumeIds.copilot || resumeIds.droid || resumeIds.cursor || resumeIds.qwen || null
   return { resumeIds, resumeId }
 }
 
@@ -144,6 +145,7 @@ function coerceDelegateBackend(value: unknown): DelegateBackend | null {
   if (['opencode', 'open code', 'open-code', 'open_code'].includes(normalized)) return 'opencode'
   if (['gemini', 'gemini cli', 'gemini-cli', 'gemini_cli'].includes(normalized)) return 'gemini'
   if (['copilot', 'copilot cli', 'copilot-cli', 'copilot_cli', 'github copilot'].includes(normalized)) return 'copilot'
+  if (['droid', 'droid cli', 'droid-cli', 'droid_cli', 'factory', 'factory droid', 'factory-droid', 'factory_droid'].includes(normalized)) return 'droid'
   if (['cursor', 'cursor cli', 'cursor-cli', 'cursor_cli', 'cursor-agent'].includes(normalized)) return 'cursor'
   if (['qwen', 'qwen code', 'qwen-code', 'qwen_code', 'qwen-code-cli', 'qwen_code_cli'].includes(normalized)) return 'qwen'
   return null
@@ -340,21 +342,22 @@ function coerceOptionalBool(value: unknown): boolean | null {
 }
 
 function resumeStorageKeyForBackend(
-  backend: 'claude' | 'codex' | 'opencode' | 'gemini' | 'copilot' | 'cursor' | 'qwen',
-): 'claudeCode' | 'codex' | 'opencode' | 'gemini' | 'copilot' | 'cursor' | 'qwen' {
+  backend: 'claude' | 'codex' | 'opencode' | 'gemini' | 'copilot' | 'droid' | 'cursor' | 'qwen',
+): 'claudeCode' | 'codex' | 'opencode' | 'gemini' | 'copilot' | 'droid' | 'cursor' | 'qwen' {
   if (backend === 'claude') return 'claudeCode'
   if (backend === 'codex') return 'codex'
   if (backend === 'opencode') return 'opencode'
   if (backend === 'gemini') return 'gemini'
   if (backend === 'copilot') return 'copilot'
+  if (backend === 'droid') return 'droid'
   if (backend === 'cursor') return 'cursor'
   return 'qwen'
 }
 
 export function resolveDelegateResumeConfig(
   normalized: Record<string, unknown>,
-  backend: 'claude' | 'codex' | 'opencode' | 'gemini' | 'copilot' | 'cursor' | 'qwen',
-  bctx: { readStoredDelegateResumeId?: (key: 'claudeCode' | 'codex' | 'opencode' | 'gemini' | 'copilot' | 'cursor' | 'qwen') => string | null },
+  backend: 'claude' | 'codex' | 'opencode' | 'gemini' | 'copilot' | 'droid' | 'cursor' | 'qwen',
+  bctx: { readStoredDelegateResumeId?: (key: 'claudeCode' | 'codex' | 'opencode' | 'gemini' | 'copilot' | 'droid' | 'cursor' | 'qwen') => string | null },
 ): { resume: boolean; resumeId: string } {
   const explicitResumeId = typeof normalized.resumeId === 'string' ? normalized.resumeId.trim() : ''
   if (explicitResumeId) return { resume: true, resumeId: explicitResumeId }
@@ -429,6 +432,11 @@ const DELEGATE_BACKEND_ADAPTERS: Record<DelegateBackend, DelegateBackendAdapter>
     binaryName: 'copilot',
     run: runCopilotDelegate,
   },
+  droid: {
+    backend: 'droid',
+    binaryName: 'droid',
+    run: runDroidDelegate,
+  },
   cursor: {
     backend: 'cursor',
     binaryName: 'cursor-agent',
@@ -459,6 +467,7 @@ function providerIdForBackend(backend: DelegateBackend): string {
   if (backend === 'opencode') return 'opencode-cli'
   if (backend === 'gemini') return 'gemini-cli'
   if (backend === 'copilot') return 'copilot-cli'
+  if (backend === 'droid') return 'droid-cli'
   if (backend === 'cursor') return 'cursor-cli'
   return 'qwen-code-cli'
 }
@@ -983,6 +992,90 @@ async function runGeminiDelegate(binary: string, task: string, resume: boolean, 
   }
 }
 
+async function runDroidDelegate(binary: string, task: string, resume: boolean, resumeId: string, bctx: DelegateContext, runtime?: DelegateRuntimeState): Promise<DelegateBackendResult> {
+  try {
+    const env = buildCliEnv()
+    const auth = probeCliAuth(binary, 'droid', env, bctx.cwd)
+    if (!auth.authenticated) {
+      return buildDelegateFailure('droid', auth.errorMessage || 'Factory Droid CLI is not authenticated.', 'auth')
+    }
+
+    const storedResumeId = bctx.readStoredDelegateResumeId?.('droid')
+    const resumeIdToUse = resumeId?.trim() || (resume ? storedResumeId : null)
+
+    return await new Promise<DelegateBackendResult>((resolve) => {
+      const args = ['exec', task, '--output-format', 'stream-json', '--auto', 'low']
+      if (resumeIdToUse) args.push('-s', resumeIdToUse)
+
+      const child = spawn(binary, args, { cwd: bctx.cwd, env, stdio: ['ignore', 'pipe', 'pipe'] })
+      bindDelegateRuntime(runtime, child)
+      let stdoutBuf = ''
+      let stderrBuf = ''
+      let responseText = ''
+      let discoveredId: string | null = null
+      let settled = false
+
+      const finish = (result: DelegateBackendResult) => {
+        if (settled) return
+        settled = true
+        resolve(result)
+      }
+
+      const timeoutHandle = setTimeout(() => {
+        try { child.kill('SIGTERM') } catch { /* ignore */ }
+      }, bctx.claudeTimeoutMs || 300000)
+
+      child.stdout?.on('data', (chunk) => {
+        stdoutBuf += chunk.toString()
+        const lines = stdoutBuf.split('\n')
+        stdoutBuf = lines.pop() || ''
+        for (const line of lines) {
+          const trimmed = line.trim()
+          if (!trimmed) continue
+          try {
+            const ev = JSON.parse(trimmed) as Record<string, unknown>
+            const sid = typeof ev.session_id === 'string'
+              ? ev.session_id
+              : typeof ev.sessionId === 'string'
+                ? ev.sessionId
+                : null
+            if (sid) discoveredId = sid
+            const text = parseCursorOutputText(ev)
+            if (text) {
+              if (String(ev.type || '').includes('result') || String(ev.type || '').includes('completed')) responseText = text
+              else responseText += text
+            }
+          } catch {
+            responseText += `${line}\n`
+          }
+        }
+      })
+
+      child.stderr?.on('data', (chunk) => {
+        stderrBuf += chunk.toString()
+        if (stderrBuf.length > 16_000) stderrBuf = stderrBuf.slice(-16_000)
+      })
+
+      child.on('close', (code, signal) => {
+        clearTimeout(timeoutHandle)
+        if (discoveredId) bctx.persistDelegateResumeId?.('droid', discoveredId)
+        const output = responseText.trim()
+        if (output) return finish(buildDelegateSuccess('droid', output))
+        const stderr = stderrBuf.trim()
+        if (stderr) return finish(buildDelegateFailure('droid', stderr))
+        return finish(buildDelegateFailure('droid', `Droid exited with code ${code ?? 'unknown'}${signal ? ` (${signal})` : ''}.`, 'runtime'))
+      })
+
+      child.on('error', (err) => {
+        clearTimeout(timeoutHandle)
+        finish(buildDelegateFailure('droid', err.message, 'spawn'))
+      })
+    })
+  } catch (err: unknown) {
+    return buildDelegateFailure('droid', errorMessage(err), 'runtime')
+  }
+}
+
 async function runCopilotDelegate(binary: string, task: string, resume: boolean, resumeId: string, bctx: DelegateContext, runtime?: DelegateRuntimeState): Promise<DelegateBackendResult> {
   try {
     const env = buildCliEnv()
@@ -1304,19 +1397,19 @@ const DelegateExtension: Extension = {
   name: 'Core Delegate',
   description: 'Delegate complex multi-file tasks to specialized CLI backends or other agents.',
   hooks: {
-    getCapabilityDescription: () => 'I can hand off coding work to Claude Code, Codex, OpenCode, Gemini CLI, Cursor CLI, or Qwen Code CLI (`delegate`) for file creation, refactoring, debugging, code generation, and multi-file edits. Resume IDs may come back via `[delegate_meta]`.',
+    getCapabilityDescription: () => 'I can hand off coding work to Claude Code, Codex, OpenCode, Gemini CLI, Copilot CLI, Factory Droid CLI, Cursor CLI, or Qwen Code CLI (`delegate`) for file creation, refactoring, debugging, code generation, and multi-file edits. Resume IDs may come back via `[delegate_meta]`.',
     getOperatingGuidance: () => ['CRITICAL: `execute_command` (not delegation) for running servers, installs, scripts. Delegation sessions end and kill processes.', 'Delegate for code tasks: writing/creating files, refactors, debugging, generation, test suites, data exports to files.'],
   } as ExtensionHooks,
   tools: [
     {
       name: 'delegate',
-      description: 'Delegate to a specialized backend (Claude, Codex, OpenCode, Gemini, Cursor, Qwen) for code tasks: writing files, refactoring, debugging, code generation, and multi-file edits. Supports background jobs with action=status|list|wait|cancel.',
+      description: 'Delegate to a specialized backend (Claude, Codex, OpenCode, Gemini, Copilot, Droid, Cursor, Qwen) for code tasks: writing files, refactoring, debugging, code generation, and multi-file edits. Supports background jobs with action=status|list|wait|cancel.',
       parameters: {
         type: 'object',
         properties: {
           action: { type: 'string', enum: ['start', 'status', 'list', 'wait', 'cancel'] },
           task: { type: 'string' },
-          backend: { type: 'string', enum: ['claude', 'codex', 'opencode', 'gemini', 'copilot', 'cursor', 'qwen'] },
+          backend: { type: 'string', enum: ['claude', 'codex', 'opencode', 'gemini', 'copilot', 'droid', 'cursor', 'qwen'] },
           resume: { type: 'boolean' },
           resumeId: { type: 'string', description: 'Optional explicit session/thread ID to resume' },
           jobId: { type: 'string' },

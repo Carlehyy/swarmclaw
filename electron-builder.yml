@@ -72,3 +72,5 @@ linux:
   category: Development
   icon: resources/icon.png
   synopsis: Build and run autonomous AI agents.
+  maintainer: SwarmClaw <noreply@swarmclaw.ai>
+  vendor: SwarmClaw

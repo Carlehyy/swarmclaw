@@ -79,6 +79,7 @@ const PROVIDER_DEFAULT_WINDOWS: Record<string, number> = {
   'opencode-cli': 200_000,
   'gemini-cli': 1_048_576,
   'copilot-cli': 200_000,
+  'droid-cli': 200_000,
   'cursor-cli': 200_000,
   'qwen-code-cli': 1_048_576,
   google: 1_048_576,

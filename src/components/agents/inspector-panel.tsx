@@ -53,6 +53,7 @@ const PROVIDER_LABELS: Record<string, string> = {
   'opencode-cli': 'OpenCode CLI',
   'gemini-cli': 'Gemini CLI',
   'copilot-cli': 'Copilot CLI',
+  'droid-cli': 'Droid CLI',
   'cursor-cli': 'Cursor CLI',
   'qwen-code-cli': 'Qwen Code CLI',
   goose: 'Goose',

@@ -76,6 +76,7 @@ const DELEGATION_TOOL_NAMES = new Set([
   'delegate_to_opencode_cli',
   'delegate_to_gemini_cli',
   'delegate_to_copilot_cli',
+  'delegate_to_droid_cli',
   'delegate_to_cursor_cli',
   'delegate_to_qwen_code_cli',
 ])
@@ -122,14 +123,14 @@ export async function buildSessionTools(cwd: string, enabledExtensions: string[]
       return loadSession(ctx.sessionId)
     }
 
-    const readStoredDelegateResumeId = (key: 'claudeCode' | 'codex' | 'opencode' | 'gemini' | 'copilot' | 'cursor' | 'qwen'): string | null => {
+    const readStoredDelegateResumeId = (key: 'claudeCode' | 'codex' | 'opencode' | 'gemini' | 'copilot' | 'droid' | 'cursor' | 'qwen'): string | null => {
       const session = resolveCurrentSession()
       if (!session?.delegateResumeIds || typeof session.delegateResumeIds !== 'object') return null
       const raw = session.delegateResumeIds[key]
       return typeof raw === 'string' && raw.trim() ? raw.trim() : null
     }
 
-    const persistDelegateResumeId = (key: 'claudeCode' | 'codex' | 'opencode' | 'gemini' | 'copilot' | 'cursor' | 'qwen', resumeId: string | null | undefined): void => {
+    const persistDelegateResumeId = (key: 'claudeCode' | 'codex' | 'opencode' | 'gemini' | 'copilot' | 'droid' | 'cursor' | 'qwen', resumeId: string | null | undefined): void => {
       const normalized = typeof resumeId === 'string' ? resumeId.trim() : ''
       if (!normalized || !ctx?.sessionId) return
       patchSession(ctx.sessionId, (target) => {

@@ -220,10 +220,11 @@ export function ChatHeader({ session, streaming, onStop, onMenuToggle, onBack, m
         opencodeSessionId: null,
         geminiSessionId: null,
         copilotSessionId: null,
+        droidSessionId: null,
         cursorSessionId: null,
         qwenSessionId: null,
         acpSessionId: null,
-        delegateResumeIds: { claudeCode: null, codex: null, opencode: null, gemini: null, copilot: null, cursor: null, qwen: null },
+        delegateResumeIds: { claudeCode: null, codex: null, opencode: null, gemini: null, copilot: null, droid: null, cursor: null, qwen: null },
       })
       await refreshSession(session.id)
     } catch { /* best-effort */ }

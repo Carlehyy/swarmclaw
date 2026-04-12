@@ -398,6 +398,7 @@ export async function finalizeChatTurn(params: {
     persistField('opencodeSessionId', session.opencodeSessionId)
     persistField('geminiSessionId', session.geminiSessionId)
     persistField('copilotSessionId', session.copilotSessionId)
+    persistField('droidSessionId', session.droidSessionId)
     persistField('cursorSessionId', session.cursorSessionId)
     persistField('qwenSessionId', session.qwenSessionId)
     persistField('acpSessionId', session.acpSessionId)
@@ -415,6 +416,7 @@ export async function finalizeChatTurn(params: {
         opencode: normalizeResumeId(sr.opencode ?? cr.opencode),
         gemini: normalizeResumeId(sr.gemini ?? cr.gemini),
         copilot: normalizeResumeId(sr.copilot ?? cr.copilot),
+        droid: normalizeResumeId(sr.droid ?? cr.droid),
         cursor: normalizeResumeId(sr.cursor ?? cr.cursor),
         qwen: normalizeResumeId(sr.qwen ?? cr.qwen),
       }

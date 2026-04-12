@@ -229,7 +229,7 @@ test('resolveDescriptor uses Hermes as an OpenAI-compatible provider with option
 })
 
 test('resolveDescriptor disables model discovery for local CLI-backed providers without live model catalogs', () => {
-  for (const providerId of ['copilot-cli', 'cursor-cli', 'qwen-code-cli', 'goose']) {
+  for (const providerId of ['copilot-cli', 'droid-cli', 'cursor-cli', 'qwen-code-cli', 'goose']) {
     const descriptor = resolveDescriptor({ providerId })
     assert.equal(descriptor?.supportsDiscovery, false, `${providerId} should not support discovery`)
     assert.equal(descriptor?.endpoint, undefined, `${providerId} should not expose a discovery endpoint`)

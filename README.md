@@ -40,6 +40,7 @@ Extension tutorial: https://swarmclaw.ai/docs/extension-tutorial
   <td align="center"><img src="doc/assets/logos/gemini-cli.svg" width="32" alt="Gemini CLI"><br><sub>Gemini CLI</sub></td>
   <td align="center"><img src="doc/assets/logos/opencode.svg" width="32" alt="OpenCode"><br><sub>OpenCode</sub></td>
   <td align="center"><img src="doc/assets/logos/copilot-cli.svg" width="32" alt="Copilot CLI"><br><sub>Copilot</sub></td>
+  <td align="center"><img src="public/provider-logos/droid-cli.svg" width="32" alt="Factory Droid CLI"><br><sub>Droid</sub></td>
   <td align="center"><img src="doc/assets/logos/cursor-cli.svg" width="32" alt="Cursor Agent CLI"><br><sub>Cursor</sub></td>
   <td align="center"><img src="doc/assets/logos/qwen-code-cli.svg" width="32" alt="Qwen Code CLI"><br><sub>Qwen Code</sub></td>
   <td align="center"><img src="doc/assets/logos/goose.svg" width="32" alt="Goose"><br><sub>Goose</sub></td>
@@ -65,7 +66,7 @@ Extension tutorial: https://swarmclaw.ai/docs/extension-tutorial
 - Node.js 22.6+ (`nvm use` will pick up the repo's `.nvmrc`, which matches CI)
 - npm 10+ or another supported package manager
 - Docker Desktop is recommended for sandbox browser execution
-- Optional provider CLIs if you want delegated CLI backends such as Claude Code, Codex, OpenCode, Gemini, Copilot, Cursor Agent, Qwen Code, or Goose
+- Optional provider CLIs if you want delegated CLI backends such as Claude Code, Codex, OpenCode, Gemini, Copilot, Factory Droid, Cursor Agent, Qwen Code, or Goose
 
 ## Quick Start
 
@@ -387,6 +388,14 @@ If you need a trace-specific endpoint, set `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` 
 Operational docs: https://swarmclaw.ai/docs/observability
 
 ## Releases
+
+### v1.5.37 Highlights
+
+- **Factory Droid CLI as a provider and delegation backend**: adds [`droid`](https://docs.factory.ai/cli/droid-exec/overview) as a first-class chat provider and `delegate` backend with streaming JSON output, session resume, and a conservative `--auto low` autonomy pin on the delegate path. Install `droid` and sign in via browser (or set `FACTORY_API_KEY`), then pick **Factory Droid CLI** in the setup wizard. Resolves #38.
+- **Desktop Release CI hardening**: v1.5.36's Electron build workflow failed on all three platforms. This release:
+  - Adds a proper `author` with email to `package.json` and a `linux.maintainer` entry in `electron-builder.yml` so the Linux `.deb` target stops rejecting the build.
+  - Pins `outputFileTracingRoot` in `next.config.ts` to the project root so the Next.js build no longer walks `C:\Users\<user>\Application Data` (a legacy NTFS junction that throws EPERM on Windows runners).
+  - Pins Python 3.11 in the desktop-release workflow so `node-gyp` rebuilds of native modules (`node-liblzma`, etc.) succeed on Python 3.12+ runners where `distutils` was removed from the stdlib.
 
 ### v1.5.36 Highlights
 

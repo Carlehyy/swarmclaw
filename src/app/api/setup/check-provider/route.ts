@@ -12,6 +12,7 @@ type SetupProvider =
   | 'opencode-cli'
   | 'gemini-cli'
   | 'copilot-cli'
+  | 'droid-cli'
   | 'cursor-cli'
   | 'qwen-code-cli'
   | 'goose'
@@ -31,7 +32,7 @@ type SetupProvider =
   | 'openclaw'
   | 'hermes'
 
-type CliSetupProvider = 'claude-cli' | 'codex-cli' | 'opencode-cli' | 'gemini-cli' | 'copilot-cli' | 'cursor-cli' | 'qwen-code-cli' | 'goose'
+type CliSetupProvider = 'claude-cli' | 'codex-cli' | 'opencode-cli' | 'gemini-cli' | 'copilot-cli' | 'droid-cli' | 'cursor-cli' | 'qwen-code-cli' | 'goose'
 
 interface SetupCheckBody {
   provider?: string
@@ -285,6 +286,7 @@ function checkCliProvider(provider: CliSetupProvider): { ok: boolean; message: s
     'opencode-cli': { binary: 'opencode', backend: 'opencode' as const, label: 'OpenCode CLI' },
     'gemini-cli': { binary: 'gemini', backend: 'gemini' as const, label: 'Gemini CLI' },
     'copilot-cli': { binary: 'copilot', backend: 'copilot' as const, label: 'GitHub Copilot CLI' },
+    'droid-cli': { binary: 'droid', backend: 'droid' as const, label: 'Factory Droid CLI' },
     'cursor-cli': { binary: 'cursor-agent', backend: 'cursor' as const, label: 'Cursor Agent CLI' },
     'qwen-code-cli': { binary: 'qwen', backend: 'qwen' as const, label: 'Qwen Code CLI' },
     goose: { binary: 'goose', backend: 'goose' as const, label: 'Goose CLI' },
@@ -312,7 +314,7 @@ export async function POST(req: Request) {
   const credentialId = clean(body.credentialId)
   const endpoint = clean(body.endpoint)
   const model = clean(body.model)
-  const CLI_PROVIDERS = new Set<CliSetupProvider>(['claude-cli', 'codex-cli', 'opencode-cli', 'gemini-cli', 'copilot-cli', 'cursor-cli', 'qwen-code-cli', 'goose'])
+  const CLI_PROVIDERS = new Set<CliSetupProvider>(['claude-cli', 'codex-cli', 'opencode-cli', 'gemini-cli', 'copilot-cli', 'droid-cli', 'cursor-cli', 'qwen-code-cli', 'goose'])
 
   // Resolve credentialId to an API key if no raw key was provided
   if (!apiKey && credentialId) {
