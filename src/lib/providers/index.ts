@@ -55,7 +55,7 @@ export const PROVIDERS: Record<string, BuiltinProviderConfig> = {
   'claude-cli': {
     id: 'claude-cli',
     name: 'Claude Code CLI',
-    models: ['claude-sonnet-4-6', 'claude-opus-4-6', 'claude-haiku-4-5-20251001', 'claude-sonnet-4-5-20250514'],
+    models: ['claude-opus-4-6', 'claude-sonnet-4-6', 'claude-haiku-4-5'],
     requiresApiKey: false,
     requiresEndpoint: false,
     handler: { streamChat: streamClaudeCliChat },
@@ -63,7 +63,7 @@ export const PROVIDERS: Record<string, BuiltinProviderConfig> = {
   'codex-cli': {
     id: 'codex-cli',
     name: 'OpenAI Codex CLI',
-    models: ['gpt-5.3-codex', 'gpt-5.2-codex', 'gpt-5.1-codex', 'gpt-5-codex', 'gpt-5-codex-mini'],
+    models: ['gpt-5.4-codex', 'gpt-5.3-codex', 'gpt-5.2-codex', 'gpt-5.1-codex', 'gpt-5-codex-mini'],
     requiresApiKey: false,
     requiresEndpoint: false,
     handler: { streamChat: streamCodexCliChat },
@@ -71,7 +71,7 @@ export const PROVIDERS: Record<string, BuiltinProviderConfig> = {
   openai: {
     id: 'openai',
     name: 'OpenAI',
-    models: ['gpt-4o', 'gpt-4o-mini', 'gpt-4.1', 'gpt-4.1-mini', 'gpt-4.1-nano', 'o3', 'o3-mini', 'o4-mini'],
+    models: ['gpt-5.4', 'gpt-5.4-mini', 'gpt-5.4-nano', 'gpt-5.3', 'o3-mini', 'gpt-4.1', 'gpt-4.1-mini'],
     requiresApiKey: true,
     requiresEndpoint: false,
     handler: { streamChat: streamOpenAiChat },
@@ -79,7 +79,15 @@ export const PROVIDERS: Record<string, BuiltinProviderConfig> = {
   openrouter: {
     id: 'openrouter',
     name: 'OpenRouter',
-    models: ['openai/gpt-4.1-mini'],
+    models: [
+      'openrouter/auto',
+      'anthropic/claude-opus-4.6', 'anthropic/claude-sonnet-4.6', 'anthropic/claude-haiku-4.5',
+      'openai/gpt-5.4', 'openai/gpt-5.4-mini',
+      'google/gemini-3.1-pro', 'google/gemini-3-flash',
+      'x-ai/grok-4',
+      'deepseek/deepseek-v3.2',
+      'meta-llama/llama-4-maverick-17b-128e-instruct',
+    ],
     requiresApiKey: true,
     requiresEndpoint: false,
     defaultEndpoint: 'https://openrouter.ai/api/v1',
@@ -96,7 +104,7 @@ export const PROVIDERS: Record<string, BuiltinProviderConfig> = {
   anthropic: {
     id: 'anthropic',
     name: 'Anthropic',
-    models: ['claude-sonnet-4-6', 'claude-opus-4-6', 'claude-haiku-4-5-20251001'],
+    models: ['claude-opus-4-6', 'claude-sonnet-4-6', 'claude-haiku-4-5'],
     requiresApiKey: true,
     requiresEndpoint: false,
     handler: { streamChat: streamAnthropicChat },
@@ -132,7 +140,7 @@ export const PROVIDERS: Record<string, BuiltinProviderConfig> = {
   'opencode-cli': {
     id: 'opencode-cli',
     name: 'OpenCode CLI',
-    models: ['claude-sonnet-4-6', 'gpt-4.1', 'gemini-2.5-pro', 'gemini-2.5-flash'],
+    models: ['claude-opus-4-6', 'claude-sonnet-4-6', 'gpt-5.4', 'gemini-3.1-pro', 'gemini-3-flash'],
     requiresApiKey: false,
     requiresEndpoint: false,
     handler: { streamChat: streamOpenCodeCliChat },
@@ -142,7 +150,11 @@ export const PROVIDERS: Record<string, BuiltinProviderConfig> = {
     name: 'OpenCode Web',
     // OpenCode addresses models as `providerID/modelID`. Free-text entry is
     // supported; these defaults seed the dropdown with common combinations.
-    models: ['anthropic/claude-sonnet-4-5', 'anthropic/claude-opus-4-5', 'openai/gpt-4.1', 'openai/o4-mini', 'google/gemini-2.5-pro'],
+    models: [
+      'anthropic/claude-opus-4-6', 'anthropic/claude-sonnet-4-6', 'anthropic/claude-haiku-4-5',
+      'openai/gpt-5.4', 'openai/gpt-5.4-mini',
+      'google/gemini-3.1-pro', 'google/gemini-3-flash',
+    ],
     requiresApiKey: false,
     optionalApiKey: true,
     requiresEndpoint: true,
@@ -152,7 +164,7 @@ export const PROVIDERS: Record<string, BuiltinProviderConfig> = {
   'gemini-cli': {
     id: 'gemini-cli',
     name: 'Gemini CLI',
-    models: ['gemini-2.5-pro', 'gemini-2.5-flash', 'gemini-2.5-flash-lite'],
+    models: ['gemini-3.1-pro', 'gemini-3-flash', 'gemini-3.1-flash-lite', 'gemini-2.5-pro', 'gemini-2.5-flash'],
     requiresApiKey: false,
     requiresEndpoint: false,
     handler: { streamChat: streamGeminiCliChat },
@@ -160,7 +172,7 @@ export const PROVIDERS: Record<string, BuiltinProviderConfig> = {
   'copilot-cli': {
     id: 'copilot-cli',
     name: 'GitHub Copilot CLI',
-    models: ['claude-sonnet-4-5', 'gpt-4.1', 'gemini-3-pro'],
+    models: ['claude-sonnet-4-6', 'gpt-5.4', 'gemini-3.1-pro'],
     requiresApiKey: false,
     requiresEndpoint: false,
     handler: { streamChat: streamCopilotCliChat },
@@ -202,7 +214,7 @@ export const PROVIDERS: Record<string, BuiltinProviderConfig> = {
   google: {
     id: 'google',
     name: 'Google Gemini',
-    models: ['gemini-2.5-pro', 'gemini-2.5-flash', 'gemini-2.5-flash-lite'],
+    models: ['gemini-3.1-pro', 'gemini-3-flash', 'gemini-3.1-flash-lite', 'gemini-2.5-pro', 'gemini-2.5-flash'],
     requiresApiKey: true,
     requiresEndpoint: false,
     defaultEndpoint: 'https://generativelanguage.googleapis.com/v1beta/openai',
@@ -219,6 +231,9 @@ export const PROVIDERS: Record<string, BuiltinProviderConfig> = {
   deepseek: {
     id: 'deepseek',
     name: 'DeepSeek',
+    // Stable aliases: 'deepseek-chat' is the non-thinking mode of the latest
+    // V-series (currently V3.2), 'deepseek-reasoner' is the thinking mode.
+    // DeepSeek rotates the underlying weights without changing these names.
     models: ['deepseek-chat', 'deepseek-reasoner'],
     requiresApiKey: true,
     requiresEndpoint: false,
@@ -236,7 +251,15 @@ export const PROVIDERS: Record<string, BuiltinProviderConfig> = {
   groq: {
     id: 'groq',
     name: 'Groq',
-    models: ['llama-3.3-70b-versatile', 'deepseek-r1-distill-llama-70b', 'qwen-qwq-32b', 'gemma2-9b-it'],
+    models: [
+      'meta-llama/llama-4-maverick-17b-128e-instruct',
+      'meta-llama/llama-4-scout-17b-16e-instruct',
+      'moonshotai/kimi-k2-instruct-0905',
+      'openai/gpt-oss-120b',
+      'openai/gpt-oss-20b',
+      'qwen/qwen3-32b',
+      'llama-3.3-70b-versatile',
+    ],
     requiresApiKey: true,
     requiresEndpoint: false,
     defaultEndpoint: 'https://api.groq.com/openai/v1',
@@ -253,7 +276,14 @@ export const PROVIDERS: Record<string, BuiltinProviderConfig> = {
   together: {
     id: 'together',
     name: 'Together AI',
-    models: ['meta-llama/Llama-4-Maverick-17B-128E-Instruct-FP8', 'deepseek-ai/DeepSeek-R1', 'Qwen/Qwen2.5-72B-Instruct'],
+    models: [
+      'meta-llama/Llama-4-Maverick-17B-128E-Instruct-FP8',
+      'meta-llama/Llama-4-Scout-17B-16E-Instruct',
+      'deepseek-ai/DeepSeek-V3.2',
+      'deepseek-ai/DeepSeek-R1',
+      'Qwen/Qwen3-235B-A22B-Instruct',
+      'moonshotai/Kimi-K2-Instruct-0905',
+    ],
     requiresApiKey: true,
     requiresEndpoint: false,
     defaultEndpoint: 'https://api.together.xyz/v1',
@@ -270,7 +300,16 @@ export const PROVIDERS: Record<string, BuiltinProviderConfig> = {
   mistral: {
     id: 'mistral',
     name: 'Mistral AI',
-    models: ['mistral-large-latest', 'mistral-small-latest', 'magistral-medium-2506', 'devstral-small-latest'],
+    models: [
+      'magistral-medium-1.2',
+      'magistral-small-1.2',
+      'devstral-medium',
+      'devstral-small-1.1',
+      'codestral-latest',
+      'mistral-small-4',
+      'mistral-large-latest',
+      'ministral-3b-latest',
+    ],
     requiresApiKey: true,
     requiresEndpoint: false,
     defaultEndpoint: 'https://api.mistral.ai/v1',
@@ -287,7 +326,7 @@ export const PROVIDERS: Record<string, BuiltinProviderConfig> = {
   xai: {
     id: 'xai',
     name: 'xAI (Grok)',
-    models: ['grok-3', 'grok-3-fast', 'grok-3-mini', 'grok-3-mini-fast'],
+    models: ['grok-4', 'grok-4-fast-reasoning', 'grok-4-fast-non-reasoning', 'grok-4-1-fast-reasoning', 'grok-4-1-fast-non-reasoning'],
     requiresApiKey: true,
     requiresEndpoint: false,
     defaultEndpoint: 'https://api.x.ai/v1',
@@ -304,7 +343,13 @@ export const PROVIDERS: Record<string, BuiltinProviderConfig> = {
   fireworks: {
     id: 'fireworks',
     name: 'Fireworks AI',
-    models: ['accounts/fireworks/models/deepseek-r1-0528', 'accounts/fireworks/models/llama-v3p3-70b-instruct', 'accounts/fireworks/models/qwen3-235b-a22b'],
+    models: [
+      'accounts/fireworks/models/deepseek-v3p2',
+      'accounts/fireworks/models/kimi-k2-instruct-0905',
+      'accounts/fireworks/models/glm-5',
+      'accounts/fireworks/models/qwen3-235b-a22b',
+      'accounts/fireworks/models/llama-v3p3-70b-instruct',
+    ],
     requiresApiKey: true,
     requiresEndpoint: false,
     defaultEndpoint: 'https://api.fireworks.ai/inference/v1',
@@ -321,7 +366,13 @@ export const PROVIDERS: Record<string, BuiltinProviderConfig> = {
   nebius: {
     id: 'nebius',
     name: 'Nebius',
-    models: ['deepseek-ai/DeepSeek-R1-0528', 'Qwen/Qwen3-235B-A22B', 'meta-llama/Llama-4-Maverick-17B-128E-Instruct-FP8'],
+    models: [
+      'deepseek-ai/DeepSeek-V3.2',
+      'moonshotai/Kimi-K2-Instruct',
+      'Qwen/Qwen3-235B-A22B',
+      'meta-llama/Llama-4-Maverick-17B-128E-Instruct-FP8',
+      'deepseek-ai/DeepSeek-R1',
+    ],
     requiresApiKey: true,
     requiresEndpoint: false,
     defaultEndpoint: 'https://api.tokenfactory.nebius.com/v1',
@@ -338,7 +389,13 @@ export const PROVIDERS: Record<string, BuiltinProviderConfig> = {
   deepinfra: {
     id: 'deepinfra',
     name: 'DeepInfra',
-    models: ['deepseek-ai/DeepSeek-R1-0528', 'meta-llama/Llama-4-Maverick-17B-128E-Instruct-FP8', 'Qwen/Qwen3-235B-A22B'],
+    models: [
+      'deepseek-ai/DeepSeek-V3.2',
+      'moonshotai/Kimi-K2-Instruct',
+      'Qwen/Qwen3-235B-A22B',
+      'meta-llama/Llama-4-Maverick-17B-128E-Instruct-FP8',
+      'deepseek-ai/DeepSeek-R1',
+    ],
     requiresApiKey: true,
     requiresEndpoint: false,
     defaultEndpoint: 'https://api.deepinfra.com/v1/openai',
@@ -364,7 +421,7 @@ export const PROVIDERS: Record<string, BuiltinProviderConfig> = {
       'gemini-3-flash-preview', 'gemma3',
       'devstral-2', 'devstral-small-2', 'ministral-3', 'mistral-large-3',
       'gpt-oss', 'cogito-2.1', 'rnj-1', 'nemotron-3-nano',
-      'llama3.3', 'llama3.2', 'llama3.1',
+      'llama3.3', 'llama3.2',
     ],
     requiresApiKey: false,
     optionalApiKey: true,

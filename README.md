@@ -389,6 +389,15 @@ Operational docs: https://swarmclaw.ai/docs/observability
 
 ## Releases
 
+### v1.5.44 Highlights
+
+- **Model lists refreshed across every provider**: dropdowns now lead with the April-2026 flagship models instead of mid-2025 names. OpenAI goes to GPT-5.4 / 5.4-mini / 5.4-nano / 5.3 / o3-mini. Google and Gemini CLI lead with Gemini 3.1 Pro, Gemini 3 Flash, and 3.1 Flash-Lite, keeping 2.5 as a legacy fallback. xAI jumps from Grok 3 to Grok 4 plus the Grok 4 / 4.1 Fast reasoning and non-reasoning variants. Groq drops the deprecated `deepseek-r1-distill-llama-70b` and leads with Llama 4 Maverick, Llama 4 Scout, Kimi K2, and gpt-oss 120b/20b. Mistral moves to Magistral 1.2, Devstral 2, Codestral, and Mistral Small 4. Fireworks / Nebius / DeepInfra now lead with DeepSeek V3.2, Kimi K2.5, and Qwen 3 235B instead of the older R1-0528 checkpoint. Anthropic and Claude CLI reorder Opus 4.6 / Sonnet 4.6 / Haiku 4.5 newest-first. OpenCode Web refreshes its `providerID/modelID` seed list.
+- **OpenRouter default set expanded**: was one model (`openai/gpt-4.1-mini`). Now ten flagship routes including `openrouter/auto`, Claude 4.6 Opus / Sonnet / Haiku, GPT-5.4, Gemini 3.1 Pro / 3 Flash, Grok 4, DeepSeek V3.2, and Llama 4 Maverick. Much better first-run experience for the "provider that routes to every other provider".
+- **`DEFAULT_AGENTS` models refreshed**: 11 starter-agent models updated to match the new flagship lineups (OpenAI → GPT-5.4, xAI → Grok 4, Google / Gemini CLI → Gemini 3.1 Pro, Groq → Llama 4 Maverick, Fireworks / Nebius / DeepInfra → DeepSeek V3.2, OpenCode Web / Copilot CLI → Claude Sonnet 4.6, OpenRouter → Claude Sonnet 4.6). Starter agents created from the setup wizard now default to the right model out of the box.
+- **Starter-agent tool bundles now include `droid_cli` and `copilot_cli`**: these delegation backends were added in v1.5.37 and v1.5.3 respectively but never made it into `STARTER_AGENT_TOOLS` / `BUILDER_AGENT_TOOLS`. Every starter kit (Sidekick, Researcher, Builder, Reviewer, Operator, OpenClaw fleet) now picks them up on new workspace creation.
+- **DeepSeek note**: `deepseek-chat` and `deepseek-reasoner` remain the recommended model names — they are stable aliases that auto-track the current `V3.2` weights. No action required.
+- **Registry sanity test**: added `provider-models.test.ts` which asserts every provider declares a non-empty deduplicated models array, matching metadata keys, and a working `handler.streamChat`. Guards against future copy-paste regressions in the registry.
+
 ### v1.5.43 Highlights
 
 - **`/api/version` no longer 500s in Docker**: the route used to shell out to `git` at runtime, which fails in the production image because `.git/` is not copied. The route now returns 200 with `{ source: 'package', version }` from `package.json` when git metadata is unavailable, and `{ source: 'git', version, commit, ... }` when it is. `/api/version/update` short-circuits on Docker-style installs with a clear `no_git_metadata` reason instead of an opaque 500. ([#41](https://github.com/swarmclawai/swarmclaw/issues/41) Bug 1, reported by [@SteamedFish](https://github.com/SteamedFish).)
@@ -414,15 +423,6 @@ Operational docs: https://swarmclaw.ai/docs/observability
 - **Tool-summary retry threshold tightened**: the "trivial response" threshold used to decide whether to force a redundant `tool_summary` continuation dropped from 150 → 80 characters. A 119-char response like "I wrote X, stored Y, and confirmed both." is substantive; the old threshold forced the model to re-stream the same answer twice.
 - **Classifier timeout raised to 10 s**: 2 s was too tight for Ollama Cloud with a fully-configured agent (observed 4–6 s calls). Result caching means the latency tax only applies to first-seen messages.
 - **Reflection memories dedup across runs**: the supervisor reflection writer now compares candidate notes against recent (last 7 days) reflection memories for the same agent and skips ones that have already been stored, stopping the ~7-per-turn rediscovery churn on top of the within-run dedup shipped in v1.5.38.
-
-### v1.5.39 Highlights
-
-- **Agents default to scoped tool access**: new agents (and existing agents whose `tools` list is non-empty) now only see the tools they've been given in the system prompt. This trims ~3 k input tokens per turn — an observed CEO/coordinator agent with 14 tools and 4 loaded skills went from 62 k to 38 k chars of system prompt. Opt back into the old firehose by toggling **Universal tool access** in the agent sheet's new "Context & Tool Access" section. Memory, context management, and `ask_human` are always included regardless of the scoped list.
-- **Pinned skills budget hardening**: one long markdown skill was eating 24 k of a 62 k prompt. Inlined pinned-skill content is now capped at 3 k chars with a pointer to `use_skill` action="load" for the full guide, and auto-attached *learned* skills get a dedicated sub-budget (max 6 skills / 8 k chars) so they cannot dominate the main pinned-skills section.
-- **OpenClaw chat fast-fails on dangling credentials**: v1.5.38 added gateway-side fast-fail; the chat streaming path now does the same, emitting a clear `err` event naming the missing credential instead of dialing the gateway unauthenticated and waiting 120 s for the timeout.
-- **Queue: orphan-recovery auto-heals stale checkouts**: pre-1.5.38 storage could leave `queued` tasks with a stale `checkoutRunId` that `checkoutTask()` refused forever. Orphan recovery now clears the stale id in the same sweep that re-queues the task, and `reconcileFinishedRunningTasks` / agent-not-found / capability-mismatch paths also null out the checkout when they terminally fail a task.
-- **Perf ring buffer raised to 2 000 entries**: queue/task repository events fire ~20 Hz during task processing and were evicting chat-execution/prompt perf entries out of the 200-entry buffer before they could be read. The larger buffer lets the perf viewer actually show a full turn.
-- **Tests**: added regression tests for pre-1.5.38 stale-checkout orphan recovery and for the scoped-tool-access algorithm.
 
 Older releases: https://swarmclaw.ai/docs/release-notes
 
