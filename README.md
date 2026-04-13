@@ -389,6 +389,10 @@ Operational docs: https://swarmclaw.ai/docs/observability
 
 ## Releases
 
+### v1.5.41 Highlights
+
+- **Moonshot / Kimi compatibility — duplicate `files` tool name fixed**: any agent with the default `files` extension was sending two tools both literally named `files` to the LLM. Most providers tolerated the duplicate; Moonshot's strict tool-schema validation rejected it with `MoonshotException - function name files is duplicated` ([#39](https://github.com/swarmclawai/swarmclaw/issues/39), reported by [@SteamedFish](https://github.com/SteamedFish)). Three fixes: the v2 file builder is now correctly gated on `files_v2` (not `files`), it registers under the matching capability key, and the session-tools assembler now shares a single dedup Set across native, CRUD, and extension phases so any future name collision is rejected with a clear warning instead of a silent double-register.
+
 ### v1.5.40 Highlights
 
 - **Current-thread recall routing**: the message classifier now emits four explicit flags (`isCurrentThreadRecall`, `isGreeting`, `isAcknowledgement`, `isMemoryWriteIntent`) so the chat router stops treating in-thread pronouns ("your last reply", "both answers", "what I just said") as durable-memory queries. Previously small OSS models (`devstral-small-2:24b` and similar) would run `memory_search` for these, come back empty, and truthfully report "no memories found" even when the answer was three messages up.
@@ -425,12 +429,6 @@ Operational docs: https://swarmclaw.ai/docs/observability
   - Adds a proper `author` with email to `package.json` and a `linux.maintainer` entry in `electron-builder.yml` so the Linux `.deb` target stops rejecting the build.
   - Pins `outputFileTracingRoot` in `next.config.ts` to the project root so the Next.js build no longer walks `C:\Users\<user>\Application Data` (a legacy NTFS junction that throws EPERM on Windows runners).
   - Pins Python 3.11 in the desktop-release workflow so `node-gyp` rebuilds of native modules (`node-liblzma`, etc.) succeed on Python 3.12+ runners where `distutils` was removed from the stdlib.
-
-### v1.5.36 Highlights
-
-- **Desktop app (Electron)**: SwarmClaw now ships as a native desktop app for macOS (Apple Silicon + Intel), Windows, and Linux (AppImage + .deb). Download from [swarmclaw.ai/downloads](https://swarmclaw.ai/downloads). The app wraps the existing standalone server inside an Electron shell, stores data in the OS app-data directory, and auto-updates via GitHub Releases (notify-only on unsigned macOS builds).
-- **Desktop release CI**: new `desktop-release.yml` workflow builds and publishes installers for all three platforms to GitHub Releases on every version tag.
-- **UI cleanup**: removed sibling-product navigation links from the in-app sidebar rail and login gate so the open-source app focuses on SwarmClaw itself. Those links remain in the project README and on swarmclaw.ai.
 
 Older releases: https://swarmclaw.ai/docs/release-notes
 

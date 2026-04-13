@@ -221,24 +221,41 @@ export async function buildSessionTools(cwd: string, enabledExtensions: string[]
       ['swarmdock', buildSwarmDockTools],
     ]
 
+    // Track tool names across all phases so duplicates are rejected
+    // consistently. Issue #39: Moonshot rejects duplicate tool names that
+    // most providers silently tolerate, so guarding only Phase 2 (as the
+    // pre-fix code did) was not enough.
+    const existingNames = new Set<string>()
     for (const [extensionId, builder] of nativeBuilders) {
       const builtTools = builder(bctx)
       for (const t of builtTools) {
+        if (existingNames.has(t.name)) {
+          log.warn('session-tools', 'Skipping native tool due to duplicate name', {
+            toolName: t.name,
+            extensionId,
+          })
+          continue
+        }
+        existingNames.add(t.name)
         toolToExtensionMap[t.name] = extensionId
+        tools.push(t)
       }
-      tools.push(...builtTools)
     }
 
     const crudTools = buildCrudTools(bctx)
     for (const toolEntry of crudTools) {
+      if (existingNames.has(toolEntry.name)) {
+        log.warn('session-tools', 'Skipping CRUD tool due to duplicate name', { toolName: toolEntry.name })
+        continue
+      }
+      existingNames.add(toolEntry.name)
       toolToExtensionMap[toolEntry.name] = toolEntry.name
+      tools.push(toolEntry)
     }
-    tools.push(...crudTools)
 
     // 2. Build Extension Tools (Built-in + External)
     try {
       const extensionTools = extensionManager.getTools(activeExtensions)
-      const existingNames = new Set(tools.map((t) => t.name))
       
       for (const entry of extensionTools) {
         const pt = entry.tool
