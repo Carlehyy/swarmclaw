@@ -396,6 +396,16 @@ Operational docs: https://swarmclaw.ai/docs/observability
 
 ## Releases
 
+### v1.5.46 Highlights
+
+- **Custom base URL for built-in OpenAI and Anthropic providers**: the Endpoint field in provider settings now works for the built-in OpenAI and Anthropic providers (marked as `optionalEndpoint`). Point them at a proxy, gateway, or self-hosted endpoint and the URL persists, auto-resolves on connection test, and flows through both the live chat path and the LangGraph agent path (`ChatAnthropic` now receives `anthropicApiUrl`). Existing installs with no custom URL keep using the defaults.
+- **Test-model selector in provider settings**: when you hit "Test Connection", a new dropdown lets you pick a specific model (for example `gpt-4.1-mini` or `claude-haiku-4-5`) or leave it on Auto-detect. Useful for verifying a specific model is reachable on a given endpoint.
+- **Auto-resolution of credentials and endpoints in the connection test**: the test route now looks up the saved credential and base URL for the provider when they are not explicitly supplied, so the provider sheet's "Test" button works without needing to replay config.
+- **Anthropic streaming refactor**: the streaming handler moved from Node's `https.request()` to `fetch()`. Same behavior, cleaner cancellation, and it now respects `session.apiEndpoint` as a full base URL instead of a hostname.
+- **Connection test body**: Ollama and OpenAI-compatible test requests now send `max_completion_tokens` instead of the legacy `max_tokens`, matching current OpenAI conventions and working correctly with reasoning models that reject `max_tokens`.
+
+Thanks to @Llugaes for the contribution.
+
 ### v1.5.45 Highlights
 
 - **SwarmVault MCP preset**: a new "SwarmVault" Quick Setup chip in the MCP server sheet pre-fills `npx -y @swarmvaultai/cli mcp` over `stdio` and prompts for the vault directory. One click registers a SwarmVault knowledge vault as an MCP server; agents pick it up via the existing per-agent MCP server selector. SwarmVault docs: https://swarmvault.ai
