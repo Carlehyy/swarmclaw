@@ -12,7 +12,7 @@ import { toast } from 'sonner'
 import { ModelCombobox } from '@/components/shared/model-combobox'
 import type { ProviderType, ClaudeSkill, AgentPackManifest, AgentRoutingStrategy, AgentRoutingTarget } from '@/types'
 import { AVAILABLE_TOOLS, PLATFORM_TOOLS } from '@/lib/tool-definitions'
-import { NATIVE_CAPABILITY_PROVIDER_IDS, NON_LANGGRAPH_PROVIDER_IDS, WORKER_ONLY_PROVIDER_IDS } from '@/lib/provider-sets'
+import { MCP_INJECTION_PROVIDER_IDS, NATIVE_CAPABILITY_PROVIDER_IDS, NON_LANGGRAPH_PROVIDER_IDS, WORKER_ONLY_PROVIDER_IDS } from '@/lib/provider-sets'
 import { isOrchestratorProviderEligible } from '@/lib/orchestrator-config'
 import { AgentAvatar } from './agent-avatar'
 import { AgentPickerList } from '@/components/shared/agent-picker-list'
@@ -179,6 +179,7 @@ export function AgentSheet() {
   const dynamicSkills = useAppStore((s) => s.skills)
   const mcpServers = useAppStore((s) => s.mcpServers)
   const loadSkills = useAppStore((s) => s.loadSkills)
+  const loadMcpServersAction = useAppStore((s) => s.loadMcpServers)
   const [claudeSkills, setClaudeSkills] = useState<ClaudeSkill[]>([])
   const [claudeSkillsLoading, setClaudeSkillsLoading] = useState(false)
   const loadClaudeSkills = async () => {
@@ -390,6 +391,7 @@ export function AgentSheet() {
       loadGatewayProfiles()
       loadCredentials()
       loadSkills()
+      loadMcpServersAction()
       loadProjects()
       loadClaudeSkills()
       // Fetch enabled extension IDs so we can filter tool toggles
@@ -2007,13 +2009,14 @@ export function AgentSheet() {
         </SectionCard>
       )}
 
-      {!WORKER_ONLY_PROVIDER_IDS.has(provider) && (
+      {(!WORKER_ONLY_PROVIDER_IDS.has(provider) || MCP_INJECTION_PROVIDER_IDS.has(provider)) && (
       <AdvancedSettingsSection
         open={showAdvancedSettings}
         onToggle={() => setShowAdvancedSettings((current) => !current)}
         summary={advancedSummary}
         badges={agentAdvancedBadges}
       >
+      {!WORKER_ONLY_PROVIDER_IDS.has(provider) && (<>
       <SectionCard
         title="Context & Tool Access"
         description="Control how many tools are described in this agent's system prompt. Scoped (default) keeps the agent focused and saves ~3 k input tokens per turn; Universal gives it visibility into every built-in tool."
@@ -2450,6 +2453,7 @@ export function AgentSheet() {
         </div>
       )}
       </SectionCard>
+      </>)}
 
       <SectionCard
         title="Tools & Skills"
@@ -2539,13 +2543,13 @@ export function AgentSheet() {
             {provider === 'claude-cli'
               ? 'Claude CLI uses its own built-in capabilities — no additional local tool/platform configuration is needed.'
               : provider === 'codex-cli'
-                ? 'OpenAI Codex CLI uses its own built-in tools (shell, files, etc.) — no additional local tool configuration is needed.'
+                ? 'OpenAI Codex CLI uses its own built-in tools (shell, files, etc.). Skills and MCP servers assigned below will be injected at runtime.'
                 : provider === 'opencode-cli'
                   ? 'OpenCode CLI uses its own built-in tools (shell, files, etc.) — no additional local tool configuration is needed.'
                   : provider === 'gemini-cli'
                     ? 'Gemini CLI uses its own built-in tools and runtime — SwarmClaw does not inject local platform tools for it.'
                     : provider === 'copilot-cli'
-                      ? 'GitHub Copilot CLI uses its own built-in tools and runtime — SwarmClaw does not inject local platform tools for it.'
+                      ? 'GitHub Copilot CLI uses its own built-in tools and runtime. Skills and MCP servers assigned below will be injected at runtime.'
                       : provider === 'droid-cli'
                         ? 'Factory Droid CLI uses its own built-in tools and autonomy controls — SwarmClaw does not inject local platform tools for it.'
                         : provider === 'cursor-cli'
