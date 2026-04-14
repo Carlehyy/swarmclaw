@@ -1045,6 +1045,7 @@ const APP_SETTINGS_SECRET_FIELDS = [
   'elevenLabsApiKey',
   'tavilyApiKey',
   'braveApiKey',
+  'exaApiKey',
 ] as const
 
 const ENCRYPTED_APP_SETTINGS_KEY = '__encryptedAppSettings'

@@ -396,6 +396,16 @@ Operational docs: https://swarmclaw.ai/docs/observability
 
 ## Releases
 
+### v1.5.47 Highlights
+
+- **MCP injection for GitHub Copilot CLI and OpenAI Codex CLI agents**: agents using the `copilot-cli` or `codex-cli` providers now run with their assigned MCP servers attached at runtime. Copilot CLI receives the servers via `--additional-mcp-config @<tempfile>`; Codex CLI gets per-session `[mcp_servers.*]` TOML sections appended to a scoped `config.toml`. Stdio transports (command, args, env, cwd) and SSE / streamable-http transports (url, headers) are both supported. Skills assigned to the agent continue to be injected via the system prompt.
+- **Skills and MCP panel visible for copilot-cli and codex-cli in the agent editor**: the Advanced Settings section now opens for these two providers so you can attach skills and MCP servers from the UI. Routing, memory, and voice panels stay hidden since these providers are worker-only.
+- **Codex CLI approval policy change**: Codex CLI sessions now launch with `--dangerously-bypass-approvals-and-sandbox` instead of `--full-auto`. The old flag silently cancels MCP tool calls via Codex's approval gate, which is why MCP tool results were not landing. SwarmClaw itself runs in its own sandbox, so Codex's additional sandbox was not load-bearing, but be aware of the change if you were relying on it for a specific agent.
+- **Under the hood**: `~/.codex-sessions/<session.id>/` replaces `/tmp/swarmclaw-codex-*` as the per-session Codex config directory because Codex refuses to create helper binaries under `/tmp`. The Playwright MCP proxy now passes an explicit `cwd: process.cwd()` when spawning, so it no longer crashes with `uv_cwd ENOENT` when the server is restarted after a directory move.
+- **Exa as a new web search provider**: Settings > Web Search gains an Exa option alongside Tavily, Brave, SearXNG, DuckDuckGo, Google, and Bing. Exa uses neural search with AI-generated summaries and falls back to highlights, then raw text when summaries are unavailable. Configure the key via the UI, the `EXA_API_KEY` environment variable, or the secrets store. Requests carry an `x-exa-integration: swarmclaw` tracking header so usage attributed to SwarmClaw is visible to Exa.
+
+Thanks to [@borislavnnikolov](https://github.com/borislavnnikolov) and [@tgonzalezc5](https://github.com/tgonzalezc5) for the contributions.
+
 ### v1.5.46 Highlights
 
 - **Custom base URL for built-in OpenAI and Anthropic providers**: the Endpoint field in provider settings now works for the built-in OpenAI and Anthropic providers (marked as `optionalEndpoint`). Point them at a proxy, gateway, or self-hosted endpoint and the URL persists, auto-resolves on connection test, and flows through both the live chat path and the LangGraph agent path (`ChatAnthropic` now receives `anthropicApiUrl`). Existing installs with no custom URL keep using the defaults.
@@ -404,7 +414,7 @@ Operational docs: https://swarmclaw.ai/docs/observability
 - **Anthropic streaming refactor**: the streaming handler moved from Node's `https.request()` to `fetch()`. Same behavior, cleaner cancellation, and it now respects `session.apiEndpoint` as a full base URL instead of a hostname.
 - **Connection test body**: Ollama and OpenAI-compatible test requests now send `max_completion_tokens` instead of the legacy `max_tokens`, matching current OpenAI conventions and working correctly with reasoning models that reject `max_tokens`.
 
-Thanks to @Llugaes for the contribution.
+Thanks to [@Llugaes](https://github.com/Llugaes) for the contribution.
 
 ### v1.5.45 Highlights
 
