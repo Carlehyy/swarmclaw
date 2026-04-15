@@ -60,6 +60,35 @@ export function joinUrl(baseUrl: string, path: string): string {
   return `${base}${suffix}`
 }
 
+const LOCAL_HOSTNAMES = new Set(['localhost', '127.0.0.1', '::1', '0.0.0.0'])
+
+/**
+ * Returns true when the endpoint points at an opencode-web instance on the
+ * same machine as swarmclaw. Only local instances share swarmclaw's filesystem,
+ * so the `directory=` query parameter (which names a local workspace path) is
+ * only meaningful there. Remote instances get an `EACCES` when they try to
+ * `lstat` a path that exists only on the swarmclaw host (issue #45).
+ *
+ * Malformed URLs are treated as remote. That is the safe default: better to
+ * omit the directory hint than to leak a local path to an unknown host.
+ */
+export function isLocalEndpoint(endpoint: string): boolean {
+  try {
+    let hostname = new URL(endpoint).hostname
+    if (hostname.startsWith('[') && hostname.endsWith(']')) {
+      hostname = hostname.slice(1, -1)
+    }
+    return LOCAL_HOSTNAMES.has(hostname.toLowerCase())
+  } catch {
+    return false
+  }
+}
+
+export function buildDirectoryQuery(cwd: string | null | undefined): string {
+  if (!cwd) return ''
+  return `?directory=${encodeURIComponent(cwd)}`
+}
+
 /**
  * Stateful SSE line parser. Buffers across chunk boundaries and emits
  * one parsed JSON object per `data:` line. Lines that do not start with
@@ -125,11 +154,11 @@ interface CreateSessionResponse { id?: string; sessionID?: string; sessionId?: s
 
 async function createSession(opts: {
   endpoint: string
-  cwd: string
+  cwd: string | null
   authHeader: string | undefined
   signal: AbortSignal
 }): Promise<string> {
-  const url = `${joinUrl(opts.endpoint, '/session')}?directory=${encodeURIComponent(opts.cwd)}`
+  const url = `${joinUrl(opts.endpoint, '/session')}${buildDirectoryQuery(opts.cwd)}`
   const res = await fetch(url, {
     method: 'POST',
     headers: {
@@ -157,14 +186,14 @@ async function createSession(opts: {
 async function postPrompt(opts: {
   endpoint: string
   sessionId: string
-  cwd: string
+  cwd: string | null
   prompt: string
   providerID: string
   modelID: string
   authHeader: string | undefined
   signal: AbortSignal
 }): Promise<{ status: number }> {
-  const url = `${joinUrl(opts.endpoint, `/session/${encodeURIComponent(opts.sessionId)}/prompt_async`)}?directory=${encodeURIComponent(opts.cwd)}`
+  const url = `${joinUrl(opts.endpoint, `/session/${encodeURIComponent(opts.sessionId)}/prompt_async`)}${buildDirectoryQuery(opts.cwd)}`
   const res = await fetch(url, {
     method: 'POST',
     headers: {
@@ -209,7 +238,9 @@ export function streamOpenCodeWebChat(opts: StreamChatOptions): Promise<string> 
   const { session, message, systemPrompt, apiKey, write, active, signal } = opts
 
   const endpoint = (session.apiEndpoint as string | undefined) || DEFAULT_ENDPOINT
-  const cwd = (session.cwd as string | undefined) || process.cwd()
+  const cwd = isLocalEndpoint(endpoint)
+    ? ((session.cwd as string | undefined) || process.cwd())
+    : null
   const auth = parseBasicAuth(apiKey)
   const authHeader = buildAuthHeader(auth)
   const { providerID, modelID } = parseModelId(session.model as string | undefined)

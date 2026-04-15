@@ -396,6 +396,10 @@ Operational docs: https://swarmclaw.ai/docs/observability
 
 ## Releases
 
+### v1.5.50 Highlights
+
+- **Fix: opencode-web remote instances no longer fail with `EACCES`**: SwarmClaw used to send the local workspace path (e.g. `/root/.swarmclaw/workspace`) as a `directory=` query parameter on every opencode-web request. Remote opencode-web instances tried to `lstat` that path and rejected the call. The provider now auto-detects local vs. remote from the endpoint hostname (`localhost`, `127.0.0.1`, `::1`, `0.0.0.0`) and only sends `directory=` when the endpoint is local. Thanks to [@SteamedFish](https://github.com/SteamedFish) for the detailed root-cause writeup in [#45](https://github.com/swarmclawai/swarmclaw/issues/45).
+
 ### v1.5.49 Highlights
 
 - **Autonomous Missions**: a new first-class concept for long-running, goal-driven agent work. Hand your agent team a goal on Friday, come back Monday to see what they shipped. Each mission carries a title, a natural-language objective, bulleted success criteria, hard budgets (USD, tokens, turns, wallclock), periodic markdown reports, and a full milestone timeline. Missions drive any session through the existing heartbeat pipeline, so delegation to Claude Code, Codex, OpenCode, Cursor, Droid, Goose, Qwen, or native SwarmClaw agents all work without changes.
