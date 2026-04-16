@@ -43,6 +43,11 @@ function numOrNull(s: string): number | null {
   return Number.isFinite(n) && n > 0 ? n : null
 }
 
+function intOrNull(s: string): number | null {
+  const n = numOrNull(s)
+  return n == null ? null : Math.round(n)
+}
+
 export function MissionTemplateInstallDialog({ template, sessions, onClose, onInstall }: Props) {
   const [title, setTitle] = useState('')
   const [goal, setGoal] = useState('')
@@ -112,9 +117,9 @@ export function MissionTemplateInstallDialog({ template, sessions, onClose, onIn
           successCriteria,
           budget: {
             maxUsd: numOrNull(maxUsd),
-            maxTokens: numOrNull(maxTokens),
-            maxWallclockSec: numOrNull(maxWallclockSec),
-            maxTurns: numOrNull(maxTurns),
+            maxTokens: intOrNull(maxTokens),
+            maxWallclockSec: intOrNull(maxWallclockSec),
+            maxTurns: intOrNull(maxTurns),
           },
           reportSchedule: reportsEnabled
             ? { intervalSec: Math.round(intervalMin * 60), format: 'markdown', enabled: true }

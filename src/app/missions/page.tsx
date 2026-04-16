@@ -10,6 +10,7 @@ import {
   MissionTemplateInstallDialog,
   type InstantiateInput,
 } from '@/components/missions/mission-template-install-dialog'
+import { MissionEditSheet, isMissionEditable } from '@/components/missions/mission-edit-sheet'
 import type { Mission, MissionReport, MissionEvent, MissionTemplate, Session } from '@/types'
 import { toast } from 'sonner'
 
@@ -119,11 +120,13 @@ interface ControlsProps {
   mission: Mission
   onAction: (action: string, reason?: string) => Promise<void>
   onForceReport: () => Promise<void>
+  onEdit: () => void
   busy: boolean
 }
 
-function MissionControls({ mission, onAction, onForceReport, busy }: ControlsProps) {
+function MissionControls({ mission, onAction, onForceReport, onEdit, busy }: ControlsProps) {
   const btn = 'text-[11px] font-600 px-2.5 py-1 rounded border transition-colors disabled:opacity-40 disabled:cursor-not-allowed'
+  const editable = isMissionEditable(mission.status)
   return (
     <div className="flex flex-wrap items-center gap-2">
       {mission.status === 'draft' || mission.status === 'paused' ? (
@@ -151,6 +154,15 @@ function MissionControls({ mission, onAction, onForceReport, busy }: ControlsPro
           className={`${btn} border-indigo-500/30 bg-indigo-500/10 text-indigo-300 hover:bg-indigo-500/15`}
         >
           Mark complete
+        </button>
+      ) : null}
+      {editable ? (
+        <button
+          disabled={busy}
+          onClick={onEdit}
+          className={`${btn} border-white/[0.12] bg-white/[0.04] text-text hover:bg-white/[0.08]`}
+        >
+          Edit
         </button>
       ) : null}
       {mission.status !== 'completed' && mission.status !== 'cancelled' ? (
@@ -218,6 +230,10 @@ function CreateMissionDialog({ open, sessions, onClose, onCreate }: CreateDialog
     const n = Number.parseFloat(s)
     return Number.isFinite(n) && n > 0 ? n : null
   }
+  const intOrNull = (s: string): number | null => {
+    const n = numOrNull(s)
+    return n == null ? null : Math.round(n)
+  }
 
   const submit = async () => {
     if (!title.trim() || !goal.trim()) {
@@ -242,9 +258,9 @@ function CreateMissionDialog({ open, sessions, onClose, onCreate }: CreateDialog
         rootSessionId,
         budget: {
           maxUsd: numOrNull(maxUsd),
-          maxTokens: numOrNull(maxTokens),
-          maxWallclockSec: numOrNull(maxWallclockSec),
-          maxTurns: numOrNull(maxTurns),
+          maxTokens: intOrNull(maxTokens),
+          maxWallclockSec: intOrNull(maxWallclockSec),
+          maxTurns: intOrNull(maxTurns),
         },
         reportSchedule: reportsEnabled
           ? { intervalSec: Math.round(intervalMin * 60), format: 'markdown', enabled: true }
@@ -377,9 +393,10 @@ interface DetailProps {
   busy: boolean
   onAction: (action: string, reason?: string) => Promise<void>
   onForceReport: () => Promise<void>
+  onEdit: () => void
 }
 
-function MissionDetail({ mission, reports, events, busy, onAction, onForceReport }: DetailProps) {
+function MissionDetail({ mission, reports, events, busy, onAction, onForceReport, onEdit }: DetailProps) {
   const [selectedReport, setSelectedReport] = useState<MissionReport | null>(null)
   const wallclockCapMs = mission.budget.maxWallclockSec != null ? mission.budget.maxWallclockSec * 1000 : null
 
@@ -408,7 +425,7 @@ function MissionDetail({ mission, reports, events, busy, onAction, onForceReport
 
       <div>
         <div className="text-[11px] font-600 uppercase tracking-wide text-text-3 mb-2">Controls</div>
-        <MissionControls mission={mission} onAction={onAction} onForceReport={onForceReport} busy={busy} />
+        <MissionControls mission={mission} onAction={onAction} onForceReport={onForceReport} onEdit={onEdit} busy={busy} />
       </div>
 
       {mission.successCriteria.length > 0 && (
@@ -497,6 +514,7 @@ export default function MissionsPage() {
   const [templates, setTemplates] = useState<MissionTemplate[]>([])
   const [galleryOpen, setGalleryOpen] = useState(false)
   const [installTemplate, setInstallTemplate] = useState<MissionTemplate | null>(null)
+  const [editMission, setEditMission] = useState<Mission | null>(null)
 
   const selected = useMemo(() => missions.find((m) => m.id === selectedId) ?? null, [missions, selectedId])
 
@@ -539,8 +557,8 @@ export default function MissionsPage() {
   }, [selectedId, refreshDetail])
 
   useEffect(() => {
-    api<Session[]>('GET', '/chats').then((s) => {
-      setSessions(Array.isArray(s) ? s : Object.values(s))
+    api<Record<string, Session>>('GET', '/chats').then((s) => {
+      setSessions(s ? Object.values(s) : [])
     }).catch(() => setSessions([]))
   }, [createOpen, galleryOpen, installTemplate])
 
@@ -585,6 +603,11 @@ export default function MissionsPage() {
     await refreshList()
     setSelectedId(created.id)
     toast.success(`Mission "${created.title}" created`)
+  }, [refreshList])
+
+  const handleMissionSaved = useCallback((updated: Mission) => {
+    setMissions((prev) => prev.map((m) => (m.id === updated.id ? updated : m)))
+    void refreshList()
   }, [refreshList])
 
   const handleInstallTemplate = useCallback(async (template: MissionTemplate, input: InstantiateInput) => {
@@ -663,6 +686,7 @@ export default function MissionsPage() {
               busy={busy}
               onAction={handleAction}
               onForceReport={handleForceReport}
+              onEdit={() => setEditMission(selected)}
             />
           ) : loaded && missions.length === 0 && templates.length > 0 ? (
             <div className="p-6">
@@ -712,6 +736,12 @@ export default function MissionsPage() {
         sessions={sessions}
         onClose={() => setInstallTemplate(null)}
         onInstall={handleInstallTemplate}
+      />
+
+      <MissionEditSheet
+        mission={editMission}
+        onClose={() => setEditMission(null)}
+        onSaved={handleMissionSaved}
       />
     </MainContent>
   )

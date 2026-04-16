@@ -218,13 +218,17 @@ export interface ClassifyMessageInput {
   history?: Message[]
 }
 
-// Timeout sized for Ollama Cloud with a fully-configured agent: observed
-// classifier calls in the 4-6 s range during live testing, plus the expanded
-// 4-flag semantic schema requires a slightly larger JSON output. 10 s
-// accommodates the tail without blocking chat turns for long on a total
-// failure. Result is cached per-message so the latency tax only applies to
-// first-seen messages.
-const CLASSIFIER_TIMEOUT_MS = 10_000
+// Timeout sized for Ollama Cloud with a fully-configured agent. Observed
+// classifier calls in the 4-6s range during live testing, with cloud
+// providers (Ollama Cloud, OpenRouter) routinely tipping over the 10s
+// boundary on a cold cache. SC_CLASSIFIER_TIMEOUT_MS overrides for users
+// running consistently slow providers; default raised to 20s so the cloud
+// path actually completes.
+const DEFAULT_CLASSIFIER_TIMEOUT_MS = 20_000
+const CLASSIFIER_TIMEOUT_MS = (() => {
+  const raw = Number(process.env.SC_CLASSIFIER_TIMEOUT_MS)
+  return Number.isFinite(raw) && raw > 0 ? Math.trunc(raw) : DEFAULT_CLASSIFIER_TIMEOUT_MS
+})()
 
 /**
  * Classify a user message using a single LLM call.

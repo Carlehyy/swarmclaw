@@ -3,7 +3,7 @@ import os from 'os'
 
 import { log } from '@/lib/server/logger'
 import { getProvider } from '@/lib/providers'
-import type { ExecutionBrief, Message, Session } from '@/types'
+import type { Agent, ExecutionBrief, Message, Session } from '@/types'
 import {
   decryptKey,
   loadCredentials,
@@ -29,6 +29,7 @@ import {
 import {
   applyResolvedRoute,
   resolvePrimaryAgentRoute,
+  type ResolvedAgentRoute,
 } from '@/lib/server/agents/agent-runtime-config'
 import {
   runCapabilityBeforeMessageWrite,
@@ -190,17 +191,13 @@ function joinSystemPromptBlocks(...blocks: Array<string | null | undefined>): st
   return joined || undefined
 }
 
-function syncSessionFromAgent(sessionId: string): void {
-  const session = getSession(sessionId)
-  if (!session?.agentId) return
-  const agent = getAgent(session.agentId)
-  if (!agent) return
-
+export function applyAgentSyncToSession(
+  session: Session,
+  agent: Agent,
+  route: ResolvedAgentRoute | null,
+  sessionId: string,
+): { session: Session; changed: boolean } {
   let changed = false
-  const route = resolvePrimaryAgentRoute(agent, undefined, {
-    preferredGatewayTags: session.routePreferredGatewayTags || [],
-    preferredGatewayUseCase: session.routePreferredGatewayUseCase || null,
-  })
   if (!session.provider && agent.provider) { session.provider = agent.provider; changed = true }
   if ((session.model === undefined || session.model === null || session.model === '') && agent.model !== undefined) {
     session.model = agent.model
@@ -302,9 +299,21 @@ function syncSessionFromAgent(sessionId: string): void {
       changed = true
     }
   }
+  return { session, changed }
+}
 
+export function syncSessionFromAgent(sessionId: string): void {
+  const session = getSession(sessionId)
+  if (!session?.agentId) return
+  const agent = getAgent(session.agentId)
+  if (!agent) return
+  const route = resolvePrimaryAgentRoute(agent, undefined, {
+    preferredGatewayTags: session.routePreferredGatewayTags || [],
+    preferredGatewayUseCase: session.routePreferredGatewayUseCase || null,
+  })
+  const { session: updated, changed } = applyAgentSyncToSession(session, agent, route, sessionId)
   if (changed) {
-    saveSession(sessionId, session)
+    saveSession(sessionId, updated)
   }
 }
 

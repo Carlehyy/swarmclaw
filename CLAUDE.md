@@ -99,6 +99,18 @@ Three boundary kinds:
 
 Resolved in `resolveSuccessfulTerminalToolBoundary()` (`src/lib/server/chat-execution/chat-streaming-utils.ts`). Only mark a new tool as terminal if it genuinely needs to end the turn — most tools should not be terminal.
 
+### Stripping Internal Markers from Assistant Output
+
+**When an LLM emits structured tokens that should not be visible to the user (e.g. side-channel classifier JSON like `{"factsUpsert":[...]}`, control tokens like `[REACTION]{...}`, or meta lines like `[AGENT_HEARTBEAT_META]{...}`), strip them with a balanced-brace walker + zod schema validation, not raw regex.** Regex breaks on nested JSON, multiline payloads, and innocent text that happens to look like a marker.
+
+The pattern:
+1. Define a **zod schema** for each known internal payload (or reuse the existing one — `WorkingStatePatchSchema`, `MessageClassificationSchema`, `ResponseCompletenessSchema`).
+2. Pair each schema with a list of **distinctive keys** that must be present (so a benign user JSON like `{"port":3000}` isn't false-stripped).
+3. Walk the text byte-by-byte to find balanced `{...}` blocks (a tiny `findBalancedJsonObjectEnd` helper handles strings, escapes, and nesting). Try `JSON.parse` on each candidate.
+4. If the parsed object has at least one distinctive key AND `schema.safeParse(obj).success` is true, remove that span.
+
+Reference implementations: `stripMainLoopMetaForPersistence` (`src/lib/server/agents/main-agent-loop.ts`) and `stripAgentReactionTokens` (`src/lib/server/chatrooms/chatroom-agent-signals.ts`). When you add a new internal payload shape, add a rule to `INTERNAL_PAYLOAD_RULES` in `main-agent-loop.ts` rather than writing a new strip function.
+
 ### Storage: Load-Modify-Save
 
 **`saveCollection()` silently blocks bulk deletes.** If the save would delete more rows than it upserts, the guard prevents it and logs a warning. This protects against accidentally wiping a collection by saving a partial record set.

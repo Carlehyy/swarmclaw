@@ -41,6 +41,9 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   const { data: raw, error } = await safeParseBody<Record<string, unknown>>(req)
   if (error) return error
+  if (raw && Array.isArray(raw.memberAgentIds) && !Array.isArray(raw.agentIds)) {
+    raw.agentIds = raw.memberAgentIds
+  }
   const parsed = ChatroomCreateSchema.safeParse(raw)
   if (!parsed.success) {
     return NextResponse.json(formatZodError(parsed.error as z.ZodError), { status: 400 })

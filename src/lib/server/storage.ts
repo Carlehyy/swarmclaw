@@ -90,7 +90,7 @@ const DB_PATH = IS_BUILD_BOOTSTRAP ? ':memory:' : path.join(DATA_DIR, 'swarmclaw
 const db = new Database(DB_PATH)
 if (!IS_BUILD_BOOTSTRAP) {
   db.pragma('journal_mode = WAL')
-  db.pragma('busy_timeout = 5000')
+  db.pragma('busy_timeout = 15000')
   db.pragma('synchronous = NORMAL')
   db.pragma('cache_size = -64000')
   db.pragma('mmap_size = 268435456')

@@ -207,11 +207,19 @@ export function createAgent(input: {
 export function updateAgent(agentId: string, body: Record<string, unknown>): Agent | null {
   const updated = patchAgent(agentId, (current) => {
     if (!current) return null
+    if (body.projectId === undefined && Array.isArray(body.projectIds) && body.projectIds.length > 0) {
+      const first = body.projectIds[0]
+      if (typeof first === 'string' && first.trim()) {
+        body.projectId = first.trim()
+      }
+    }
     const agent = { ...current, ...body, updatedAt: Date.now() }
     if (body.tools !== undefined || body.extensions !== undefined) {
+      // Fall back to `current` (pre-spread) so a non-array body value does not
+      // clobber the existing list via `{...current, ...body}` above.
       const nextSelection = normalizeCapabilitySelection({
-        tools: Array.isArray(body.tools) ? body.tools : agent.tools,
-        extensions: Array.isArray(body.extensions) ? body.extensions : agent.extensions,
+        tools: Array.isArray(body.tools) ? body.tools : current.tools,
+        extensions: Array.isArray(body.extensions) ? body.extensions : current.extensions,
       })
       agent.tools = nextSelection.tools
       agent.extensions = nextSelection.extensions

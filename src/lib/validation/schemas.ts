@@ -131,6 +131,14 @@ export const AgentCreateSchema = z.object({
   budgetAction: z.enum(['warn', 'block']).optional().default('warn'),
 })
 
+/**
+ * Partial of AgentCreateSchema for PUT /agents/:id. Every field is optional and
+ * validated when present. Callers MUST filter the parsed result to only the
+ * keys that were present in the raw body (zod re-applies defaults otherwise,
+ * which would clobber untouched fields with their defaults).
+ */
+export const AgentUpdateSchema = AgentCreateSchema.partial()
+
 export const ConnectorCreateSchema = z.object({
   name: z.string().min(1, 'Connector name is required').optional(),
   platform: z.enum([
@@ -195,6 +203,38 @@ export const TaskCreateSchema = z.object({
     requireArtifact: z.boolean().optional(),
     requireReport: z.boolean().optional(),
   }).nullable().optional(),
+})
+
+/**
+ * PUT /tasks/:id body schema. See AgentUpdateSchema above for the default-
+ * stripping pattern: callers MUST filter the parsed result to only raw-body
+ * keys or zod defaults will overwrite untouched stored fields.
+ *
+ * Extra fields accepted only by the route (not creation): `appendComment`,
+ * status enum, and runtime transition fields.
+ */
+export const TaskUpdateSchema = TaskCreateSchema.partial().extend({
+  appendComment: z.object({
+    author: z.string().optional(),
+    authorId: z.string().optional(),
+    text: z.string().min(1),
+  }).optional(),
+  result: z.string().nullable().optional(),
+  error: z.string().nullable().optional(),
+  queuedAt: z.number().nullable().optional(),
+  startedAt: z.number().nullable().optional(),
+  completedAt: z.number().nullable().optional(),
+  outputFiles: z.array(z.string()).optional(),
+  artifacts: z.array(z.unknown()).optional(),
+})
+
+export const WebhookUpdateSchema = z.object({
+  name: z.string().min(1).max(200).optional(),
+  source: z.string().max(64).optional(),
+  events: z.array(z.string()).optional(),
+  agentId: z.string().nullable().optional(),
+  secret: z.string().max(512).optional(),
+  isEnabled: z.boolean().optional(),
 })
 
 export const ChatroomCreateSchema = z.object({
