@@ -399,6 +399,13 @@ Operational docs: https://swarmclaw.ai/docs/observability
 
 ## Releases
 
+### v1.5.60 Highlights
+
+Adds a turn-snapshot primitive for external replay and comparison tooling, without touching the execution flow.
+
+- **Turn snapshot endpoint.** New `GET /api/chats/:id/turns/:index/snapshot` returns the input state of a prior user turn: the message (text + optional imagePath + time), all prior messages in order, the session's effective provider/model/endpoint/credential at snapshot time, and the bound agent's provider/model/systemPrompt when available. Invalid or non-user indices return `400`, out-of-range indices return `404`. CLI: `swarmclaw chats turn-snapshot <chatId> <index>`.
+- **Use case.** External CLIs, notebooks, and comparison harnesses can now capture the exact inputs that produced a given turn and replay them against a different model, provider, or system prompt to compare outputs — without mutating the original session. Pairs with the existing `edit-resend` path (destructive in-session replay) and the new share-link infrastructure in v1.5.59 (share the original turn's context, replay on another instance).
+
 ### v1.5.59 Highlights
 
 Viral-loop release. Adds public share links for missions, skills, and sessions, plus a complementary raw-markdown endpoint so any shared skill installs directly through the existing `POST /api/skills/import`.
@@ -436,16 +443,6 @@ This release closes the org-orchestration feature gap with Paperclip while keepi
 
 - **Fix: TTS error responses are now proper JSON instead of a raw Buffer blob.** `POST /api/tts` and `POST /api/tts/stream` previously returned `500` with the error message wrapped in a `new NextResponse(string, ...)` that the CLI JSON-decoded into `{"type":"Buffer","data":[78,111,...]}`. Both routes now return `NextResponse.json({error}, {status: 500})`. Regression test added.
 - **Zod-validated PUT/PATCH endpoints — hardening sweep.** Extends the v1.5.55 work (agents, tasks, webhooks) to close the same silent-corruption bug class on the remaining vulnerable routes: `PUT /api/secrets/:id`, `POST /api/secrets`, `PATCH /api/goals/:id`, `PUT /api/providers/:id`, `PUT /api/documents/:id`, `PUT /api/external-agents/:id`, and `PUT /api/chatrooms/:id`. Each route validates against a dedicated schema (`SecretUpdateSchema`, `SecretCreateSchema`, `GoalUpdateSchema`, `ProviderUpdateSchema`, `DocumentUpdateSchema`, `ExternalAgentUpdateSchema`, `ChatroomUpdateSchema`) in `src/lib/validation/schemas.ts`, then filters parsed data to the keys actually present in the raw body so Zod defaults can't overwrite untouched stored fields. Endpoints already doing per-field `typeof` guards (knowledge, gateways, projects) were left as-is.
-
-### v1.5.55 Highlights
-
-- **Fix: mission budget updates with decimal values no longer silently fail with a 400.** The mission UI's `numOrNull` parsed user input with `Number.parseFloat`, but the API requires `int()` for `maxTokens`, `maxToolCalls`, `maxWallclockSec`, and `maxTurns`. Typing `1000.5` returned a cryptic Zod error to the toast and the update was lost. Added `intOrNull` (rounds) in `mission-edit-sheet.tsx`, `mission-template-install-dialog.tsx`, and `app/missions/page.tsx`. `maxUsd` still accepts decimals.
-- **Fix: mission edit sheet's connectors dropdown was always empty.** The sheet fetched `/connectors` expecting a `Connector[]`, but the endpoint returns `Record<string, Connector>`. The defensive `Array.isArray` fallback quietly rendered an empty list, so users could not attach report connectors when editing a running mission. Now typed as `Record<string, Connector>` and projected with `Object.values`.
-- **Fix: memory search returns results for short (3-4 char) words like `cats`, `blue`, `dog`.** `buildFtsQuery` had a `unique[0].length >= 5` guard that returned an empty FTS query for any single-token search shorter than 5 chars, silently dropping valid searches. The upstream filter already requires ≥3 chars, so the extra guard just excluded useful queries. Removed; regression tests cover `cats`, `blue`, and `dog`.
-- **Fix: `PUT /api/agents/:id` now validates its body with a Zod schema.** Previously the route did `{...current, ...body}` without validation, so sending `{"tools": "not_an_array"}` silently wiped the agent's tool list to `[]`. Added `AgentUpdateSchema = AgentCreateSchema.partial()` and a filter step that keeps only keys present in the raw body (so Zod defaults do not overwrite untouched fields). Bad types now return a 400 with field-level errors. `updateAgent()` keeps a `current.tools` / `current.extensions` fallback as defense-in-depth for internal callers.
-- **Fix: `PUT /api/tasks/:id` now validates its body with a Zod schema.** Same class of bug: a numeric `title` silently corrupted the stored field. Added `TaskUpdateSchema = TaskCreateSchema.partial().extend({...})` with the update-only fields (`appendComment`, `result`, `error`, lifecycle timestamps) and the same raw-key filter pattern. Bad types now 400 with untouched storage.
-- **Fix: `PUT /api/webhooks/:id` now validates its body with a Zod schema.** Previously `{"events": "not_an_array"}` wiped the events list. Added `WebhookUpdateSchema` and explicit `rawKeys.has(...)` guards in the mutate closure so only fields actually present in the body are applied.
-- **Fix: classifier JSON no longer leaks into assistant responses.** Some Ollama / Ollama Cloud turns were emitting the internal `MessageClassification` object directly into the stream (e.g. `{"taskIntent":"research",...}` prepended to the real reply). The existing stripper only matched when `isDeliverableTask` was the first key, so leaks starting with `taskIntent` sailed through to the user. Replaced the regex with a principled detector that brace-matches candidate JSON (string-quote aware) and validates against `MessageClassificationSchema.safeParse` — the schema itself is the source of truth, so future schema changes can't break detection.
 
 Older releases: https://swarmclaw.ai/docs/release-notes
 

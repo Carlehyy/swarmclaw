@@ -579,6 +579,7 @@ const COMMAND_GROUPS = [
       cmd('messages-send', 'POST', '/chats/:id/messages', 'Append a user/system message to a chat', { expectsJsonBody: true }),
       cmd('messages-delete', 'DELETE', '/chats/:id/messages', 'Delete a message from a chat', { expectsJsonBody: true }),
       cmd('edit-resend', 'POST', '/chats/:id/edit-resend', 'Edit and resend from a specific message index', { expectsJsonBody: true }),
+      cmd('turn-snapshot', 'GET', '/chats/:id/turns/:index/snapshot', 'Snapshot the input state of a prior user turn (for external replay)'),
       cmd('chat', 'POST', '/chats/:id/chat', 'Send chat message (streaming)', {
         expectsJsonBody: true,
         responseType: 'sse',
