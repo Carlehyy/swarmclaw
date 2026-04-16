@@ -122,6 +122,7 @@ export const AgentCreateSchema = z.object({
   memoryTierPreference: z.enum(['working', 'durable', 'archive', 'blended']).nullable().optional().default(null),
   proactiveMemory: z.boolean().optional().default(true),
   autoDraftSkillSuggestions: z.boolean().optional().default(true),
+  planningMode: z.enum(['off', 'strict']).nullable().optional().default(null),
   projectId: z.string().optional(),
   avatarSeed: z.string().optional(),
   avatarUrl: z.string().nullable().optional().default(null),

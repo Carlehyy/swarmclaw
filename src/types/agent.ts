@@ -125,6 +125,14 @@ export interface Agent {
   proactiveMemory?: boolean
   /** Auto-refresh a reviewed skill draft from meaningful chat turns for this agent. */
   autoDraftSkillSuggestions?: boolean
+  /**
+   * Planning enforcement mode.
+   * - 'off' (default): no extra planning guidance
+   * - 'strict': instruct the model to emit a [MAIN_LOOP_PLAN] block before any
+   *   tool call on multi-step turns. The existing main-agent-loop plan parser
+   *   reads these blocks into MainLoopState.planSteps.
+   */
+  planningMode?: 'off' | 'strict' | null
   /** Controls whether file operations are confined to the workspace or allowed anywhere on the host. Default: 'workspace'. */
   filesystemScope?: 'workspace' | 'machine' | null
   /** Per-agent filesystem restrictions. Globs matched against resolved paths. */

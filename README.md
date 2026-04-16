@@ -399,6 +399,14 @@ Operational docs: https://swarmclaw.ai/docs/observability
 
 ## Releases
 
+### v1.5.61 Highlights
+
+Adds an opt-in per-agent planning mode that rides on the existing `[MAIN_LOOP_PLAN]` token machinery.
+
+- **`Agent.planningMode: 'off' | 'strict' | null`** — new optional field on the Agent type. Defaults to `null` (off) so existing agents are unaffected. Validated by `AgentCreateSchema` / `AgentUpdateSchema` and surfaced through `createAgent` in `agent-service.ts`.
+- **Strict planning prompt section.** New `buildPlanningModeSection` in `prompt-sections.ts` injects a short contract into the system prompt when `planningMode === 'strict'`: before any multi-step work, emit a single-line `[MAIN_LOOP_PLAN]{"steps":...}` block. The existing parser in `main-agent-loop.ts` reads these blocks into `MainLoopState.planSteps` / `currentPlanStep` / `completedPlanSteps` with no additional wiring. Skipped in minimal prompt mode and for heartbeat turns.
+- **Test coverage.** `prompt-sections.planning-mode.test.ts` covers the null / off / strict / minimal / missing-agent paths (6 cases).
+
 ### v1.5.60 Highlights
 
 Adds a turn-snapshot primitive for external replay and comparison tooling, without touching the execution flow.
@@ -438,11 +446,6 @@ This release closes the org-orchestration feature gap with Paperclip while keepi
 - **Configuration version history.** Every `updateAgent` call now snapshots the prior agent state into `config-versions.json` (capped at 50 versions per entity). `GET /api/config-versions?entityKind=agent&entityId=...` lists history; `POST /api/config-versions/restore` rolls back. Foundation for extending to extensions, connectors, MCP servers, chatrooms, and projects.
 - **Multi-workspace scaffolding.** New `Workspace` registry with `GET|POST|PATCH|DELETE /api/workspaces` and `GET|POST /api/workspaces/active`. The default workspace seeds itself on first read; switching the active workspace persists to `workspace-registry.json`. **Note:** this is metadata only in v1.5.57 — actual data-dir forking per workspace is intentionally deferred (low-risk shipping).
 - **CLI manifest expanded.** New top-level groups: `workspaces`, `workflow-states`, `config-versions`, `cost-attribution`, `chatroom-policy`. Run `swarmclaw workspaces list`, `swarmclaw cost-attribution by-code --query codes=client-a,range=30d`, `swarmclaw config-versions list --query entityKind=agent,entityId=...`, etc. CLI route-coverage test passes.
-
-### v1.5.56 Highlights
-
-- **Fix: TTS error responses are now proper JSON instead of a raw Buffer blob.** `POST /api/tts` and `POST /api/tts/stream` previously returned `500` with the error message wrapped in a `new NextResponse(string, ...)` that the CLI JSON-decoded into `{"type":"Buffer","data":[78,111,...]}`. Both routes now return `NextResponse.json({error}, {status: 500})`. Regression test added.
-- **Zod-validated PUT/PATCH endpoints — hardening sweep.** Extends the v1.5.55 work (agents, tasks, webhooks) to close the same silent-corruption bug class on the remaining vulnerable routes: `PUT /api/secrets/:id`, `POST /api/secrets`, `PATCH /api/goals/:id`, `PUT /api/providers/:id`, `PUT /api/documents/:id`, `PUT /api/external-agents/:id`, and `PUT /api/chatrooms/:id`. Each route validates against a dedicated schema (`SecretUpdateSchema`, `SecretCreateSchema`, `GoalUpdateSchema`, `ProviderUpdateSchema`, `DocumentUpdateSchema`, `ExternalAgentUpdateSchema`, `ChatroomUpdateSchema`) in `src/lib/validation/schemas.ts`, then filters parsed data to the keys actually present in the raw body so Zod defaults can't overwrite untouched stored fields. Endpoints already doing per-field `typeof` guards (knowledge, gateways, projects) were left as-is.
 
 Older releases: https://swarmclaw.ai/docs/release-notes
 

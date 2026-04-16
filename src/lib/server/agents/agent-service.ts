@@ -178,6 +178,7 @@ export function createAgent(input: {
     memoryTierPreference: (body.memoryTierPreference as Agent['memoryTierPreference']) || undefined,
     proactiveMemory: body.proactiveMemory !== false,
     autoDraftSkillSuggestions: body.autoDraftSkillSuggestions as Agent['autoDraftSkillSuggestions'],
+    planningMode: (body.planningMode as Agent['planningMode']) ?? null,
     projectId: typeof body.projectId === 'string' && body.projectId.trim() ? body.projectId.trim() : undefined,
     avatarSeed: typeof body.avatarSeed === 'string' ? body.avatarSeed : undefined,
     avatarUrl: typeof body.avatarUrl === 'string' ? body.avatarUrl : undefined,
