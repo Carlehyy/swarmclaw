@@ -399,13 +399,17 @@ Operational docs: https://swarmclaw.ai/docs/observability
 
 ## Releases
 
-### v1.5.53 Highlights
+### v1.5.54 Highlights
 
 - **Mission templates library**: the `/missions` page now opens with a curated gallery of starter missions. Each template pre-wires a goal, success criteria, USD / token / turn / wallclock budgets, and a report cadence, so non-technical users can install a working autonomous run in one click. Initial lineup: Daily News Digest, Inbox Triage, Competitor Watch, Weekly Research Report, Social Listener, and Customer Support Triage. Setup notes flag any connector or permission prerequisites before installation. Power-user overrides (budget caps, success criteria, report cadence) live behind a collapsed **Advanced Settings** panel so the default install flow stays one click.
 - **New API routes `GET /api/missions/templates` and `POST /api/missions/templates/:id/instantiate`** with matching CLI commands `swarmclaw missions templates` and `swarmclaw missions instantiate`. Installed missions persist a `templateId` so the origin is traceable for future template-update flows; legacy missions normalize to `templateId: null` on load, no data migration required.
-- **Fix: switching a session's model now sticks in the UI** ([#50](https://github.com/swarmclawai/swarmclaw/pull/50)). The **Switch Model** panel in the agent inspector was reading from `agent.provider` / `agent.model` (the agent's defaults) instead of `session.provider` / `session.model`, so after saving a model switch the collapsed pill still showed the agent default, the combobox reset to the default when reopened, and `selectedProvider` reverted on every save. `ModelSwitcherInline` now uses `session.provider || agent.provider` and `session.model || agent.model` as the source of truth, and its `useEffect` syncs to `session.provider` changes so a successful save updates the panel immediately.
+- **Fix: user-selected provider and model now survive the chat execution pipeline** ([#51](https://github.com/swarmclawai/swarmclaw/pull/51), thanks to [@borislavnnikolov](https://github.com/borislavnnikolov)). Switching provider or model via the inspector panel mid-session was being reverted on every turn because the agent's configured route was unconditionally reapplied in three places. `syncSessionFromAgent` now only syncs credentials / endpoint / fallbacks when the session's provider still matches the route provider, `prepareChatTurn` preserves the user's chosen model after applying the route, and `updateChatSession` auto-resolves a stored credential for the new provider (and clears the stale `apiEndpoint`) when provider changes without an explicit `credentialId`. Restores reliable switching between Copilot CLI, Codex CLI, Groq, and OpenAI-compatible providers.
 
-Thanks to [@borislavnnikolov](https://github.com/borislavnnikolov) for the contribution.
+> **Note:** v1.5.53 release notes described the mission templates library, but the feature commit landed after the v1.5.53 tag was cut. v1.5.54 is the release that actually ships it.
+
+### v1.5.53 Highlights
+
+- **Fix: switching a session's model now sticks in the UI** ([#50](https://github.com/swarmclawai/swarmclaw/pull/50), thanks to [@borislavnnikolov](https://github.com/borislavnnikolov)). The **Switch Model** panel in the agent inspector was reading from `agent.provider` / `agent.model` (the agent's defaults) instead of `session.provider` / `session.model`, so after saving a model switch the collapsed pill still showed the agent default, the combobox reset to the default when reopened, and `selectedProvider` reverted on every save. `ModelSwitcherInline` now uses `session.provider || agent.provider` and `session.model || agent.model` as the source of truth, and its `useEffect` syncs to `session.provider` changes so a successful save updates the panel immediately.
 
 ### v1.5.52 Highlights
 
