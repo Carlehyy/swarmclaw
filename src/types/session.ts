@@ -175,6 +175,8 @@ export interface Session {
   currentRunId?: string | null
   /** Optional link to an autonomous Mission that drives this session. */
   missionId?: string | null
+  /** Cost-attribution tags applied to all usage records produced by this session. */
+  billingCodes?: string[]
   conversationTone?: string
   emoji?: string
   creature?: string

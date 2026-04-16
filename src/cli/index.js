@@ -822,6 +822,50 @@ const COMMAND_GROUPS = [
     ],
   },
   {
+    name: 'workspaces',
+    description: 'Manage logical workspaces (multi-workspace scaffolding)',
+    commands: [
+      cmd('list', 'GET', '/workspaces', 'List workspaces'),
+      cmd('create', 'POST', '/workspaces', 'Create a workspace', { expectsJsonBody: true }),
+      cmd('update', 'PATCH', '/workspaces', 'Update a workspace', { expectsJsonBody: true }),
+      cmd('delete', 'DELETE', '/workspaces', 'Delete a workspace (use --query id=...)'),
+      cmd('active', 'GET', '/workspaces/active', 'Get the active workspace'),
+      cmd('set-active', 'POST', '/workspaces/active', 'Set the active workspace', { expectsJsonBody: true }),
+    ],
+  },
+  {
+    name: 'workflow-states',
+    description: 'Manage customizable task workflow states',
+    commands: [
+      cmd('list', 'GET', '/task-workflow-states', 'List workflow states'),
+      cmd('create', 'POST', '/task-workflow-states', 'Create or update a workflow state', { expectsJsonBody: true }),
+      cmd('delete', 'DELETE', '/task-workflow-states', 'Delete a workflow state (use --query id=... or --query reset=true)'),
+    ],
+  },
+  {
+    name: 'config-versions',
+    description: 'Inspect and restore configuration version history',
+    commands: [
+      cmd('list', 'GET', '/config-versions', 'List versions for an entity (use --query entityKind=agent,entityId=...)'),
+      cmd('restore', 'POST', '/config-versions/restore', 'Restore an entity to a prior version', { expectsJsonBody: true }),
+    ],
+  },
+  {
+    name: 'cost-attribution',
+    description: 'Aggregate LLM cost by billing-code tags',
+    commands: [
+      cmd('by-code', 'GET', '/usage/by-code', 'Roll up cost by billing code (use --query codes=foo,bar,range=7d)'),
+    ],
+  },
+  {
+    name: 'chatroom-policy',
+    description: 'Configure chatroom delegation refusal policies',
+    commands: [
+      cmd('set', 'POST', '/chatrooms/refusal-policy', 'Set onRefusal policy for a chatroom', { expectsJsonBody: true }),
+      cmd('simulate', 'PUT', '/chatrooms/refusal-policy', 'Simulate a refusal-handling decision', { expectsJsonBody: true }),
+    ],
+  },
+  {
     name: 'swarmfeed',
     description: 'SwarmFeed social network',
     commands: [

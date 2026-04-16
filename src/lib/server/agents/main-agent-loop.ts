@@ -17,6 +17,7 @@ import { syncMainLoopToRunContext } from '@/lib/server/run-context'
 import { buildExecutionBrief, buildExecutionBriefContextBlock } from '@/lib/server/execution-brief'
 import { cleanText, cleanMultiline } from '@/lib/server/text-normalization'
 import { getGoalById, resolveEffectiveGoal } from '@/lib/server/goals/goal-service'
+import { getMission } from '@/lib/server/missions/mission-repository'
 
 const LEGACY_META_LINE_RE = /\[(?:MAIN_LOOP_META|MAIN_LOOP_PLAN|MAIN_LOOP_REVIEW|AGENT_HEARTBEAT_META|AUTONOMY_TICK)\]\s*(\{[^\n]*\})?/i
 const AUTONOMY_TICK_RE = /\[AUTONOMY_TICK\]\s*(\{[^\n]*\})/i
@@ -513,6 +514,13 @@ function resolveSessionGoalRecord(session: Session | null | undefined): Record<s
     ? String(s.missionId).trim()
     : ''
   if (legacyMissionId) {
+    // Prefer the mission's bound goal (so Initiative/Project ancestry flows in)
+    // over treating the missionId itself as a goal id.
+    const mission = getMission(legacyMissionId)
+    if (mission?.goalId) {
+      const boundGoal = getGoalById(mission.goalId)
+      if (boundGoal) return boundGoal as unknown as Record<string, unknown>
+    }
     const missionGoal = getGoalById(legacyMissionId)
     if (missionGoal) return missionGoal as unknown as Record<string, unknown>
   }

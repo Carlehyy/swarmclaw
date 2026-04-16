@@ -559,6 +559,45 @@ const COMMAND_GROUPS = {
       delete: { description: 'Delete a goal', method: 'DELETE', path: '/goals/:id', params: ['id'] },
     },
   },
+  workspaces: {
+    description: 'Manage logical workspaces (multi-workspace scaffolding)',
+    commands: {
+      list: { description: 'List workspaces', method: 'GET', path: '/workspaces' },
+      create: { description: 'Create a workspace', method: 'POST', path: '/workspaces' },
+      update: { description: 'Update a workspace', method: 'PATCH', path: '/workspaces' },
+      delete: { description: 'Delete a workspace', method: 'DELETE', path: '/workspaces' },
+      active: { description: 'Get the active workspace', method: 'GET', path: '/workspaces/active' },
+      'set-active': { description: 'Set the active workspace', method: 'POST', path: '/workspaces/active' },
+    },
+  },
+  'workflow-states': {
+    description: 'Manage customizable task workflow states',
+    commands: {
+      list: { description: 'List workflow states', method: 'GET', path: '/task-workflow-states' },
+      create: { description: 'Create or update a workflow state', method: 'POST', path: '/task-workflow-states' },
+      delete: { description: 'Delete a workflow state (or pass --query reset=true to restore defaults)', method: 'DELETE', path: '/task-workflow-states' },
+    },
+  },
+  'config-versions': {
+    description: 'Inspect and restore configuration version history',
+    commands: {
+      list: { description: 'List versions for an entity (--query entityKind=agent,entityId=...)', method: 'GET', path: '/config-versions' },
+      restore: { description: 'Restore an entity to a prior version', method: 'POST', path: '/config-versions/restore' },
+    },
+  },
+  'cost-attribution': {
+    description: 'Aggregate cost by billing-code tags',
+    commands: {
+      'by-code': { description: 'Roll up cost by billing code (--query codes=foo,bar,range=7d)', method: 'GET', path: '/usage/by-code' },
+    },
+  },
+  'chatroom-policy': {
+    description: 'Configure chatroom delegation refusal policies',
+    commands: {
+      set: { description: 'Set onRefusal policy for a chatroom', method: 'POST', path: '/chatrooms/refusal-policy' },
+      simulate: { description: 'Simulate a refusal-handling decision', method: 'PUT', path: '/chatrooms/refusal-policy' },
+    },
+  },
   missions: {
     description: 'Manage autonomous missions',
     commands: {

@@ -16,6 +16,7 @@ import {
   saveAgent,
 } from '@/lib/server/agents/agent-repository'
 import { logActivity } from '@/lib/server/activity/activity-log'
+import { snapshotVersion } from '@/lib/server/config-versions/config-version-repository'
 import { getAgentSpendWindows } from '@/lib/server/cost'
 import { serviceFail, serviceOk } from '@/lib/server/service-result'
 import { listSessions, saveSession } from '@/lib/server/sessions/session-repository'
@@ -205,8 +206,10 @@ export function createAgent(input: {
 }
 
 export function updateAgent(agentId: string, body: Record<string, unknown>): Agent | null {
+  let preUpdateSnapshot: Agent | null = null
   const updated = patchAgent(agentId, (current) => {
     if (!current) return null
+    if (!preUpdateSnapshot) preUpdateSnapshot = current
     if (body.projectId === undefined && Array.isArray(body.projectIds) && body.projectIds.length > 0) {
       const first = body.projectIds[0]
       if (typeof first === 'string' && first.trim()) {
@@ -316,6 +319,19 @@ export function updateAgent(agentId: string, body: Record<string, unknown>): Age
     return agent as Agent
   })
   if (!updated) return null
+
+  if (preUpdateSnapshot) {
+    try {
+      snapshotVersion({
+        entityKind: 'agent',
+        entityId: agentId,
+        snapshot: preUpdateSnapshot as unknown as Record<string, unknown>,
+        actor: 'user',
+      })
+    } catch (err) {
+      log.warn('agent-service', `Config version snapshot failed for agent ${agentId}: ${err instanceof Error ? err.message : err}`)
+    }
+  }
 
   if (updated.threadSessionId) {
     ensureAgentThreadSession(agentId)

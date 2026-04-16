@@ -110,6 +110,10 @@ export interface Mission {
   endedAt?: number | null
   endReason?: string | null
   templateId?: string | null
+  /** Optional reference to the goal this mission serves (Goal entity). */
+  goalId?: string | null
+  /** Cost attribution tags. Cost rolls up by code in addition to per-mission/per-agent. */
+  billingCodes?: string[]
 }
 
 export const DEFAULT_MISSION_WARN_FRACTIONS = [0.5, 0.8, 0.95]

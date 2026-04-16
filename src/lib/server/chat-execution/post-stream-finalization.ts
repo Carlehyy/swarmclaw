@@ -14,6 +14,7 @@ import { extractSuggestions } from '@/lib/server/suggestions'
 import type { StructuredToolInterface } from '@langchain/core/tools'
 import { estimateCost, buildExtensionDefinitionCosts } from '@/lib/server/cost'
 import { appendUsage } from '@/lib/server/usage/usage-repository'
+import { resolveBillingCodesForSession } from '@/lib/server/usage/resolve-billing-codes'
 import { runCapabilityHook } from '@/lib/server/native-capabilities'
 import {
   shouldForceExternalServiceSummary,
@@ -217,6 +218,7 @@ export async function finalizeStreamResult(opts: FinalizeStreamResultOpts): Prom
       durationMs: Date.now() - startTs,
       agentId: session.agentId || null,
       projectId: session.projectId || null,
+      billingCodes: resolveBillingCodesForSession(session),
       extensionDefinitionCosts,
       extensionInvocations: state.extensionInvocations.length > 0 ? state.extensionInvocations : undefined,
     }

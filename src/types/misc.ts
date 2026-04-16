@@ -54,6 +54,8 @@ export interface UsageRecord {
   durationMs?: number
   agentId?: string | null
   projectId?: string | null
+  /** Billing/attribution tags rolled up into per-code cost reports. */
+  billingCodes?: string[]
   extensionDefinitionCosts?: ExtensionDefinitionCost[]
   extensionInvocations?: ExtensionInvocationRecord[]
 }
@@ -118,6 +120,16 @@ export interface Chatroom {
   archivedAt?: number | null
   protocolRunId?: string | null
   parentChatroomId?: string | null
+  /**
+   * Policy applied when a delegated agent refuses or returns a refusal token.
+   * - reroute: re-run routing (skipping the refusing agent) to pick another candidate
+   * - escalate: bubble to the agent's `escalationTargetAgentId`, falling back to chatroom owner
+   * - human: surface to a human via approval gate
+   * Defaults to `reroute` when unset.
+   */
+  onRefusal?: 'reroute' | 'escalate' | 'human' | null
+  /** Optional human/operator agent id used as the final escalation target. */
+  escalationTargetAgentId?: string | null
   createdAt: number
   updatedAt: number
 }

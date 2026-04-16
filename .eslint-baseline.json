@@ -1,8 +1,8 @@
 {
   "version": 1,
-  "generatedAt": "2026-04-11T14:13:08.813Z",
-  "totalIssues": 359,
-  "uniqueIssues": 123,
+  "generatedAt": "2026-04-16T20:14:49.781Z",
+  "totalIssues": 357,
+  "uniqueIssues": 121,
   "issues": [
     {
       "filePath": "bin/worker-cmd.js",
@@ -549,20 +549,6 @@
       "severity": 2,
       "message": "Unexpected any. Specify a different type.",
       "count": 12
-    },
-    {
-      "filePath": "src/lib/server/portability/import.ts",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "message": "'PortableSchedule' is defined but never used.",
-      "count": 1
-    },
-    {
-      "filePath": "src/lib/server/portability/import.ts",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "message": "'PortableSkill' is defined but never used.",
-      "count": 1
     },
     {
       "filePath": "src/lib/server/protocols/protocol-foreach.ts",

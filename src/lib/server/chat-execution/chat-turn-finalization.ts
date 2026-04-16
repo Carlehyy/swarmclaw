@@ -49,6 +49,7 @@ import {
   replaceAllMessages,
 } from '@/lib/server/messages/message-repository'
 import { appendUsage } from '@/lib/server/usage/usage-repository'
+import { resolveBillingCodesForSession } from '@/lib/server/usage/resolve-billing-codes'
 import { synchronizeWorkingStateForTurn } from '@/lib/server/working-state/service'
 import { notify } from '@/lib/server/ws-hub'
 import { selectKnowledgeCitations } from '@/lib/server/knowledge-sources'
@@ -223,6 +224,7 @@ export async function finalizeChatTurn(params: {
         durationMs,
         agentId: sessionForRun.agentId || null,
         projectId: sessionForRun.projectId || null,
+        billingCodes: resolveBillingCodesForSession(sessionForRun),
       }
       appendUsage(sessionId, usageRecord)
       emit({

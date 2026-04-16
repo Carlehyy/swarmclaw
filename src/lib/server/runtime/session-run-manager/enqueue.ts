@@ -9,6 +9,7 @@ import { isAllEstopEngaged, isAutonomyEstopEngaged } from '@/lib/server/runtime/
 import { isRestartRecoverableSource } from '@/lib/server/runtime/run-ledger'
 import { getActiveSessionProcess } from '@/lib/server/runtime/runtime-state'
 import { checkMissionBudgetForSession } from '@/lib/server/missions/mission-budget-hook'
+import { checkAgentBudgetForSession } from '@/lib/server/agents/agent-budget-hook'
 
 import { cancelPendingForSession } from './cancellation'
 import {
@@ -51,6 +52,7 @@ type SessionToolConfig = {
   tools?: string[] | null
   extensions?: string[] | null
   missionId?: string | null
+  agentId?: string | null
 }
 
 function computeEffectiveRunTimeoutMs(
@@ -117,10 +119,14 @@ export function enqueueSessionRun(
     throw new Error(`Autonomy estop is engaged. New ${source} runs are paused.`)
   }
   if (isAutonomyManagedEnqueue(source, internal)) {
-    const sessionForMission = getSession(input.sessionId) as SessionToolConfig | null
-    const missionVerdict = checkMissionBudgetForSession(sessionForMission?.missionId ?? null)
+    const sessionForBudget = getSession(input.sessionId) as SessionToolConfig | null
+    const missionVerdict = checkMissionBudgetForSession(sessionForBudget?.missionId ?? null)
     if (!missionVerdict.allow) {
       throw new Error(`Mission halted: ${missionVerdict.reason ?? 'budget exhausted'}`)
+    }
+    const agentVerdict = checkAgentBudgetForSession(sessionForBudget?.agentId ?? null)
+    if (!agentVerdict.allow) {
+      throw new Error(`Agent budget exhausted: ${agentVerdict.reason ?? 'budget exhausted'}`)
     }
   }
   const executionKey = typeof input.executionGroupKey === 'string' && input.executionGroupKey.trim()
