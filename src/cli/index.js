@@ -641,6 +641,18 @@ const COMMAND_GROUPS = [
     ],
   },
   {
+    name: 'share',
+    description: 'Public share links for missions, skills, and sessions',
+    commands: [
+      cmd('list', 'GET', '/share', 'List share links (supports --query entityType=mission,entityId=...)'),
+      cmd('mint', 'POST', '/share', 'Mint a new share link', { expectsJsonBody: true }),
+      cmd('get', 'GET', '/share/:id', 'Get a share link by id'),
+      cmd('revoke', 'DELETE', '/share/:id', 'Revoke a share link'),
+      cmd('resolve', 'GET', '/s/:token', 'Resolve a public share token to its scrubbed payload'),
+      cmd('raw', 'GET', '/s/:token/raw', 'Fetch the raw markdown body for a share token (skill/mission/session)'),
+    ],
+  },
+  {
     name: 'skills',
     description: 'Manage reusable skills',
     commands: [

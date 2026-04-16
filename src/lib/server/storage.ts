@@ -182,6 +182,7 @@ const COLLECTIONS = [
   'agent_missions',
   'mission_reports',
   'agent_mission_events',
+  'share_links',
 ] as const
 
 export type StorageCollection = (typeof COLLECTIONS)[number]

@@ -399,6 +399,15 @@ Operational docs: https://swarmclaw.ai/docs/observability
 
 ## Releases
 
+### v1.5.59 Highlights
+
+Viral-loop release. Adds public share links for missions, skills, and sessions, plus a complementary raw-markdown endpoint so any shared skill installs directly through the existing `POST /api/skills/import`.
+
+- **Share links for missions, skills, and sessions.** New `share_links` collection in `src/lib/server/storage.ts` plus `src/lib/server/sharing/share-link-repository.ts`. `POST /api/share { entityType, entityId, expiresInSec?, label? }` mints a cryptographically random 32-char base64url token; `GET /api/share` lists; `GET /api/share/:id` fetches; `DELETE /api/share/:id` revokes (pass `?hard=true` to hard-delete). CLI: `swarmclaw share {list,mint,get,revoke,resolve,raw}`.
+- **Public read endpoints (no auth required).** `GET /api/s/:token` returns the scrubbed JSON payload; `GET /api/s/:token/raw` returns plain markdown (skills return their SKILL.md verbatim, missions render as title + goal + criteria + milestones, sessions as a transcript). Revoked and expired tokens return `404 Not found` without leaking shape information. `GET /s/:token` is a server-rendered page for dropping straight into a browser.
+- **Share-link-based skill install.** `POST /api/skills/import` already accepts an http(s) URL; pointing it at `https://<your-host>/api/s/<token>/raw` now installs a shared skill from another SwarmClaw instance without auth handshakes. Pairs naturally with existing `swarmclaw skills import` CLI.
+- **Share-link repository tests.** `share-link-repository.test.ts` covers mint / list / revoke / lookup-by-token round-trip plus expiry handling against a temporary data dir.
+
 ### v1.5.58 Highlights
 
 This release broadens the built-in evaluation harness so SwarmClaw runs can be benchmarked against named suites, adds two targeted starter kits, exposes live per-session cost data, tightens auto-skill drafting, and ships a zero-setup demo mission template.
@@ -437,14 +446,6 @@ This release closes the org-orchestration feature gap with Paperclip while keepi
 - **Fix: `PUT /api/tasks/:id` now validates its body with a Zod schema.** Same class of bug: a numeric `title` silently corrupted the stored field. Added `TaskUpdateSchema = TaskCreateSchema.partial().extend({...})` with the update-only fields (`appendComment`, `result`, `error`, lifecycle timestamps) and the same raw-key filter pattern. Bad types now 400 with untouched storage.
 - **Fix: `PUT /api/webhooks/:id` now validates its body with a Zod schema.** Previously `{"events": "not_an_array"}` wiped the events list. Added `WebhookUpdateSchema` and explicit `rawKeys.has(...)` guards in the mutate closure so only fields actually present in the body are applied.
 - **Fix: classifier JSON no longer leaks into assistant responses.** Some Ollama / Ollama Cloud turns were emitting the internal `MessageClassification` object directly into the stream (e.g. `{"taskIntent":"research",...}` prepended to the real reply). The existing stripper only matched when `isDeliverableTask` was the first key, so leaks starting with `taskIntent` sailed through to the user. Replaced the regex with a principled detector that brace-matches candidate JSON (string-quote aware) and validates against `MessageClassificationSchema.safeParse` — the schema itself is the source of truth, so future schema changes can't break detection.
-
-### v1.5.54 Highlights
-
-- **Mission templates library**: the `/missions` page now opens with a curated gallery of starter missions. Each template pre-wires a goal, success criteria, USD / token / turn / wallclock budgets, and a report cadence, so non-technical users can install a working autonomous run in one click. Initial lineup: Daily News Digest, Inbox Triage, Competitor Watch, Weekly Research Report, Social Listener, and Customer Support Triage. Setup notes flag any connector or permission prerequisites before installation. Power-user overrides (budget caps, success criteria, report cadence) live behind a collapsed **Advanced Settings** panel so the default install flow stays one click.
-- **New API routes `GET /api/missions/templates` and `POST /api/missions/templates/:id/instantiate`** with matching CLI commands `swarmclaw missions templates` and `swarmclaw missions instantiate`. Installed missions persist a `templateId` so the origin is traceable for future template-update flows; legacy missions normalize to `templateId: null` on load, no data migration required.
-- **Fix: user-selected provider and model now survive the chat execution pipeline** ([#51](https://github.com/swarmclawai/swarmclaw/pull/51), thanks to [@borislavnnikolov](https://github.com/borislavnnikolov)). Switching provider or model via the inspector panel mid-session was being reverted on every turn because the agent's configured route was unconditionally reapplied in three places. `syncSessionFromAgent` now only syncs credentials / endpoint / fallbacks when the session's provider still matches the route provider, `prepareChatTurn` preserves the user's chosen model after applying the route, and `updateChatSession` auto-resolves a stored credential for the new provider (and clears the stale `apiEndpoint`) when provider changes without an explicit `credentialId`. Restores reliable switching between Copilot CLI, Codex CLI, Groq, and OpenAI-compatible providers.
-
-> **Note:** v1.5.53 release notes described the mission templates library, but the feature commit landed after the v1.5.53 tag was cut. v1.5.54 is the release that actually ships it.
 
 Older releases: https://swarmclaw.ai/docs/release-notes
 
