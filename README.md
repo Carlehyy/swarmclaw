@@ -399,6 +399,12 @@ Operational docs: https://swarmclaw.ai/docs/observability
 
 ## Releases
 
+### v1.5.52 Highlights
+
+- **Session X-Ray now surfaces the backend execution log** ([#48](https://github.com/swarmclawai/swarmclaw/pull/48), thanks to [@borislavnnikolov](https://github.com/borislavnnikolov)). The debug panel fetches entries from the SQLite execution log on open and merges them with in-memory message events, sorted by time. Expandable entries show provider, model, stream errors, duration, and token counts — the info that was previously invisible when Ollama or other local-model runs failed silently. A new **Tools** filter tab, an `exec` badge for log-sourced entries, an entry count in the stats bar, and a Refresh button round it out. New API route `GET /api/chats/:id/execution-log` with `limit`, `since`, and `category` query params, registered in the CLI manifest as `swarmclaw chats execution-log`.
+- **Execution errors now captured in the log** ([#48](https://github.com/swarmclawai/swarmclaw/pull/48)). `finalizeChatTurn()` writes a structured `error` entry to the execution log on terminal failure, recording provider, model, stream errors, duration, token counts, and whether a response was produced — so the Session X-Ray above actually has something to show.
+- **Fix: blank task-sheet no longer shows `"null"` under *Blocked By*** ([#47](https://github.com/swarmclawai/swarmclaw/pull/47), thanks to [@borislavnnikolov](https://github.com/borislavnnikolov)). A successful task create/update returns `error: null`, and the old `'error' in res` guard treated that as a truthy error and rendered `String(null)` as a red "null" string under the Blocked By field. Now only non-empty string errors trigger the UI, and `depError` is cleared on dialog close so stale state cannot leak across re-opens.
+
 ### v1.5.51 Highlights
 
 - **Desktop app now actually opens and renders on macOS**: packaged builds were broken in v1.5.50 by a stack of independent issues that each masked the next. This release unblocks the cold-boot path end to end. Measured cold-boot time on a populated install: ~1 second to first `/api/healthz` response, down from a hard 60-second timeout.
