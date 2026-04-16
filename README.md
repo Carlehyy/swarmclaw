@@ -81,8 +81,11 @@ Extension tutorial: https://swarmclaw.ai/docs/extension-tutorial
 Download the one-click installer from [swarmclaw.ai/downloads](https://swarmclaw.ai/downloads).
 Available for macOS (Apple Silicon & Intel), Windows, and Linux (AppImage + .deb).
 
-Current builds are unsigned, so on first launch:
-- **macOS:** right-click the app in Finder → **Open** → **Open** to bypass Gatekeeper.
+Current builds are ad-hoc signed but not notarized, so on first launch:
+- **macOS:** right-click the app in Finder → **Open** → **Open** to bypass Gatekeeper. If macOS instead reports *"SwarmClaw is damaged and can't be opened"* (common on Apple Silicon when the dmg was quarantined by Safari), strip the quarantine attribute and relaunch:
+  ```bash
+  xattr -dr com.apple.quarantine /Applications/SwarmClaw.app
+  ```
 - **Windows:** if SmartScreen appears, click **More info** → **Run anyway**.
 - **Linux (AppImage):** `chmod +x` the downloaded file, then run it.
 
@@ -395,6 +398,18 @@ If you need a trace-specific endpoint, set `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` 
 Operational docs: https://swarmclaw.ai/docs/observability
 
 ## Releases
+
+### v1.5.51 Highlights
+
+- **Desktop app now actually opens and renders on macOS**: packaged builds were broken in v1.5.50 by a stack of independent issues that each masked the next. This release unblocks the cold-boot path end to end. Measured cold-boot time on a populated install: ~1 second to first `/api/healthz` response, down from a hard 60-second timeout.
+  - Ad-hoc code signing (`identity: '-'`) via a new `scripts/electron-after-pack.cjs` hook that runs `codesign --sign - --force --deep` after electron-builder packages the bundle. The bundle identifier is now sealed as `ai.swarmclaw.desktop` with all 74k resources sealed, so quarantined dmgs surface as "unidentified developer" (right-click → Open) instead of the more confusing "damaged" error.
+  - Per-architecture native module sync: the afterPack hook copies `better-sqlite3`, `@mongodb-js/zstd`, `node-liblzma`, and `utf-8-validate` `.node` binaries from the electron-builder-rebuilt root `node_modules` into the packaged `.next/standalone/node_modules`. Without this, the standalone server hit `ERR_DLOPEN_FAILED: NODE_MODULE_VERSION 137` on launch because Next.js's output-tracing copied the Node-ABI build of better-sqlite3 into standalone while electron-builder only rebuilt the root tree for Electron's ABI.
+  - `scripts/run-next-build.mjs` now copies `mdn-data` (used by `css-tree` via `jsdom`) into standalone alongside the existing `css-tree/data` patch, so pages that depend on it don't 500 with `Cannot find module 'mdn-data/css/at-rules.json'`.
+  - `isomorphic-dompurify` replaced by the browser-only `dompurify` in `agent-avatar.tsx`. The isomorphic wrapper was pulling `jsdom`'s ESM-only `@exodus/bytes` dep into every server bundle the avatar was referenced from, which blew up SSR under Electron 33 (Node 20.18) with `ERR_REQUIRE_ESM` on every page.
+  - Session-consolidation migrations, `initWsServer`, and `ensureDaemonStarted` moved into a `setImmediate` deferred block in `src/instrumentation.ts` so Next.js can bind the HTTP listener before per-install work runs.
+- **App icon fixed**: the Dock no longer shows Electron's default `exec` placeholder. `scripts/gen-icons.mjs` generates `resources/icon.icns`, `resources/icon.ico`, and `resources/icon.png` from `public/branding/swarmclaw-org-avatar.png`; the main process sets the Dock icon at launch and passes it to every `BrowserWindow`.
+- **Embedded server log file + improved failure dialog**: the Electron wrapper now tees the child Next.js server's stdout/stderr into `<userData>/logs/server.log` (`~/Library/Application Support/@swarmclawai/swarmclaw/logs/server.log` on macOS, 1 MB rotation). If startup fails or the server exits, the error dialog shows the tail of the log inline and exposes an **Open Logs Folder** button that jumps Finder straight to the file. This is what made root-cause debugging possible in the first place — if you hit any kind of regression here, grab that log and open an issue.
+- **Embedded server timeout raised from 60s to 5 minutes**: a safety net. On a healthy install the server is up in about a second; 300 seconds is there for pathological cold boots (very large data dirs, contested Apple Silicon Gatekeeper verification on unsigned binaries, etc.) and should never be hit in normal use.
 
 ### v1.5.50 Highlights
 

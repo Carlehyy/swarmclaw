@@ -9,8 +9,13 @@ const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'
 
 const args = new Set(process.argv.slice(2))
 const skipNext = args.has('--skip-next')
-const skipRebuild = args.has('--skip-rebuild')
 const publishAlways = args.has('--publish')
+// --skip-rebuild accepted for backwards compat; electron-builder + the
+// afterPack hook (scripts/electron-after-pack.cjs) now handle native module
+// ABI per-architecture so there is no pre-package rebuild step to skip.
+if (args.has('--skip-rebuild')) {
+  // no-op
+}
 const platformFlag = args.has('--mac') ? '--mac'
   : args.has('--win') ? '--win'
   : args.has('--linux') ? '--linux'
@@ -67,23 +72,11 @@ if (fs.existsSync(publicDir)) {
   copyDir(publicDir, standalonePublic)
 }
 
-if (!skipRebuild) {
-  console.log('[build-electron] rebuilding native modules for Electron ABI…')
-  const standaloneNodeModules = path.join(standaloneDir, 'node_modules')
-  if (fs.existsSync(path.join(standaloneNodeModules, 'better-sqlite3'))) {
-    run('npx', [
-      '--no-install',
-      'electron-rebuild',
-      '-f',
-      '-w',
-      'better-sqlite3',
-      '--module-dir',
-      standaloneDir,
-    ])
-  } else {
-    console.warn('[build-electron] no better-sqlite3 in standalone node_modules, skipping rebuild')
-  }
-}
+// Native modules inside .next/standalone/node_modules are rebuilt per-arch by
+// the electron-builder afterPack hook (scripts/electron-after-pack.cjs), which
+// runs electron-rebuild against the packaged .app's copy of standalone/. Doing
+// it here would only rebuild once for the host arch and be overwritten during
+// packaging anyway.
 
 console.log('[build-electron] running electron-builder…')
 const builderArgs = []

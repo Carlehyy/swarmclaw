@@ -164,14 +164,27 @@ export function repairStandaloneCssTreeData(cwd = process.cwd()) {
   const standaloneDir = path.join(cwd, '.next', 'standalone')
   if (!fs.existsSync(standaloneDir)) return false
 
-  const dataDst = path.join(standaloneDir, 'node_modules', 'css-tree', 'data')
-  if (fs.existsSync(dataDst)) return false
+  let repaired = false
 
-  const dataSrc = path.join(cwd, 'node_modules', 'css-tree', 'data')
-  if (!fs.existsSync(dataSrc)) return false
+  const cssTreeDst = path.join(standaloneDir, 'node_modules', 'css-tree', 'data')
+  const cssTreeSrc = path.join(cwd, 'node_modules', 'css-tree', 'data')
+  if (!fs.existsSync(cssTreeDst) && fs.existsSync(cssTreeSrc)) {
+    fs.cpSync(cssTreeSrc, cssTreeDst, { recursive: true, force: true })
+    repaired = true
+  }
 
-  fs.cpSync(dataSrc, dataDst, { recursive: true, force: true })
-  return true
+  // css-tree's CJS entry calls require('mdn-data/css/*.json') at load time,
+  // and Next's output-tracing does not pull the raw JSON data files into the
+  // standalone tree. Copy them in so jsdom (via css-tree) loads correctly
+  // under the packaged app.
+  const mdnDataDst = path.join(standaloneDir, 'node_modules', 'mdn-data')
+  const mdnDataSrc = path.join(cwd, 'node_modules', 'mdn-data')
+  if (!fs.existsSync(mdnDataDst) && fs.existsSync(mdnDataSrc)) {
+    fs.cpSync(mdnDataSrc, mdnDataDst, { recursive: true, force: true })
+    repaired = true
+  }
+
+  return repaired
 }
 
 export function repairStandaloneNextMetadata(cwd = process.cwd()) {

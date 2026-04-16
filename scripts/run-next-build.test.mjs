@@ -15,6 +15,7 @@ import {
   hasTraceCopyWarning,
   mergeNodeOptions,
   readCgroupMemoryLimitBytes,
+  repairStandaloneCssTreeData,
   repairStandaloneNextMetadata,
   resolveNextBuildMaxOldSpaceSizeMb,
 } from './run-next-build.mjs'
@@ -174,6 +175,28 @@ describe('run-next-build', () => {
         () => repairStandaloneNextMetadata(tempDir),
         /Missing required Next metadata runtime files/,
       )
+    } finally {
+      fs.rmSync(tempDir, { recursive: true, force: true })
+    }
+  })
+
+  it('repairStandaloneCssTreeData copies mdn-data JSON files into standalone output', () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'swarmclaw-css-tree-'))
+    try {
+      fs.mkdirSync(path.join(tempDir, '.next', 'standalone'), { recursive: true })
+      const cssTreeSrc = path.join(tempDir, 'node_modules', 'css-tree', 'data')
+      const mdnDataSrc = path.join(tempDir, 'node_modules', 'mdn-data', 'css')
+      fs.mkdirSync(cssTreeSrc, { recursive: true })
+      fs.mkdirSync(mdnDataSrc, { recursive: true })
+      fs.writeFileSync(path.join(cssTreeSrc, 'patch.json'), '{}')
+      fs.writeFileSync(path.join(mdnDataSrc, 'at-rules.json'), '{"@media":{}}')
+
+      const repaired = repairStandaloneCssTreeData(tempDir)
+      assert.equal(repaired, true)
+
+      const standaloneNm = path.join(tempDir, '.next', 'standalone', 'node_modules')
+      assert.equal(fs.existsSync(path.join(standaloneNm, 'css-tree', 'data', 'patch.json')), true)
+      assert.equal(fs.existsSync(path.join(standaloneNm, 'mdn-data', 'css', 'at-rules.json')), true)
     } finally {
       fs.rmSync(tempDir, { recursive: true, force: true })
     }
