@@ -817,6 +817,8 @@ const COMMAND_GROUPS = [
       cmd('reports', 'GET', '/missions/:id/reports', 'List mission reports'),
       cmd('report-now', 'POST', '/missions/:id/reports', 'Force-generate a mission report now'),
       cmd('events', 'GET', '/missions/:id/events', 'List mission events (use --query sinceAt=..., --query untilAt=...)'),
+      cmd('templates', 'GET', '/missions/templates', 'List built-in mission templates'),
+      cmd('instantiate', 'POST', '/missions/templates/:id/instantiate', 'Create a mission from a template', { expectsJsonBody: true }),
     ],
   },
   {

@@ -1,5 +1,5 @@
 import crypto from 'crypto'
-import type { Mission, MissionBudget, MissionReportSchedule, MissionStatus } from '@/types'
+import type { Mission, MissionBudget, MissionReportSchedule, MissionStatus, MissionTemplate } from '@/types'
 import { DEFAULT_MISSION_WARN_FRACTIONS } from '@/types'
 import { hmrSingleton } from '@/lib/shared-utils'
 import { log } from '@/lib/server/logger'
@@ -11,6 +11,7 @@ import {
   patchMission,
   upsertMission,
 } from './mission-repository'
+import { getMissionTemplate } from './mission-templates'
 
 const TAG = 'mission-service'
 
@@ -59,6 +60,7 @@ export interface CreateMissionInput {
   budget?: Partial<MissionBudget>
   reportSchedule?: MissionReportSchedule | null
   reportConnectorIds?: string[]
+  templateId?: string | null
 }
 
 function newMissionId(): string {
@@ -82,6 +84,9 @@ function sanitizeBudget(input: Partial<MissionBudget> = {}): MissionBudget {
 
 export function createMission(input: CreateMissionInput): Mission {
   const now = Date.now()
+  const templateId = typeof input.templateId === 'string' && input.templateId.trim()
+    ? input.templateId.trim().slice(0, 64)
+    : null
   const mission: Mission = {
     id: newMissionId(),
     title: input.title.trim(),
@@ -106,10 +111,51 @@ export function createMission(input: CreateMissionInput): Mission {
     reportConnectorIds: input.reportConnectorIds ?? [],
     createdAt: now,
     updatedAt: now,
+    templateId,
   }
   upsertMission(mission)
   log.info(TAG, `Created mission ${mission.id} (goal: ${mission.goal.slice(0, 80)})`)
   return mission
+}
+
+export interface CreateMissionFromTemplateInput {
+  templateId: string
+  rootSessionId: string
+  overrides?: {
+    title?: string
+    goal?: string
+    successCriteria?: string[]
+    budget?: Partial<MissionBudget>
+    reportSchedule?: MissionReportSchedule | null
+    agentIds?: string[]
+    reportConnectorIds?: string[]
+  }
+}
+
+export interface CreateMissionFromTemplateResult {
+  mission: Mission
+  template: MissionTemplate
+}
+
+export function createMissionFromTemplate(input: CreateMissionFromTemplateInput): CreateMissionFromTemplateResult | null {
+  const template = getMissionTemplate(input.templateId)
+  if (!template) return null
+  const overrides = input.overrides ?? {}
+  const mergedBudget: Partial<MissionBudget> = { ...template.defaults.budget, ...(overrides.budget ?? {}) }
+  const mission = createMission({
+    title: overrides.title?.trim() || template.defaults.title,
+    goal: overrides.goal?.trim() || template.defaults.goal,
+    successCriteria: overrides.successCriteria ?? template.defaults.successCriteria,
+    rootSessionId: input.rootSessionId,
+    agentIds: overrides.agentIds ?? [],
+    budget: mergedBudget,
+    reportSchedule: overrides.reportSchedule === undefined
+      ? template.defaults.reportSchedule
+      : overrides.reportSchedule,
+    reportConnectorIds: overrides.reportConnectorIds ?? [],
+    templateId: template.id,
+  })
+  return { mission, template }
 }
 
 function applyStatusTransition(

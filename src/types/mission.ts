@@ -109,7 +109,34 @@ export interface Mission {
   startedAt?: number | null
   endedAt?: number | null
   endReason?: string | null
+  templateId?: string | null
 }
 
 export const DEFAULT_MISSION_WARN_FRACTIONS = [0.5, 0.8, 0.95]
 export const MISSION_MILESTONE_TAIL_CAP = 200
+
+export type MissionTemplateCategory =
+  | 'research'
+  | 'communication'
+  | 'monitoring'
+  | 'productivity'
+  | 'support'
+
+export interface MissionTemplateDefaults {
+  title: string
+  goal: string
+  successCriteria: string[]
+  budget: MissionBudget
+  reportSchedule: MissionReportSchedule | null
+}
+
+export interface MissionTemplate {
+  id: string
+  name: string
+  description: string
+  icon: string
+  category: MissionTemplateCategory
+  tags: string[]
+  setupNote?: string | null
+  defaults: MissionTemplateDefaults
+}

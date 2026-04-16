@@ -571,6 +571,8 @@ const COMMAND_GROUPS = {
       reports: { description: 'List mission reports', method: 'GET', path: '/missions/:id/reports', params: ['id'] },
       'report-now': { description: 'Force-generate a mission report now', method: 'POST', path: '/missions/:id/reports', params: ['id'] },
       events: { description: 'List mission events', method: 'GET', path: '/missions/:id/events', params: ['id'] },
+      templates: { description: 'List built-in mission templates', method: 'GET', path: '/missions/templates' },
+      instantiate: { description: 'Create a mission from a template', method: 'POST', path: '/missions/templates/:id/instantiate', params: ['id'], body: true },
     },
   },
 }

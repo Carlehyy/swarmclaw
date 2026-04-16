@@ -458,6 +458,12 @@ function normalizeStoredAgentMissionRecord(value: unknown): unknown {
   if (mission.endedAt === undefined) mission.endedAt = null
   if (mission.endReason === undefined) mission.endReason = null
 
+  if (typeof mission.templateId === 'string' && mission.templateId.trim()) {
+    mission.templateId = mission.templateId.trim().slice(0, 64)
+  } else {
+    mission.templateId = null
+  }
+
   return mission
 }
 

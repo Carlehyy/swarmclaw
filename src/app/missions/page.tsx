@@ -5,7 +5,12 @@ import { api } from '@/lib/app/api-client'
 import { MainContent } from '@/components/layout/main-content'
 import { HintTip } from '@/components/shared/hint-tip'
 import { inputClass } from '@/components/shared/form-styles'
-import type { Mission, MissionReport, MissionEvent, Session } from '@/types'
+import { MissionTemplateGallery } from '@/components/missions/mission-template-gallery'
+import {
+  MissionTemplateInstallDialog,
+  type InstantiateInput,
+} from '@/components/missions/mission-template-install-dialog'
+import type { Mission, MissionReport, MissionEvent, MissionTemplate, Session } from '@/types'
 import { toast } from 'sonner'
 
 const POLL_MS = 4_000
@@ -489,6 +494,9 @@ export default function MissionsPage() {
   const [createOpen, setCreateOpen] = useState(false)
   const [busy, setBusy] = useState(false)
   const [loaded, setLoaded] = useState(false)
+  const [templates, setTemplates] = useState<MissionTemplate[]>([])
+  const [galleryOpen, setGalleryOpen] = useState(false)
+  const [installTemplate, setInstallTemplate] = useState<MissionTemplate | null>(null)
 
   const selected = useMemo(() => missions.find((m) => m.id === selectedId) ?? null, [missions, selectedId])
 
@@ -534,7 +542,15 @@ export default function MissionsPage() {
     api<Session[]>('GET', '/chats').then((s) => {
       setSessions(Array.isArray(s) ? s : Object.values(s))
     }).catch(() => setSessions([]))
-  }, [createOpen])
+  }, [createOpen, galleryOpen, installTemplate])
+
+  useEffect(() => {
+    let cancelled = false
+    api<MissionTemplate[]>('GET', '/missions/templates')
+      .then((list) => { if (!cancelled) setTemplates(Array.isArray(list) ? list : []) })
+      .catch(() => { if (!cancelled) setTemplates([]) })
+    return () => { cancelled = true }
+  }, [])
 
   const handleAction = useCallback(async (action: string, reason?: string) => {
     if (!selectedId) return
@@ -571,28 +587,60 @@ export default function MissionsPage() {
     toast.success(`Mission "${created.title}" created`)
   }, [refreshList])
 
+  const handleInstallTemplate = useCallback(async (template: MissionTemplate, input: InstantiateInput) => {
+    const result = await api<{ mission: Mission }>(
+      'POST',
+      `/missions/templates/${encodeURIComponent(template.id)}/instantiate`,
+      input,
+    )
+    await refreshList()
+    setSelectedId(result.mission.id)
+    setGalleryOpen(false)
+    toast.success(`Mission "${result.mission.title}" installed`)
+  }, [refreshList])
+
   return (
     <MainContent>
       <div className="flex-1 flex min-h-0">
         <div className="w-[340px] shrink-0 border-r border-white/[0.06] flex flex-col min-h-0">
-          <div className="p-3 border-b border-white/[0.06] flex items-center justify-between">
-            <div>
-              <div className="text-[13px] font-600">Missions</div>
-              <div className="text-[10px] text-text-3">Autonomous goal-driven runs</div>
+          <div className="p-3 border-b border-white/[0.06]">
+            <div className="flex items-center justify-between mb-2">
+              <div>
+                <div className="text-[13px] font-600">Missions</div>
+                <div className="text-[10px] text-text-3">Autonomous goal-driven runs</div>
+              </div>
+              <button
+                onClick={() => setCreateOpen(true)}
+                className="text-[11px] font-600 px-2.5 py-1 rounded border border-emerald-500/30 bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/15"
+              >
+                + New
+              </button>
             </div>
-            <button
-              onClick={() => setCreateOpen(true)}
-              className="text-[11px] font-600 px-2.5 py-1 rounded border border-emerald-500/30 bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/15"
-            >
-              + New
-            </button>
+            {templates.length > 0 && (
+              <button
+                onClick={() => setGalleryOpen(true)}
+                className="w-full text-left text-[11px] font-600 px-2.5 py-1.5 rounded border border-white/[0.08] bg-white/[0.02] text-text-3 hover:border-white/[0.16] hover:text-text"
+              >
+                Browse {templates.length} starter templates →
+              </button>
+            )}
           </div>
           <div className="flex-1 overflow-y-auto p-2 flex flex-col gap-1.5">
             {!loaded ? (
               <div className="text-[11px] text-text-3 p-3">Loading...</div>
             ) : missions.length === 0 ? (
-              <div className="text-[11px] text-text-3 p-3">
-                No missions yet. Click <span className="text-emerald-300 font-600">+ New</span> to start an autonomous run.
+              <div className="flex flex-col gap-2 p-3">
+                <div className="text-[11px] text-text-3">
+                  No missions yet. Start from a template or create one from scratch.
+                </div>
+                {templates.length > 0 && (
+                  <button
+                    onClick={() => setGalleryOpen(true)}
+                    className="text-[11px] font-600 px-2.5 py-1 rounded border border-emerald-500/30 bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/15 self-start"
+                  >
+                    Open template gallery
+                  </button>
+                )}
               </div>
             ) : (
               missions.map((m) => (
@@ -616,6 +664,13 @@ export default function MissionsPage() {
               onAction={handleAction}
               onForceReport={handleForceReport}
             />
+          ) : loaded && missions.length === 0 && templates.length > 0 ? (
+            <div className="p-6">
+              <MissionTemplateGallery
+                templates={templates}
+                onInstall={(t) => setInstallTemplate(t)}
+              />
+            </div>
           ) : (
             <div className="flex items-center justify-center h-full text-text-3 text-[12px]">
               {loaded && missions.length === 0 ? 'Create a mission to get started.' : 'Select a mission'}
@@ -629,6 +684,34 @@ export default function MissionsPage() {
         sessions={sessions}
         onClose={() => setCreateOpen(false)}
         onCreate={handleCreate}
+      />
+
+      {galleryOpen && (
+        <div
+          className="fixed inset-0 z-40 flex items-center justify-center bg-black/60 p-4"
+          onClick={() => setGalleryOpen(false)}
+        >
+          <div
+            className="w-full max-w-4xl max-h-[90vh] overflow-y-auto rounded-[14px] border border-white/[0.08] bg-bg shadow-[0_24px_64px_rgba(0,0,0,0.6)] p-6"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-4">
+              <div className="text-[15px] font-700 text-text">Mission templates</div>
+              <button onClick={() => setGalleryOpen(false)} className="text-text-3 text-[12px] hover:text-text">Close</button>
+            </div>
+            <MissionTemplateGallery
+              templates={templates}
+              onInstall={(t) => setInstallTemplate(t)}
+            />
+          </div>
+        </div>
+      )}
+
+      <MissionTemplateInstallDialog
+        template={installTemplate}
+        sessions={sessions}
+        onClose={() => setInstallTemplate(null)}
+        onInstall={handleInstallTemplate}
       />
     </MainContent>
   )
