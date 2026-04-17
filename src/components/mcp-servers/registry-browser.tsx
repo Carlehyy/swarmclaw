@@ -11,8 +11,7 @@
  */
 
 import { useEffect, useState } from 'react'
-
-const REGISTRY_API = 'https://swarmdock-api.onrender.com/api/v1/mcp/servers'
+import { api } from '@/lib/app/api-client'
 
 export interface RegistryPrefill {
   name: string
@@ -100,10 +99,8 @@ export function RegistryBrowser({
       setError(null)
       try {
         const qs = query ? `?q=${encodeURIComponent(query)}&limit=20` : '?limit=20'
-        const res = await fetch(`${REGISTRY_API}${qs}`)
-        if (!res.ok) throw new Error(`Registry returned ${res.status}`)
-        const data = await res.json() as { servers: RegistryServer[] }
-        if (!cancelled) setServers(data.servers)
+        const data = await api<{ servers: RegistryServer[] }>('GET', `/mcp-registry${qs}`)
+        if (!cancelled) setServers(data.servers ?? [])
       } catch (err) {
         if (!cancelled) setError(err instanceof Error ? err.message : 'Failed to load registry')
       } finally {
@@ -120,9 +117,7 @@ export function RegistryBrowser({
   const handleSelect = async (slug: string) => {
     setSelecting(slug)
     try {
-      const res = await fetch(`${REGISTRY_API}/${encodeURIComponent(slug)}`)
-      if (!res.ok) throw new Error(`Server detail returned ${res.status}`)
-      const detail = await res.json() as RegistryDetail
+      const detail = await api<RegistryDetail>('GET', `/mcp-registry/${encodeURIComponent(slug)}`)
       const prefill = installToPrefill(detail)
       if (!prefill) {
         setError('This server has no installation method SwarmClaw can consume yet.')

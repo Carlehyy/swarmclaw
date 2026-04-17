@@ -373,6 +373,14 @@ const COMMAND_GROUPS = [
     ],
   },
   {
+    name: 'mcp-registry',
+    description: 'Browse the public SwarmDock MCP Registry',
+    commands: [
+      cmd('search', 'GET', '/mcp-registry', 'Search registry servers (supports --query q=postgres,limit=20)'),
+      cmd('get', 'GET', '/mcp-registry/:slug', 'Get registry server detail by slug'),
+    ],
+  },
+  {
     name: 'memories',
     description: 'Alias of memory command group',
     aliasFor: 'memory',

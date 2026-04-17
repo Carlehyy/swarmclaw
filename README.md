@@ -399,6 +399,17 @@ Operational docs: https://swarmclaw.ai/docs/observability
 
 ## Releases
 
+### v1.5.65 Highlights
+
+Follow-up hardening on the v1.5.64 work after live-testing the chat-header flows, the MCP connection pool, and the MCP Registry browser. Six concrete bugs fixed in the clear/undo, MCP pool eviction, and registry-browser code paths.
+
+- **`clearChatMessages` now resets `opencodeWebSessionId` too.** The snapshot/undo pair already captured and restored it, but `clear` itself left the stale identifier in place — so a fresh opencode-web turn would resume the conversation the user intended to drop. Paired with a matching default in `storage-normalization.ts` so older session records load with `opencodeWebSessionId: null` instead of `undefined`. Regression covered by `clear-route.test.ts`.
+- **Undo toast no longer writes to the wrong chat.** If the user navigated away after clicking Clear, clicking Undo in the toast would inject restored messages into whatever chat was currently open. `chat-area.tsx` now gates the `setMessages` calls on `selectActiveSessionId === targetSessionId`; same guard added to the compact-complete path.
+- **Background MCP status probes no longer evict the connection pool.** Visiting `/mcp-servers` auto-called `POST /api/mcp-servers/:id/test` for every server, which force-disconnected pooled clients that running agents were using mid-turn. Eviction is now gated behind `?reset=1`, which only the explicit **Re-test** button sends. Regression added to `src/app/api/mcp-servers/route.test.ts`.
+- **SwarmDock MCP Registry browser actually works now.** The upstream `swarmdock-api.onrender.com` endpoint emits no CORS headers, so the in-browser `RegistryBrowser` component always failed with `Failed to fetch`. Added `GET /api/mcp-registry` and `GET /api/mcp-registry/:slug` as server-side proxies and rewired the component to call them. Verified in Chrome: 20 servers load, selecting one prefills the New MCP Server sheet with its recommended install command.
+- **`mcp-registry` CLI group.** New commands `swarmclaw mcp-registry search` and `swarmclaw mcp-registry get <slug>` so CLI workflows can pull from the same proxy.
+- **Prior release's MCP tool-evict-on-transport-failure fix** (cherry-picked from user's local branch): connection-class errors from downstream MCP tools now evict the pool entry for the originating server, so the next turn reconnects fresh instead of retrying through a half-broken transport.
+
 ### v1.5.64 Highlights
 
 Two themes this release. First, **context-window management reaches the chat UI**: a live token-usage meter in every chat header, a one-click LLM-backed compaction that keeps the session alive without nuking history, and a redesigned clear flow with a 30-second undo that restores both transcripts and CLI resume IDs. Second, **MCP token spend is now controllable**: per-server `alwaysExpose` policy, per-agent eager-tool overrides, an in-session `mcp_tool_search` promoter, a long-lived connection pool, a token-cost endpoint per server, and a built-in browser for the public SwarmDock MCP registry.
