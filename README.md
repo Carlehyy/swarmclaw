@@ -399,6 +399,14 @@ Operational docs: https://swarmclaw.ai/docs/observability
 
 ## Releases
 
+### v1.5.63 Highlights
+
+Chatroom fix from @borislavnnikolov: CLI-backed agents (codex-cli, copilot-cli, gemini-cli, and the rest of the `NON_LANGGRAPH_PROVIDER_IDS` set) now work correctly as chatroom members instead of falling through a LangGraph path they cannot run. With the execution path fixed, the worker-only membership blocks are lifted too, so any non-trashed agent can be added to a room.
+
+- **Direct provider runtime for CLI chatroom turns.** `src/app/api/chatrooms/[id]/chat/route.ts` now branches on `NON_LANGGRAPH_PROVIDER_IDS` and calls `provider.handler.streamChat()` directly for CLI-backed agents while keeping the LangGraph `streamAgentChat` path for everything else. Streaming, tool events, and persisted messages all flow through unchanged.
+- **Full member selection.** The create, update, members, session-tool, and UI layers (`src/app/api/chatrooms/route.ts`, `src/app/api/chatrooms/[id]/route.ts`, `src/app/api/chatrooms/[id]/members/route.ts`, `src/lib/server/session-tools/chatroom.ts`, `src/components/chatrooms/chatroom-sheet.tsx`) no longer reject or hide worker-only agents. Any non-trashed agent is eligible.
+- **Regression test.** `src/app/api/chatrooms/[id]/chat/route.test.ts` proves a `codex-cli`-backed chatroom turn bypasses `streamAgentChat`, streams a response through the provider handler, and persists one assistant reply.
+
 ### v1.5.62 Highlights
 
 Hardens parallel sub-agent dispatch with a concurrency cap, a quorum join policy, and a cycle check — so a fan-out can't accidentally saturate providers, melt a mission budget, or wedge the runtime on a delegation loop.
@@ -431,16 +439,6 @@ Viral-loop release. Adds public share links for missions, skills, and sessions, 
 - **Public read endpoints (no auth required).** `GET /api/s/:token` returns the scrubbed JSON payload; `GET /api/s/:token/raw` returns plain markdown (skills return their SKILL.md verbatim, missions render as title + goal + criteria + milestones, sessions as a transcript). Revoked and expired tokens return `404 Not found` without leaking shape information. `GET /s/:token` is a server-rendered page for dropping straight into a browser.
 - **Share-link-based skill install.** `POST /api/skills/import` already accepts an http(s) URL; pointing it at `https://<your-host>/api/s/<token>/raw` now installs a shared skill from another SwarmClaw instance without auth handshakes. Pairs naturally with existing `swarmclaw skills import` CLI.
 - **Share-link repository tests.** `share-link-repository.test.ts` covers mint / list / revoke / lookup-by-token round-trip plus expiry handling against a temporary data dir.
-
-### v1.5.58 Highlights
-
-This release broadens the built-in evaluation harness so SwarmClaw runs can be benchmarked against named suites, adds two targeted starter kits, exposes live per-session cost data, tightens auto-skill drafting, and ships a zero-setup demo mission template.
-
-- **Benchmark-style eval suites.** New `SWEBENCH_LITE_SCENARIOS` and `GAIA_L1_SCENARIOS` in `src/lib/server/eval/scenarios-swebench.ts` and `scenarios-gaia.ts` — curated parallels (not the upstream datasets) sized for a single-agent harness run. The shared `EvalScenario` type now carries an optional `suite: 'core' | 'swe-bench-lite' | 'gaia-l1' | 'tool-use' | 'code-action'` tag. `POST /api/eval/suite` accepts `{ suite: "swe-bench-lite" }` to scope a run. New `GET /api/eval/suites` lists every suite with scenario count, max score, and categories. CLI commands: `swarmclaw eval suites`, and `swarmclaw eval suite` still takes a JSON body now including `suite`. Useful for advertising verifiable numbers against a named benchmark instead of a bespoke scoring rubric.
-- **Two additional starter kits.** `inbox_triage` (single Triager agent over email + memory + documents) and `data_analyst` (single Analyst agent over shell + files + web + documents) join the existing seven kits in `src/lib/setup-defaults.ts`. Both are surfaced on the intent-driven setup path alongside Personal Assistant, Research Copilot, Builder Studio, and Delegate Team.
-- **Live per-session usage API.** New `GET /api/usage/live?sessionId=...` returns a lightweight snapshot — records, tokens in/out, estimated cost, firstAt/lastAt, wallclockMs, turns — so frontends can surface a live cost meter without pulling the full aggregated `/api/usage` payload. Without a `sessionId` the route returns the ten most recently active sessions. Registered in the CLI as `swarmclaw usage live`.
-- **Auto-skill drafting is stricter and rate-limited.** `shouldAutoDraftSkillSuggestion` in `chat-turn-finalization.ts` now requires at least 3 tool events in the completed turn (was 1), and a new per-agent daily cap limits automatic drafts to 3 per day per agent to prevent suggestion-inbox spam. Both thresholds are named constants (`AUTO_DRAFT_MIN_TOOL_EVENTS`, `AUTO_DRAFT_DAILY_LIMIT`). Agents with `autoDraftSkillSuggestions = false` are unaffected (auto-drafting remains opt-in per agent).
-- **Hello World demo mission template.** New `hello-world-demo` entry in `BUILT_IN_MISSION_TEMPLATES` — a bounded, zero-setup mission that reads three files in the working directory and writes a one-paragraph markdown summary to `hello-world-report.md`. Budgets (USD 0.25, 20k tokens, 30 turns, 15 min) are small enough to run on a local Ollama model without cost. Intended as the first thing a new user watches an agent complete end to end.
 
 Older releases: https://swarmclaw.ai/docs/release-notes
 
