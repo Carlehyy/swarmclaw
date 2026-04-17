@@ -132,3 +132,19 @@ async function safeDisconnect(entry: PoolEntry): Promise<void> {
     /* ignore — we're tearing down anyway */
   }
 }
+
+/**
+ * Heuristic: does this error look like the pooled connection is dead (vs. a
+ * normal tool-level error the caller should surface)? Conservative by design —
+ * we only evict on well-known transport-level signatures so a "your API key is
+ * wrong" error from an MCP tool doesn't force a reconnect storm.
+ */
+export function isConnectionLikeError(err: unknown): boolean {
+  if (!err) return false
+  const code = typeof err === 'object' && err && 'code' in err ? String((err as { code: unknown }).code ?? '') : ''
+  if (code && /^(ECONNREFUSED|ECONNRESET|EPIPE|EHOSTUNREACH|ETIMEDOUT|ENOTFOUND|ECONNABORTED)$/i.test(code)) {
+    return true
+  }
+  const msg = err instanceof Error ? err.message : String(err)
+  return /connection closed|transport closed|server has closed|process exited|child exited|mcp server not connected|read ECONN|write EPIPE|socket hang up|stream closed|unexpected end of (?:json|input|stream)/i.test(msg)
+}

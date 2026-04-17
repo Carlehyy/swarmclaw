@@ -62,7 +62,7 @@ import {
   shouldExposeMcpTool,
   type DiscoveredTool,
 } from '../mcp-gateway-runtime'
-import { getOrConnectMcpClient } from '../mcp-connection-pool'
+import { getOrConnectMcpClient, evictMcpClient, isConnectionLikeError } from '../mcp-connection-pool'
 import {
   getEnabledCapabilitySelection,
   isExternalExtensionId,
@@ -92,6 +92,37 @@ const DELEGATION_TOOL_NAMES = new Set([
 function inferBareName(langChainName: string, serverName: string): string {
   const prefix = `mcp_${sanitizeName(serverName)}_`
   return langChainName.startsWith(prefix) ? langChainName.slice(prefix.length) : langChainName
+}
+
+/**
+ * Wraps an MCP-sourced LangChain tool so connection-class failures (stdio pipe
+ * closed, HTTP reset, etc.) evict the pool entry, letting the next turn
+ * rebuild the client fresh. Non-connection errors (validation, tool logic,
+ * auth) propagate unchanged — we trust the downstream's isError signal.
+ */
+function wrapMcpToolWithPoolEviction(
+  inner: StructuredToolInterface,
+  serverId: string,
+): StructuredToolInterface {
+  const wrappedCallback = async (args: unknown): Promise<unknown> => {
+    try {
+      return await inner.invoke(args as Record<string, unknown>)
+    } catch (err: unknown) {
+      if (isConnectionLikeError(err)) {
+        void evictMcpClient(serverId).catch(() => undefined)
+        log.warn('session-tools', `MCP tool "${inner.name}" connection error — evicted pool entry for ${serverId}`, {
+          error: errorMessage(err),
+        })
+      }
+      throw err
+    }
+  }
+  return tool(wrappedCallback, {
+    name: inner.name,
+    description: inner.description,
+    // Re-use the inner tool's zod schema so shape/validation is identical.
+    schema: (inner as unknown as { schema: z.ZodType }).schema,
+  })
 }
 
 export async function buildSessionTools(cwd: string, enabledExtensions: string[], ctx?: ToolContext): Promise<SessionToolsResult> {
@@ -354,7 +385,7 @@ export async function buildSessionTools(cwd: string, enabledExtensions: string[]
             })
             if (!shouldBind) continue
             toolToExtensionMap[t.name] = `mcp:${serverId}`
-            tools.push(t)
+            tools.push(wrapMcpToolWithPoolEviction(t, serverId))
           }
         } catch (err: unknown) {
           log.warn('session-tools', `Failed to connect MCP server "${config.name}"`, { serverId, error: errorMessage(err) })

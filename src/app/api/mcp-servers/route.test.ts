@@ -61,6 +61,16 @@ test('MCP server routes exercise a live stdio server end to end', async () => {
   assert.equal(health.ok, true)
   assert.deepEqual(health.tools, ['mcp_smoke_ping', 'mcp_smoke_echo', 'mcp_smoke_cwd_check'])
 
+  // `reset=1` still works and succeeds — used by the explicit "Re-test" button
+  // to force pool eviction. Default (no query) path skips eviction so
+  // auto-probes don't disrupt in-flight agent MCP calls.
+  const resetHealthResponse = await testMcpServer(new Request(`http://local/api/mcp-servers/${serverId}/test?reset=1`, {
+    method: 'POST',
+  }), routeParams(serverId))
+  assert.equal(resetHealthResponse.status, 200)
+  const resetHealth = await resetHealthResponse.json() as Record<string, unknown>
+  assert.equal(resetHealth.ok, true)
+
   const toolsResponse = await listMcpTools(new Request(`http://local/api/mcp-servers/${serverId}/tools`), routeParams(serverId))
   assert.equal(toolsResponse.status, 200)
   const tools = await toolsResponse.json() as Array<Record<string, unknown>>

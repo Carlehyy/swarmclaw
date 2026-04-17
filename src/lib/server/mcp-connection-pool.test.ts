@@ -6,6 +6,7 @@ import {
   evictAllMcpClients,
   evictMcpClient,
   getOrConnectMcpClient,
+  isConnectionLikeError,
   isPooled,
   poolSize,
 } from './mcp-connection-pool'
@@ -94,5 +95,33 @@ describe('mcp-connection-pool', () => {
     await evictAllMcpClients()
     assert.equal(disconnectCalls, 2)
     assert.equal(poolSize(), 0)
+  })
+})
+
+describe('isConnectionLikeError', () => {
+  it('returns true for known transport-level error codes', () => {
+    const err = Object.assign(new Error('epipe'), { code: 'EPIPE' })
+    assert.equal(isConnectionLikeError(err), true)
+    const err2 = Object.assign(new Error('reset'), { code: 'ECONNRESET' })
+    assert.equal(isConnectionLikeError(err2), true)
+  })
+
+  it('returns true on connection-closed messages', () => {
+    assert.equal(isConnectionLikeError(new Error('Connection closed')), true)
+    assert.equal(isConnectionLikeError(new Error('MCP server not connected')), true)
+    assert.equal(isConnectionLikeError(new Error('child process exited')), true)
+    assert.equal(isConnectionLikeError(new Error('socket hang up')), true)
+  })
+
+  it('returns false for ordinary tool-level errors', () => {
+    assert.equal(isConnectionLikeError(new Error('GitHub token is invalid')), false)
+    assert.equal(isConnectionLikeError(new Error('File not found: /nope')), false)
+    assert.equal(isConnectionLikeError(new Error('schema validation failed')), false)
+  })
+
+  it('returns false for non-error inputs', () => {
+    assert.equal(isConnectionLikeError(null), false)
+    assert.equal(isConnectionLikeError(undefined), false)
+    assert.equal(isConnectionLikeError(''), false)
   })
 })

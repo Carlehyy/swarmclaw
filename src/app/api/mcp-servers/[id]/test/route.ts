@@ -5,15 +5,21 @@ import { connectMcpServer, mcpToolsToLangChain, disconnectMcpServer } from '@/li
 import { evictMcpClient } from '@/lib/server/mcp-connection-pool'
 import { errorMessage } from '@/lib/shared-utils'
 
-export async function POST(_req: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
   const servers = loadMcpServers()
   const server = servers[id]
   if (!server) return notFound()
 
-  // Force a fresh connection for the test — if a pooled client is in a weird
-  // state, the test button is the user's signal to rebuild it.
-  await evictMcpClient(id)
+  // Only evict the pool when the caller explicitly asks for a reset (e.g. the
+  // "Re-test" button). Background probes from the server list view skip this
+  // so they don't disconnect pooled clients that running agents are using
+  // mid-turn. Pool eviction on config change is handled by the PUT route.
+  const url = new URL(req.url)
+  const reset = url.searchParams.get('reset') === '1' || url.searchParams.get('reset') === 'true'
+  if (reset) {
+    await evictMcpClient(id)
+  }
 
   try {
     const { client, transport } = await connectMcpServer(server)

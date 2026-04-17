@@ -188,7 +188,7 @@ export function McpServerList({ inSidebar }: { inSidebar?: boolean }) {
     e.stopPropagation()
     setStatuses((prev) => ({ ...prev, [id]: { ok: false, loading: true } }))
     try {
-      const res = await api<{ ok: boolean; tools?: string[]; error?: string }>('POST', `/mcp-servers/${id}/test`)
+      const res = await api<{ ok: boolean; tools?: string[]; error?: string }>('POST', `/mcp-servers/${id}/test?reset=1`)
       if (!mountedRef.current) return
       setStatuses((prev) => ({ ...prev, [id]: { ok: res.ok, tools: res.tools, error: res.error, loading: false } }))
       if (res.ok) toast.success('Connection test passed')
