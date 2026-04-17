@@ -399,6 +399,14 @@ Operational docs: https://swarmclaw.ai/docs/observability
 
 ## Releases
 
+### v1.5.66 Highlights
+
+Fixes a runaway-token-burn bug in the orchestrator-wake and heartbeat loops. The root cause was hidden in the success/failure classification: a session run can resolve its promise successfully while still carrying an `error` on the result (e.g. a provider 429 swallowed into persisted output), and the wake trackers only incremented their failure counters on a rejected promise. So the backoff never engaged, the auto-disable-after-N-failures gate never tripped, and the wake kept firing at its configured interval indefinitely — every firing spending tokens on a full prompt against a provider that was already cooling down.
+
+- **`classifyWakeOutcome` (`src/lib/server/runtime/heartbeat-service.ts`)** — new pure helper, extracted for unit testing, that maps a resolved run result into `null` (success) or a short failure reason. A run counts as a failure when `result.error` is a non-empty string, *or* when `result.text` is empty/whitespace-only. Both the orchestrator-wake and heartbeat outcome handlers now feed through this helper, so silent-failure runs tick the failure counter and the exponential backoff (10s → 5min) kicks in normally.
+- **Auto-disable gate now trips for provider 429 / silent-wake loops.** The existing `MAX_CONSECUTIVE_FAILURES = 10` threshold was already in place but unreachable for the most common failure mode (429 errors that still persisted a run). After the fix, ten consecutive dud wakes auto-disable the orchestrator/heartbeat for that agent/session and post an explicit notification instead of grinding indefinitely.
+- **Regression coverage.** `heartbeat-service.test.ts` now has 5 targeted cases on `classifyWakeOutcome` — the 429 regression, empty-output detection, non-string error fields, whitespace-only errors, and the happy path. `test:runtime` now runs 104 cases.
+
 ### v1.5.65 Highlights
 
 Follow-up hardening on the v1.5.64 work after live-testing the chat-header flows, the MCP connection pool, and the MCP Registry browser. Six concrete bugs fixed in the clear/undo, MCP pool eviction, and registry-browser code paths.

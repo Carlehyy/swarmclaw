@@ -54,6 +54,23 @@ const ORCHESTRATOR_MIN_INTERVAL_SEC = 60
 const ORCHESTRATOR_MAX_INTERVAL_SEC = 86400    // 24h
 const ORCHESTRATOR_MAX_PROMPT_CHARS = 4000
 
+/**
+ * Classify a resolved session-run result as success or failure for the
+ * heartbeat/orchestrator outcome tracker. A resolved promise can still
+ * carry an error on `result.error` (e.g. a provider 429 that was swallowed
+ * into persisted output) or resolve with empty text, and both cases must
+ * count as failures — otherwise a stuck wake loop never ticks the
+ * failure counter, never backs off, and never auto-disables.
+ */
+export function classifyWakeOutcome(result: unknown): string | null {
+  if (!result || typeof result !== 'object') return 'empty wake response'
+  const obj = result as { error?: unknown; text?: unknown }
+  if (typeof obj.error === 'string' && obj.error.trim()) return obj.error
+  const text = typeof obj.text === 'string' ? obj.text : ''
+  if (!text.trim()) return 'empty wake response'
+  return null
+}
+
 interface FailureRecord {
   count: number
   lastFailedAt: number
@@ -782,24 +799,28 @@ export async function tickHeartbeats() {
     state.lastBySession.set(session.id, now)
 
     const sid = session.id as string
-    enqueue.promise.then(() => {
-      const prev = state.failures.get(sid)
-      if (prev?.recoveryAttempts) {
-        log.info('heartbeat', `Recovery successful for session ${sid} after ${prev.recoveryAttempts} attempt(s)`)
+    // A session run can "resolve" with an error in result.error (e.g. provider
+    // 429 swallowed into the persisted failure) or with empty text. Treat both
+    // as failures so backoff and auto-disable trigger, otherwise a stuck
+    // heartbeat keeps re-firing at the configured interval and burning tokens.
+    const handleHeartbeatOutcome = (failure: string | null) => {
+      if (!failure) {
+        const prev = state.failures.get(sid)
+        if (prev?.recoveryAttempts) {
+          log.info('heartbeat', `Recovery successful for session ${sid} after ${prev.recoveryAttempts} attempt(s)`)
+        }
+        state.failures.delete(sid)
+        patchSession(sid, (s) => {
+          if (!s) return s
+          s.lastDeliveryStatus = 'ok'
+          s.lastDeliveredAt = Date.now()
+          return s
+        })
+        return
       }
-      state.failures.delete(sid)
-      // Track successful delivery
-      patchSession(sid, (s) => {
-        if (!s) return s
-        s.lastDeliveryStatus = 'ok'
-        s.lastDeliveredAt = Date.now()
-        return s
-      })
-    }).catch((err: unknown) => {
       const prev = state.failures.get(sid)
       const newCount = (prev?.count ?? 0) + 1
       const record: FailureRecord = { count: newCount, lastFailedAt: Date.now() }
-      // Auto-disable heartbeat after too many consecutive failures to prevent resource waste
       if (newCount >= MAX_CONSECUTIVE_FAILURES) {
         record.autoDisabledAt = Date.now()
         log.warn('heartbeat', `Auto-disabling heartbeat for session ${sid} after ${newCount} consecutive failures`)
@@ -821,17 +842,20 @@ export async function tickHeartbeats() {
         })
       }
       state.failures.set(sid, record)
-      const msg = errorMessage(err)
-      log.warn('heartbeat', `Heartbeat run failed for session ${sid} (${newCount}/${MAX_CONSECUTIVE_FAILURES})`, msg)
-      // Track failed delivery
+      log.warn('heartbeat', `Heartbeat run failed for session ${sid} (${newCount}/${MAX_CONSECUTIVE_FAILURES})`, failure)
       patchSession(sid, (s) => {
         if (!s) return s
         s.lastDeliveryStatus = 'error'
-        s.lastDeliveryError = msg
+        s.lastDeliveryError = failure
         s.lastDeliveredAt = Date.now()
         return s
       })
-    })
+    }
+    enqueue.promise
+      .then((result) => handleHeartbeatOutcome(classifyWakeOutcome(result)))
+      .catch((err: unknown) => {
+        handleHeartbeatOutcome(errorMessage(err) || 'heartbeat rejected')
+      })
   }
 }
 
@@ -1118,10 +1142,15 @@ export async function tickOrchestratorAgents() {
 
       log.info('orchestrator', `Woke orchestrator agent ${agent.name} (${agent.id}), cycle #${(agent.orchestratorCycleCount || 0) + 1}`)
 
-      // Track success/failure
-      enqueue.promise.then(() => {
-        orchestratorState.failures.delete(agent.id)
-      }).catch((err: unknown) => {
+      // Track success/failure. A run can "resolve" but still carry an error
+      // on the result (e.g. provider 429 that was caught and persisted), so we
+      // inspect the resolved result as well as the rejected path — otherwise
+      // a stuck wake loop never ticks the failure counter and never backs off.
+      const handleWakeOutcome = (failure: string | null) => {
+        if (!failure) {
+          orchestratorState.failures.delete(agent.id)
+          return
+        }
         const prev = orchestratorState.failures.get(agent.id)
         const newCount = (prev?.count ?? 0) + 1
         const record: FailureRecord = { count: newCount, lastFailedAt: Date.now() }
@@ -1146,8 +1175,13 @@ export async function tickOrchestratorAgents() {
           })
         }
         orchestratorState.failures.set(agent.id, record)
-        log.warn('orchestrator', `Orchestrator wake failed for agent ${agent.id} (${newCount}/${MAX_CONSECUTIVE_FAILURES})`, errorMessage(err))
-      })
+        log.warn('orchestrator', `Orchestrator wake failed for agent ${agent.id} (${newCount}/${MAX_CONSECUTIVE_FAILURES})`, failure)
+      }
+      enqueue.promise
+        .then((result) => handleWakeOutcome(classifyWakeOutcome(result)))
+        .catch((err: unknown) => {
+          handleWakeOutcome(errorMessage(err) || 'wake rejected')
+        })
     } catch (err) {
       log.warn('orchestrator', `Error ticking orchestrator agent ${agent.id}:`, errorMessage(err))
     }
