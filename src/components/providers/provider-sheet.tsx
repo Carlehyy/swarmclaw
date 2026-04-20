@@ -59,6 +59,7 @@ export function ProviderSheet() {
   const [liveLoading, setLiveLoading] = useState(false)
   const [liveMessage, setLiveMessage] = useState('')
   const [liveCached, setLiveCached] = useState(false)
+  const [contextWindowSize, setContextWindowSize] = useState('')
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [deleting, setDeleting] = useState(false)
 
@@ -84,6 +85,7 @@ export function ProviderSheet() {
         setRequiresApiKey(editingCustom.requiresApiKey)
         setCredentialId(editingCustom.credentialId || null)
         setIsEnabled(editingCustom.isEnabled)
+        setContextWindowSize(editingCustom.contextWindowSize ? String(editingCustom.contextWindowSize) : '')
       } else if (editingBuiltin) {
         setName(editingBuiltin.name)
         setBaseUrl(editingBuiltinOverride?.baseUrl || editingBuiltin.defaultEndpoint || '')
@@ -93,6 +95,7 @@ export function ProviderSheet() {
         const existingCred = Object.values(credentials).find((c) => c.provider === editingBuiltin.id)
         setCredentialId(existingCred?.id || null)
         setIsEnabled(editingBuiltinOverride?.isEnabled !== false)
+        setContextWindowSize(editingBuiltinOverride?.contextWindowSize ? String(editingBuiltinOverride.contextWindowSize) : '')
       } else {
         setName('')
         setBaseUrl('')
@@ -100,6 +103,7 @@ export function ProviderSheet() {
         setRequiresApiKey(true)
         setCredentialId(null)
         setIsEnabled(true)
+        setContextWindowSize('')
       }
     }
   }, [open, editingId, credentials, editingBuiltin, editingBuiltinOverride, editingCustom])
@@ -161,6 +165,7 @@ export function ProviderSheet() {
           models: modelList,
           isEnabled,
           baseUrl: baseUrl.trim() || undefined,
+          contextWindowSize: contextWindowSize ? Number(contextWindowSize) : undefined,
         })
         toast.success('Built-in provider updated')
         onClose()
@@ -174,6 +179,7 @@ export function ProviderSheet() {
         requiresApiKey,
         credentialId,
         isEnabled,
+        contextWindowSize: contextWindowSize ? Number(contextWindowSize) : undefined,
       }
       await saveCustomProviderMutation.mutateAsync({
         id: editingCustom?.id,
@@ -307,6 +313,19 @@ export function ProviderSheet() {
           </p>
         </div>
       )}
+
+      {/* Context Window Size */}
+      <div className="mb-8">
+        <label className="block font-display text-[12px] font-600 text-text-2 uppercase tracking-[0.08em] mb-3">
+          Context Window Size
+        </label>
+        <input type="number" value={contextWindowSize} onChange={(e) => setContextWindowSize(e.target.value)}
+          placeholder="Default: 8192" min={1}
+          className={`${inputClass} font-mono text-[14px]`} />
+        <p className="text-[11px] text-text-3/70 mt-2">
+          Context window size in tokens. Leave empty to use the built-in default (8192).
+        </p>
+      </div>
 
       {/* Models — chip editor for built-in, textarea for custom */}
       <div className="mb-8">

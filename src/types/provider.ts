@@ -49,6 +49,8 @@ export interface ProviderConfig {
   requiresApiKey: boolean
   credentialId?: string | null
   isEnabled: boolean
+  /** User-configured context window size in tokens. Falls back to built-in defaults when absent. */
+  contextWindowSize?: number
   createdAt: number
   updatedAt: number
 }

@@ -26,6 +26,7 @@ interface SaveBuiltinProviderInput {
   models: string[]
   isEnabled: boolean
   baseUrl?: string
+  contextWindowSize?: number
 }
 
 interface SaveCustomProviderInput {
@@ -82,12 +83,13 @@ export function useToggleProviderMutation() {
 export function useSaveBuiltinProviderMutation() {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: async ({ id, models, isEnabled, baseUrl }: SaveBuiltinProviderInput) => {
+    mutationFn: async ({ id, models, isEnabled, baseUrl, contextWindowSize }: SaveBuiltinProviderInput) => {
       await api('PUT', `/providers/${id}/models`, { models })
       return api('PUT', `/providers/${id}`, {
         type: 'builtin',
         isEnabled,
         ...(baseUrl ? { baseUrl } : {}),
+        ...(contextWindowSize ? { contextWindowSize } : {}),
       })
     },
     onSuccess: async () => {

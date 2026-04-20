@@ -4,6 +4,7 @@ import { extractFactsFromMessages, ensureRunContext, pruneRunContext } from '@/l
 import { getSession, saveSession } from '@/lib/server/sessions/session-repository'
 
 import { repairTranscriptConsistency } from './transcript-repair'
+import { loadProviderConfigs } from './storage'
 
 // --- LLM compaction constants ---
 
@@ -98,8 +99,23 @@ const PROVIDER_DEFAULT_WINDOWS: Record<string, number> = {
 /** Get context window size for a model, falling back to provider default */
 export function getContextWindowSize(provider: string, model: string): number {
   return PROVIDER_CONTEXT_WINDOWS[model]
+    || getUserProviderContextWindow(provider)
     || PROVIDER_DEFAULT_WINDOWS[provider]
     || 8_192
+}
+
+/** Read user-configured contextWindowSize from provider config, if set */
+function getUserProviderContextWindow(provider: string): number | undefined {
+  try {
+    const configs = loadProviderConfigs()
+    const config = configs[provider]
+    if (config && typeof config.contextWindowSize === 'number' && config.contextWindowSize > 0) {
+      return config.contextWindowSize
+    }
+  } catch {
+    // Storage may not be available during build/bootstrap
+  }
+  return undefined
 }
 
 // --- Token estimation ---

@@ -12,7 +12,7 @@ export async function GET(_req: Request) {
 }
 
 export async function POST(req: Request) {
-  const { data: body, error } = await safeParseBody<{ id?: string; name?: string; baseUrl?: string; models?: string[]; requiresApiKey?: boolean; credentialId?: string | null; isEnabled?: boolean }>(req)
+  const { data: body, error } = await safeParseBody<{ id?: string; name?: string; baseUrl?: string; models?: string[]; requiresApiKey?: boolean; credentialId?: string | null; isEnabled?: boolean; contextWindowSize?: number }>(req)
   if (error) return error
   const configs = loadProviderConfigs()
   const id = body.id || `custom-${genId()}`
@@ -25,6 +25,7 @@ export async function POST(req: Request) {
     requiresApiKey: body.requiresApiKey ?? true,
     credentialId: body.credentialId || null,
     isEnabled: body.isEnabled ?? true,
+    contextWindowSize: body.contextWindowSize,
     createdAt: Date.now(),
     updatedAt: Date.now(),
   }
