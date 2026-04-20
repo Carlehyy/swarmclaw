@@ -399,6 +399,14 @@ Operational docs: https://swarmclaw.ai/docs/observability
 
 ## Releases
 
+### v1.5.67 Highlights
+
+Three chatroom-focused fixes from a community contribution by [@borislavnnikolov](https://github.com/borislavnnikolov). Thanks Borislav!
+
+- **Inspect a chatroom member mid-turn.** Clicking a member avatar in a chatroom while that agent is busy now opens a bottom sheet with the agent's synthetic chatroom session: recent messages, execution-log entries, and counts. Previously the click jumped to the agent detail page, which lost the chatroom context. The synthetic session-id convention (`chatroom-<roomId>-<agentId>`) is now centralized in `src/lib/chatroom-sessions.ts` and shared between the UI and `chatroom-helpers.ts` so the two halves can never drift.
+- **Continue a specific session, not just the agent's main thread.** The store now exposes an `activeSessionIdOverride` on the session slice. Selecting a chat from the Chat List or a specific session row from the Agent Inspector sets the override, so the chat surface opens that exact session instead of the agent's primary thread session. The override clears automatically when the agent changes or the session is removed, with regression tests in `session-slice.test.ts` covering the override-preferred, override-stale, and fallback cases.
+- **Caret stays aligned with mention highlights in the chatroom composer.** The mention-highlight `<span>` had `px-0.5` padding that pushed the mirrored caret out of position at line ends. Padding is removed and the soft-accent background lightened slightly so the highlight still reads without nudging the layout.
+
 ### v1.5.66 Highlights
 
 Fixes a runaway-token-burn bug in the orchestrator-wake and heartbeat loops. The root cause was hidden in the success/failure classification: a session run can resolve its promise successfully while still carrying an `error` on the result (e.g. a provider 429 swallowed into persisted output), and the wake trackers only incremented their failure counters on a rejected promise. So the backoff never engaged, the auto-disable-after-N-failures gate never tripped, and the wake kept firing at its configured interval indefinitely — every firing spending tokens on a full prompt against a provider that was already cooling down.
