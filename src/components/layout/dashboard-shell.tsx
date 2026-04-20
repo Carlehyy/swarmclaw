@@ -22,8 +22,6 @@ import { CommandPalette } from '@/components/shared/command-palette'
 
 import type { AppView } from '@/types'
 
-const STAR_NOTIFICATION_KEY = 'sc_star_notification_v1'
-const GITHUB_REPO_URL = 'https://github.com/swarmclawai/swarmclaw'
 
 const AUTH_PATHS = new Set(['/login', '/setup', '/user'])
 
@@ -123,24 +121,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
     if (!currentUser) { router.replace('/setup'); return }
   }, [hydrated, authChecked, authenticated, currentUser, setupDone, router, isAuthPage, userReady])
 
-  // Star notification (one-time)
-  useEffect(() => {
-    if (!authenticated) return
-    if (safeStorageGet(STAR_NOTIFICATION_KEY)) return
-    safeStorageSet(STAR_NOTIFICATION_KEY, '1')
-    void api('POST', '/notifications', {
-      type: 'info',
-      title: 'Enjoying SwarmClaw?',
-      message: 'If SwarmClaw helps your workflow, please star the GitHub repo to support the project.',
-      actionLabel: 'Star on GitHub',
-      actionUrl: GITHUB_REPO_URL,
-      entityType: 'support',
-      entityId: 'github-star',
-      dedupKey: 'support:github-star',
-    }).then(() => {
-      void useAppStore.getState().loadNotifications()
-    }).catch(() => {})
-  }, [authenticated])
+
 
   // Theme hue
   useEffect(() => {
