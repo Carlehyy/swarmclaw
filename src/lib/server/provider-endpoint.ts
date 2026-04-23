@@ -52,9 +52,6 @@ export function resolveProviderCredentialId(input: {
       })[0]?.[0] || normalizedId
   }
 
-  const matchingIds = matchingEntries.map(([id]) => id)
-
-  if (matchingIds.length === 1) return matchingIds[0]
   return normalizedId
 }
 
