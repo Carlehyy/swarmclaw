@@ -6,6 +6,7 @@ import type { Agent, MemoryEntry, Session } from '@/types'
 import { useAppStore } from '@/stores/use-app-store'
 import { useChatStore } from '@/stores/use-chat-store'
 import { api } from '@/lib/app/api-client'
+import { sortSessionsNewestFirst } from '@/lib/chat/new-session'
 import { AgentAvatar } from './agent-avatar'
 import { AgentFilesEditor } from './agent-files-editor'
 import { OpenClawSkillsPanel } from './openclaw-skills-panel'
@@ -907,7 +908,7 @@ function SessionsSection({ agent }: { agent: Agent }) {
   const setInspectorOpen = useAppStore((s) => s.setInspectorOpen)
 
   const agentSessions = useMemo(() => {
-    return Object.values(sessions).filter((s) => s.agentId === agent.id)
+    return sortSessionsNewestFirst(Object.values(sessions).filter((s) => s.agentId === agent.id))
   }, [sessions, agent.id])
 
   if (agentSessions.length === 0) return null

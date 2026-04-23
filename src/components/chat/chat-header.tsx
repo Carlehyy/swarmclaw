@@ -17,6 +17,7 @@ import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip
 import { copyTextToClipboard } from '@/lib/clipboard'
 import { useNavigate } from '@/lib/app/navigation'
 import { getEnabledToolIds } from '@/lib/capability-selection'
+import { getNewSessionButtonTitle, hasResettableSessionRuntime } from '@/lib/chat/new-session'
 import { ContextMeterBadge } from './context-meter-badge'
 
 function Tip({ label, children, side = 'bottom' }: { label: string; children: ReactNode; side?: 'top' | 'bottom' | 'left' | 'right' }) {
@@ -84,9 +85,10 @@ interface Props {
   messageCount?: number
   onCompactComplete?: () => void
   onClearRequest?: () => void
+  onStartNewSession?: () => void
 }
 
-export function ChatHeader({ session, streaming, onStop, onMenuToggle, onBack, mobile, browserActive, onStopBrowser, onVoiceToggle, voiceActive, voiceSupported, connectorSources, connectorFilter, onConnectorFilterChange, hasMultipleSources, messageCount = 0, onCompactComplete, onClearRequest }: Props) {
+export function ChatHeader({ session, streaming, onStop, onMenuToggle, onBack, mobile, browserActive, onStopBrowser, onVoiceToggle, voiceActive, voiceSupported, connectorSources, connectorFilter, onConnectorFilterChange, hasMultipleSources, messageCount = 0, onCompactComplete, onClearRequest, onStartNewSession }: Props) {
   const now = useNow()
   const agentStatus = useChatStore((s) => s.agentStatus)
   const agents = useAppStore((s) => s.agents)
@@ -114,6 +116,8 @@ export function ChatHeader({ session, streaming, onStop, onMenuToggle, onBack, m
   const renameInputRef = useRef<HTMLInputElement>(null)
   const renameContainerRef = useRef<HTMLSpanElement>(null)
   const liveStatus = agentStatus || null
+  const canStartNewSession = !streaming && !!onStartNewSession && (messageCount > 0 || hasResettableSessionRuntime(session))
+  const newSessionTitle = getNewSessionButtonTitle(session)
   const connectorPresenceMeta = useMemo(() => {
     if (!connector) return null
     const lastAt = connectorPresence?.lastMessageAt
@@ -430,6 +434,23 @@ export function ChatHeader({ session, streaming, onStop, onMenuToggle, onBack, m
                 onCompactComplete={onCompactComplete}
                 onClearRequest={onClearRequest}
               />
+            )}
+            {canStartNewSession && (
+              <Tip label={newSessionTitle}>
+                <button
+                  type="button"
+                  onClick={onStartNewSession}
+                  className="inline-flex items-center gap-1.5 rounded-[9px] border border-white/[0.06] bg-white/[0.03] px-2.5 py-1 text-[10px] font-600 text-text-3/70 transition-colors shrink-0 cursor-pointer hover:border-white/[0.15] hover:bg-white/[0.05] hover:text-text-2"
+                  aria-label="Start a new chat session"
+                  title={newSessionTitle}
+                >
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <path d="M12 5v14" />
+                    <path d="M5 12h14" />
+                  </svg>
+                  <span>New chat</span>
+                </button>
+              </Tip>
             )}
           </div>
           {liveStatus?.status && (
