@@ -6,6 +6,12 @@ import { spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
+const nativeModules = [
+  'better-sqlite3',
+  '@mongodb-js/zstd',
+  'node-liblzma',
+  'utf-8-validate',
+]
 
 const args = new Set(process.argv.slice(2))
 const skipNext = args.has('--skip-next')
@@ -22,6 +28,11 @@ const platformFlag = args.has('--mac') ? '--mac'
   : null
 
 function run(cmd, cmdArgs, env = {}) {
+  const status = runWithStatus(cmd, cmdArgs, env)
+  if (status !== 0) process.exit(status)
+}
+
+function runWithStatus(cmd, cmdArgs, env = {}) {
   const result = spawnSync(cmd, cmdArgs, {
     cwd: repoRoot,
     stdio: 'inherit',
@@ -30,8 +41,14 @@ function run(cmd, cmdArgs, env = {}) {
   })
   if (result.status !== 0) {
     console.error(`[build-electron] ${cmd} ${cmdArgs.join(' ')} failed with status ${result.status}`)
-    process.exit(result.status ?? 1)
+    return result.status ?? 1
   }
+  return 0
+}
+
+function restoreHostNativeModules() {
+  console.log('[build-electron] restoring host native modules…')
+  run('npm', ['rebuild', ...nativeModules, '--silent'])
 }
 
 function copyDir(src, dest) {
@@ -86,6 +103,8 @@ if (publishAlways) {
 } else {
   builderArgs.push('--publish', 'never')
 }
-run('npx', ['--no-install', 'electron-builder', ...builderArgs])
+const builderStatus = runWithStatus('npx', ['--no-install', 'electron-builder', ...builderArgs])
+restoreHostNativeModules()
+if (builderStatus !== 0) process.exit(builderStatus)
 
 console.log('[build-electron] done. Artifacts in release/')

@@ -65,6 +65,15 @@ describe('mission-templates: registry', () => {
     }
   })
 
+  it('includes the launch week growth sprint template', () => {
+    const template = templates.getMissionTemplate('launch-week-growth-sprint')
+    assert.ok(template, 'expected launch sprint template')
+    assert.equal(template.name, 'Launch Week Growth Sprint')
+    assert.equal(template.category, 'productivity')
+    assert.ok(template.defaults.goal.includes('Do not post publicly without explicit approval'))
+    assert.ok(template.defaults.successCriteria.some((item) => item.includes('Product Hunt')))
+  })
+
   it('getMissionTemplate resolves known ids', () => {
     const list = templates.listMissionTemplates()
     const first = list[0]

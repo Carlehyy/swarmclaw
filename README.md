@@ -399,6 +399,15 @@ Operational docs: https://swarmclaw.ai/docs/observability
 
 ## Releases
 
+### v1.5.68 Highlights
+
+Launch-readiness release for turning SwarmClaw's own next launch into a reusable workflow.
+
+- **Launch Week Growth Sprint mission template.** The mission template gallery now includes a launch-week operator that audits the product/docs, drafts GitHub Release, Product Hunt, Show HN, social, and community copy, identifies the top demo moments, and produces daily feedback/metrics/follow-up reports. The default goal explicitly keeps public posting behind approval.
+- **Security and release metadata refresh.** Next.js is updated to `16.2.4` in the app and docs site, OpenClaw / Discord.js / selected transitives are refreshed so the production high/critical audit gate passes, and the stale `package-lock.json` root version is realigned with the published package version.
+- **Desktop release gate hardening.** `npm run electron:build` now restores host-architecture native modules after macOS multi-arch packaging, so a local release smoke build no longer leaves the checkout unable to run the next host build.
+- **Launch assets and docs.** Added a concrete v1.5.68 launch plan in `docs/release/v1.5.68-launch-plan.md`, refreshed the website release notes/docs index, and updated stale install examples so public launch traffic sees current instructions.
+
 ### v1.5.67 Highlights
 
 Three chatroom-focused fixes from a community contribution by [@borislavnnikolov](https://github.com/borislavnnikolov). Thanks Borislav!

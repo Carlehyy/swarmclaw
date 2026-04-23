@@ -142,6 +142,29 @@ export const BUILT_IN_MISSION_TEMPLATES: MissionTemplate[] = [
     },
   },
   {
+    id: 'launch-week-growth-sprint',
+    name: 'Launch Week Growth Sprint',
+    description:
+      'Plan and run a public launch week with channel-specific copy, demo moments, feedback capture, and daily follow-up reports.',
+    icon: '🚀',
+    category: 'productivity',
+    tags: ['launch', 'growth', 'release'],
+    setupNote:
+      'Set the product, audience, launch channels, and any hard no-posting boundaries in the goal. Connect social/community connectors only if you want the agent to draft posts there; keep public posting behind approval.',
+    defaults: {
+      title: 'Launch Week Growth Sprint',
+      goal:
+        'Prepare and run a one-week public launch for this project. Audit the current product and docs, write channel-specific launch assets for GitHub Releases, Product Hunt, Show HN, short social posts, and community updates, identify the top 5 demo moments, and produce a daily markdown launch report with feedback, metrics, and follow-up tasks. Do not post publicly without explicit approval.',
+      successCriteria: [
+        'Launch assets are drafted for GitHub Releases, Product Hunt, Show HN, social, and community channels',
+        'Top demo moments and target audiences are listed with links, screenshots, or source references to use',
+        'Feedback, metrics, objections, and follow-up tasks are captured in a daily launch report',
+      ],
+      budget: budget({ maxUsd: 4, maxTokens: 180_000, maxTurns: 220, maxWallclockSec: 7 * DAY }),
+      reportSchedule: report(DAY),
+    },
+  },
+  {
     id: 'customer-support-triage',
     name: 'Customer Support Triage',
     description:
