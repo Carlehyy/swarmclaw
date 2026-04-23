@@ -539,8 +539,8 @@ export function ChatArea() {
   }, [removeSessionFromStore, sessionId, setCurrentAgent])
 
   const handlePrompt = useCallback((text: string) => {
-    sendMessage(text)
-  }, [sendMessage])
+    void handleSend(text)
+  }, [handleSend])
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault()

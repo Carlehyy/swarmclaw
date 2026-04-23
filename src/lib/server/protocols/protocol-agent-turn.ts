@@ -253,18 +253,14 @@ export async function defaultExecuteAgentTurn(params: {
     try {
       const turnStartedAt = Date.now()
       const history = buildHistoryForAgent(chatroom, agent.id)
-      const result = await Promise.race([
-        executeStructuredSessionTurn({
-          session: syntheticSession,
-          message: params.prompt,
-          apiKey,
-          systemPrompt: fullSystemPrompt,
-          history,
-        }),
-        new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error(`Agent turn timed out after ${AGENT_TURN_TIMEOUT_MS / 1000}s (agent: ${params.agentId})`)), AGENT_TURN_TIMEOUT_MS),
-        ),
-      ])
+      const result = await executeStructuredSessionTurnWithTimeout({
+        session: syntheticSession,
+        message: params.prompt,
+        apiKey,
+        systemPrompt: fullSystemPrompt,
+        history,
+        agentId: params.agentId,
+      })
       const rawText = result.text || ''
       const text = resolveStructuredSessionTurnText({
         rawText,
@@ -359,6 +355,30 @@ async function executeStructuredSessionTurn(params: {
     toolEvents: streamed.toolEvents || [],
     retrievalTrace: streamed.knowledgeRetrievalTrace || null,
     citations: [],
+  }
+}
+
+async function executeStructuredSessionTurnWithTimeout(params: {
+  session: ReturnType<typeof ensureSyntheticSession>
+  message: string
+  apiKey: string | null
+  systemPrompt: string
+  history: ReturnType<typeof buildHistoryForAgent>
+  agentId: string
+}): Promise<ProtocolAgentTurnResult> {
+  let timeoutId: ReturnType<typeof setTimeout> | null = null
+  try {
+    return await Promise.race([
+      executeStructuredSessionTurn(params),
+      new Promise<never>((_, reject) => {
+        timeoutId = setTimeout(
+          () => reject(new Error(`Agent turn timed out after ${AGENT_TURN_TIMEOUT_MS / 1000}s (agent: ${params.agentId})`)),
+          AGENT_TURN_TIMEOUT_MS,
+        )
+      }),
+    ])
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId)
   }
 }
 

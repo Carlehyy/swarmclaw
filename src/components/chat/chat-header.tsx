@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState, useMemo, useRef, type ReactNode } from 'react'
+import { Plus } from 'lucide-react'
 import type { Session } from '@/types'
 import { useAppStore } from '@/stores/use-app-store'
 import { useChatStore } from '@/stores/use-chat-store'
@@ -444,10 +445,7 @@ export function ChatHeader({ session, streaming, onStop, onMenuToggle, onBack, m
                   aria-label="Start a new chat session"
                   title={newSessionTitle}
                 >
-                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                    <path d="M12 5v14" />
-                    <path d="M5 12h14" />
-                  </svg>
+                  <Plus className="h-3 w-3" aria-hidden="true" strokeWidth={2.2} />
                   <span>New chat</span>
                 </button>
               </Tip>

@@ -399,6 +399,15 @@ Operational docs: https://swarmclaw.ai/docs/observability
 
 ## Releases
 
+### v1.5.69 Highlights
+
+Fast-follow release for [#55](https://github.com/swarmclawai/swarmclaw/pull/55) by [@borislavnnikolov](https://github.com/borislavnnikolov). Thanks Borislav!
+
+- **Structured runs are easier to find.** Schedule-backed protocol runs now appear in the schedule console and unified `/api/runs` endpoints, including detail and event fallbacks for structured run records.
+- **Agent sessions get a cleaner fresh-chat flow.** Agent chat headers now expose a New chat action for sessions with history or saved CLI/runtime handles, first prompts derive compact session titles, and agent session lists sort newest-first.
+- **Structured session execution is sturdier.** CLI providers can execute structured turns through their direct provider runtime, blank structured responses now surface the real logged error where possible, successful structured turns clear their watchdog timers promptly, schedule timing changes recompute `nextRunAt`, and in-process daemon status/control paths are covered.
+- **Package contents are safer.** The npm package allowlist now explicitly excludes local env files under `src/` even when a maintainer has private ignored config in their working tree.
+
 ### v1.5.68 Highlights
 
 Launch-readiness release for turning SwarmClaw's own next launch into a reusable workflow.

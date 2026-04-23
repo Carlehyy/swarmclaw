@@ -1,6 +1,6 @@
 {
   "name": "@swarmclawai/swarmclaw",
-  "version": "1.5.68",
+  "version": "1.5.69",
   "description": "Build and run autonomous AI agents with OpenClaw, Hermes, multiple model providers, orchestration, delegation, memory, skills, schedules, and chat connectors.",
   "main": "electron-dist/main.js",
   "license": "MIT",
@@ -44,6 +44,7 @@
     "bin/",
     "skills/",
     "src/",
+    "!src/**/.env*",
     "public/",
     "Dockerfile.sandbox-browser",
     "scripts/easy-setup.mjs",
