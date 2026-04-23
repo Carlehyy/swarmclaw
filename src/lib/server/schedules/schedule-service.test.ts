@@ -44,7 +44,7 @@ describe('prepareScheduleUpdate', () => {
       const nextRunAt = readNextRunAt(result.schedule)
       assert.notEqual(nextRunAt, current.nextRunAt)
       assert.equal(typeof nextRunAt, 'number')
-      assert.ok((nextRunAt || 0) > Date.now())
+      assert.equal(nextRunAt, Date.parse('2026-01-01T10:45:00.000Z'))
     }
   })
 

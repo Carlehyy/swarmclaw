@@ -119,6 +119,7 @@ function mapTaskStatus(status: BoardTask['status']): ScheduleConsoleRunRow['stat
     case 'queued':
       return status
     case 'archived':
+      return 'cancelled'
     default:
       return 'queued'
   }

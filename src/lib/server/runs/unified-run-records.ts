@@ -83,7 +83,7 @@ export function protocolEventToRunEventRecord(run: ProtocolRun, event: ProtocolR
     status,
     summary: event.summary,
     event: {
-      t: status === 'failed' ? 'err' : 'status',
+      t: status === 'failed' ? 'err' : status ? 'status' : 'md',
       text: event.summary,
     },
     citations: event.citations,
