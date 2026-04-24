@@ -245,3 +245,28 @@ export const FULL_WIDTH_VIEWS = new Set<AppView>([
   'connectors', 'webhooks', 'mcp_servers', 'knowledge', 'extensions',
   'usage', 'runs', 'autonomy', 'logs', 'settings', 'activity', 'projects', 'swarmfeed', 'marketplace', 'missions',
 ])
+
+export const PANEL_SIDEBAR_VIEWS = new Set<AppView>([
+  'agents',
+  'connectors',
+  'extensions',
+  'knowledge',
+  'logs',
+  'mcp_servers',
+  'memory',
+  'providers',
+  'runs',
+  'schedules',
+  'secrets',
+  'skills',
+  'tasks',
+  'webhooks',
+])
+
+export function isPanelSidebarView(view: AppView | null | undefined): boolean {
+  return Boolean(view && PANEL_SIDEBAR_VIEWS.has(view))
+}
+
+export function shouldAutoOpenPanelSidebar(view: AppView | null | undefined, isDesktop: boolean): boolean {
+  return isDesktop && isPanelSidebarView(view)
+}

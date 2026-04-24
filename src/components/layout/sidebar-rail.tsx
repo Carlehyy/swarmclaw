@@ -9,7 +9,7 @@ import { DaemonIndicator } from '@/components/layout/daemon-indicator'
 import { NotificationCenter } from '@/components/shared/notification-center'
 import { NavItem, RailTooltip } from '@/components/layout/nav-item'
 import { useWs } from '@/hooks/use-ws'
-import { FULL_WIDTH_VIEWS } from '@/lib/app/view-constants'
+import { FULL_WIDTH_VIEWS, isPanelSidebarView } from '@/lib/app/view-constants'
 import { pathToView, useNavigate } from '@/lib/app/navigation'
 import { safeStorageGet, safeStorageSet } from '@/lib/app/safe-storage'
 import type { AppView } from '@/types'
@@ -80,9 +80,9 @@ export function SidebarRail({
       setSidebarOpen(false)
       return
     }
-    if (FULL_WIDTH_VIEWS.has(view)) {
-      setSidebarOpen(false)
-    } else if (activeView === view && sidebarOpen) {
+    if (isPanelSidebarView(view)) {
+      setSidebarOpen(!(activeView === view && sidebarOpen))
+    } else if (FULL_WIDTH_VIEWS.has(view)) {
       setSidebarOpen(false)
     } else {
       setSidebarOpen(true)

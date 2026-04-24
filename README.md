@@ -399,6 +399,17 @@ Operational docs: https://swarmclaw.ai/docs/observability
 
 ## Releases
 
+### v1.5.70 Highlights
+
+Fast-follow release for [#56](https://github.com/swarmclawai/swarmclaw/pull/56) by [@latentwill](https://github.com/latentwill). Thanks latentwill!
+
+Also includes fixes for [#57](https://github.com/swarmclawai/swarmclaw/issues/57) and [#58](https://github.com/swarmclawai/swarmclaw/issues/58) reported by [@zantak](https://github.com/zantak). Thanks zantak!
+
+- **Builtin provider saves work again.** Saving a builtin provider no longer sends the strict-schema rejected `type` field, and the provider update route is now covered by the runtime test script.
+- **Knowledge sources appear on direct visits.** Panel-backed routes such as Knowledge now auto-open their source/sidebar panel on desktop route changes, while mobile keeps the drawer closed by default.
+- **Reasoning content stays out of the reply body.** OpenAI-compatible `reasoning_content` and `reasoning` stream deltas now flow into the existing collapsed Thinking panel instead of being appended before the visible answer.
+- **macOS install guidance remains explicit.** Ad-hoc signed macOS desktop builds still document the quarantine workaround until Developer ID signing and notarization are available. Thanks [@yagudaev](https://github.com/yagudaev) for confirming the current workaround on Apple Silicon.
+
 ### v1.5.69 Highlights
 
 Fast-follow release for [#55](https://github.com/swarmclawai/swarmclaw/pull/55) by [@borislavnnikolov](https://github.com/borislavnnikolov). Thanks Borislav!
