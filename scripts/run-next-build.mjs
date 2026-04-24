@@ -201,7 +201,6 @@ export function repairStandaloneBrowserMcpRuntime(cwd = process.cwd()) {
   for (const packageName of REQUIRED_STANDALONE_BROWSER_PACKAGES) {
     const sourceDir = path.join(cwd, 'node_modules', ...packageName.split('/'))
     const targetDir = path.join(standaloneNodeModules, ...packageName.split('/'))
-    if (fs.existsSync(targetDir)) continue
     if (!fs.existsSync(sourceDir)) {
       throw new Error(`Missing required browser MCP runtime package under ${sourceDir}.`)
     }

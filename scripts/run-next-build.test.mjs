@@ -240,4 +240,34 @@ describe('run-next-build', () => {
       fs.rmSync(tempDir, { recursive: true, force: true })
     }
   })
+
+  it('repairStandaloneBrowserMcpRuntime fills partially traced browser MCP package directories', () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'swarmclaw-browser-mcp-partial-'))
+    try {
+      fs.mkdirSync(path.join(tempDir, '.next', 'standalone'), { recursive: true })
+      for (const packageName of REQUIRED_STANDALONE_BROWSER_PACKAGES) {
+        const packageDir = path.join(tempDir, 'node_modules', ...packageName.split('/'))
+        fs.mkdirSync(packageDir, { recursive: true })
+        fs.writeFileSync(path.join(packageDir, 'package.json'), `{"name":${JSON.stringify(packageName)}}`)
+      }
+      fs.writeFileSync(
+        path.join(tempDir, 'node_modules', '@playwright', 'mcp', 'cli.js'),
+        '#!/usr/bin/env node\n',
+      )
+      fs.mkdirSync(path.join(tempDir, '.next', 'standalone', 'node_modules', '@playwright', 'mcp'), { recursive: true })
+
+      const repaired = repairStandaloneBrowserMcpRuntime(tempDir)
+      assert.equal(repaired, true)
+      assert.equal(
+        fs.existsSync(path.join(tempDir, '.next', 'standalone', 'node_modules', '@playwright', 'mcp', 'cli.js')),
+        true,
+      )
+      assert.equal(
+        fs.existsSync(path.join(tempDir, '.next', 'standalone', 'node_modules', '@playwright', 'mcp', 'package.json')),
+        true,
+      )
+    } finally {
+      fs.rmSync(tempDir, { recursive: true, force: true })
+    }
+  })
 })

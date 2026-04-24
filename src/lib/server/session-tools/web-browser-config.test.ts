@@ -19,7 +19,7 @@ describe('browser tool connection config', () => {
 
     assert.equal(params.command, process.execPath)
     assert.equal(params.args.includes('--browser'), true)
-    assert.equal(params.args.includes('chromium'), true)
+    assert.equal(params.args[params.args.indexOf('--browser') + 1], 'chromium')
     assert.equal(params.args.includes('--headless'), true)
     assert.equal(params.args.includes('--shared-browser-context'), false)
     assert.equal(params.args.includes('/tmp/swarmclaw-browser-profile'), true)
