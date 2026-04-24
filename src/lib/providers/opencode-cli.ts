@@ -2,7 +2,7 @@ import { spawn } from 'child_process'
 import type { StreamChatOptions } from './index'
 import { log } from '../server/logger'
 import { loadRuntimeSettings } from '@/lib/server/runtime/runtime-settings'
-import { resolveCliBinary, buildCliEnv, probeCliAuth, attachAbortHandler, isStderrNoise } from './cli-utils'
+import { resolveCliBinary, buildCliEnv, probeCliAuth, attachAbortHandler, isStderrNoise, parseCliExtraArgs } from './cli-utils'
 
 /**
  * OpenCode CLI provider — spawns `opencode run <message> --format json` for non-interactive usage.
@@ -43,6 +43,11 @@ export function streamOpenCodeCliChat({ session, message, imagePath, systemPromp
   const args = ['run', prompt, '--format', 'json']
   if (session.opencodeSessionId) args.push('--session', session.opencodeSessionId)
   if (session.model) args.push('--model', session.model)
+  // CLI Extra Args: allow runtime-specified flags from the agent/session
+  try {
+    const extra = parseCliExtraArgs(session.cliExtraArgs)
+    if (extra?.length) args.push(...extra)
+  } catch { /* ignore if not present */ }
   if (imagePath) args.push('--file', imagePath)
 
   log.info('opencode-cli', `Spawning: ${binary}`, {

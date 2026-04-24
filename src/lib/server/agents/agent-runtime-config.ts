@@ -350,7 +350,7 @@ export function resolveAgentRouteCandidatesWithProfiles(
     {
       id: 'base',
       label: agent.name,
-      provider: agent.provider,
+      provider: agent.provider, cliExtraArgs: agent.cliExtraArgs ?? null,
       model: agent.model,
       ollamaMode: agent.ollamaMode ?? null,
       credentialId: agent.credentialId ?? null,

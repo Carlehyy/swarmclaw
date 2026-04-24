@@ -32,6 +32,7 @@ function buildThreadSession(agent: Agent, sessionId: string, user: string, creat
     cwd: existing?.cwd || WORKSPACE_DIR,
     user: existing?.user || user,
     provider: agent.provider,
+    cliExtraArgs: agent.cliExtraArgs ?? null,
     model: agent.model,
     ollamaMode: agent.ollamaMode ?? existing?.ollamaMode ?? null,
     credentialId: agent.credentialId || null,

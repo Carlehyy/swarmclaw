@@ -2,7 +2,7 @@ import { spawn } from 'child_process'
 import type { StreamChatOptions } from './index'
 import { log } from '../server/logger'
 import { loadRuntimeSettings } from '@/lib/server/runtime/runtime-settings'
-import { resolveCliBinary, buildCliEnv, probeCliAuth, attachAbortHandler, isStderrNoise } from './cli-utils'
+import { resolveCliBinary, buildCliEnv, probeCliAuth, attachAbortHandler, isStderrNoise, parseCliExtraArgs } from './cli-utils'
 
 function buildQwenPrompt(message: string, systemPrompt?: string, imagePath?: string): string {
   const parts: string[] = []
@@ -56,6 +56,11 @@ export function streamQwenCodeCliChat({ session, message, imagePath, systemPromp
   const args = ['-p', prompt, '--output-format', 'stream-json', '--include-partial-messages', '--yolo']
   if (session.qwenSessionId) args.push('--resume', session.qwenSessionId)
   if (session.model && session.model !== 'default') args.push('--model', session.model)
+  // CLI Extra Args: allow runtime-specified flags from the agent/session
+  try {
+    const extra = parseCliExtraArgs(session.cliExtraArgs)
+    if (extra?.length) args.push(...extra)
+  } catch { /* ignore if not present */ }
 
   log.info('qwen-code-cli', `Spawning: ${binary}`, {
     args: args.map((value, index) => index === 1 && value.length > 120 ? `(${value.length} chars)` : value),

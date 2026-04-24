@@ -29,7 +29,7 @@ export function createAgentTaskSession(
     name: `[Task] ${agent.name}: ${task.slice(0, 40)}`,
     cwd: cwd || WORKSPACE_DIR,
     user: 'system',
-    provider: agent.provider,
+    provider: agent.provider, cliExtraArgs: agent.cliExtraArgs ?? null,
     model: agent.model,
     credentialId: agent.credentialId || null,
     fallbackCredentialIds: agent.fallbackCredentialIds || [],

@@ -23,6 +23,7 @@ export interface GenerationModelPreference {
   apiEndpoint?: string | null
   gatewayProfileId?: string | null
   thinkingLevel?: 'minimal' | 'low' | 'medium' | 'high' | null
+  cliExtraArgs?: string | null
 }
 
 interface ResolvedGenerationModelConfig {
@@ -151,6 +152,7 @@ function getAgentGenerationPreferences(agent: Agent | null | undefined): Generat
   if (!agent) return []
   const preferences: GenerationModelPreference[] = [{
     provider: agent.provider,
+    cliExtraArgs: agent.cliExtraArgs ?? null,
     model: agent.model,
     ollamaMode: agent.ollamaMode || null,
     credentialId: agent.credentialId || null,

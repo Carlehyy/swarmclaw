@@ -437,8 +437,8 @@ function handleAgentsList(_params: Record<string, unknown>, _ctx: PlatformAction
     id: a.id,
     name: a.name,
     description: a.description || '',
-    provider: a.provider,
-    model: a.model,
+            provider: a.provider, cliExtraArgs: a.cliExtraArgs ?? null,
+            model: a.model,
   }))
   return JSON.stringify(agents)
 }

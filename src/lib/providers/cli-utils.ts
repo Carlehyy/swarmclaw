@@ -159,6 +159,16 @@ export function isStderrNoise(text: string): boolean {
   return STDERR_NOISE_PATTERNS.some((re) => re.test(text))
 }
 
+/**
+ * Sanitize and split a cliExtraArgs string into individual argv tokens.
+ * Strips control characters, trims whitespace, and splits on whitespace.
+ */
+export function parseCliExtraArgs(raw: string | null | undefined): string[] {
+  if (!raw) return []
+  const cleaned = raw.replace(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/g, '')
+  return cleaned.trim().split(/\s+/).filter(Boolean)
+}
+
 // ---------------------------------------------------------------------------
 // Auth Probing
 // ---------------------------------------------------------------------------

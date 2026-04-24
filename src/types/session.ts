@@ -187,6 +187,7 @@ export interface Session {
   injectedMemoryIds?: Record<string, number>
   /** Structured working memory that survives compaction and flows through delegation. */
   runContext?: RunContext | null
+  cliExtraArgs?: string | null
 }
 
 export interface RunContext {

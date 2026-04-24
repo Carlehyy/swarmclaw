@@ -637,7 +637,7 @@ async function processWebhookRetries() {
         name: sessionName,
         cwd: WORKSPACE_DIR,
         user: 'system',
-        provider: agent.provider || 'claude-cli',
+        provider: agent.provider || 'claude-cli', cliExtraArgs: agent.cliExtraArgs ?? null,
         model: agent.model || '',
         credentialId: agent.credentialId || null,
         apiEndpoint: agent.apiEndpoint || null,

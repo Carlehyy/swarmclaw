@@ -14,6 +14,7 @@ import type { ProviderType, ClaudeSkill, AgentPackManifest, AgentRoutingStrategy
 import { AVAILABLE_TOOLS, PLATFORM_TOOLS } from '@/lib/tool-definitions'
 import { MCP_INJECTION_PROVIDER_IDS, NATIVE_CAPABILITY_PROVIDER_IDS, NON_LANGGRAPH_PROVIDER_IDS, WORKER_ONLY_PROVIDER_IDS } from '@/lib/provider-sets'
 import { isOrchestratorProviderEligible } from '@/lib/orchestrator-config'
+import { isCliProvider } from '@/lib/providers/cli-utils'
 import { AgentAvatar } from './agent-avatar'
 import { AgentPickerList } from '@/components/shared/agent-picker-list'
 import { randomSoul } from '@/lib/soul-suggestions'
@@ -234,6 +235,7 @@ export function AgentSheet() {
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
   const [uploading, setUploading] = useState(false)
   const [thinkingLevel, setThinkingLevel] = useState<'' | 'minimal' | 'low' | 'medium' | 'high'>('')
+  const [cliExtraArgs, setCliExtraArgs] = useState<string>('')
   const [memoryScopeMode, setMemoryScopeMode] = useState<'auto' | 'all' | 'global' | 'agent' | 'session' | 'project'>('auto')
   const [memoryTierPreference, setMemoryTierPreference] = useState<'working' | 'durable' | 'archive' | 'blended'>('blended')
   const [proactiveMemory, setProactiveMemory] = useState(true)
@@ -440,6 +442,7 @@ export function AgentSheet() {
         setAvatarSeed(editing.avatarSeed || Math.random().toString(36).slice(2, 10))
         setAvatarUrl(editing.avatarUrl || null)
         setThinkingLevel(editing.thinkingLevel || '')
+        setCliExtraArgs(editing?.cliExtraArgs ?? '')
         setMemoryScopeMode(editing.memoryScopeMode || 'auto')
         setMemoryTierPreference(editing.memoryTierPreference || 'blended')
         setProactiveMemory(editing.proactiveMemory !== false)
@@ -828,6 +831,7 @@ export function AgentSheet() {
       orchestratorGovernance,
       orchestratorMaxCyclesPerDay: orchestratorMaxCyclesPerDay ? Number(orchestratorMaxCyclesPerDay) : null,
       identityState,
+      cliExtraArgs: cliExtraArgs.trim() || null,
       sessionResetMode: sessionResetMode || null,
       sessionIdleTimeoutSec: Number.isFinite(parsedSessionIdleTimeoutSec) && parsedSessionIdleTimeoutSec! >= 0 ? parsedSessionIdleTimeoutSec : null,
       sessionMaxAgeSec: Number.isFinite(parsedSessionMaxAgeSec) && parsedSessionMaxAgeSec! >= 0 ? parsedSessionMaxAgeSec : null,
@@ -2040,6 +2044,22 @@ export function AgentSheet() {
         </p>
       </div>
       </SectionCard>
+
+      {isCliProvider(provider) && (
+        <SectionCard title="CLI Extra Arguments" description="Additional flags appended to the CLI invocation (space-separated)." className="mb-6 border-white/[0.05] bg-white/[0.01]">
+          <input
+            type="text"
+            value={cliExtraArgs}
+            onChange={(e) => setCliExtraArgs(e.target.value)}
+            placeholder="--dangerously-skip-permissions --thinking"
+            className={inputClass}
+            style={{ fontFamily: 'inherit' }}
+          />
+          <p className="text-[11px] text-text-3/70 mt-2">
+            Space-separated arguments appended after built-in flags. Example: --dangerously-skip-permissions --variant high
+          </p>
+        </SectionCard>
+      )}
 
       <SectionCard
         title="Voice & Autonomy"

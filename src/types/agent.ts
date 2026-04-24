@@ -193,6 +193,8 @@ export interface Agent {
     credentials?: string[]
   } | null
 
+  cliExtraArgs?: string | null
+
   budgetAction?: 'warn' | 'block'
   /** Runtime-enriched: current month's spend. Populated by GET /api/agents when monthlyBudget is set. */
   monthlySpend?: number
@@ -301,6 +303,7 @@ export interface AgentPackEntry {
   elevenLabsVoiceId?: string | null
   soul?: string
   systemPrompt?: string
+  cliExtraArgs?: string | null
 }
 
 export interface AgentPackManifest {

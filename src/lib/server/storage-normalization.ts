@@ -627,6 +627,8 @@ function normalizeStoredRecordInner(
     agent.sandboxConfig = normalizeAgentSandboxConfig(agent.sandboxConfig)
     // Default executeConfig — null means not configured (falls back to defaults in execute.ts)
     if (agent.executeConfig === undefined) agent.executeConfig = null
+    // Default CLI extra arguments for agents
+    if (agent.cliExtraArgs === undefined) agent.cliExtraArgs = null
     // Default proactiveMemory to true for existing agents
     if (agent.proactiveMemory === undefined) agent.proactiveMemory = true
     if (!Array.isArray(agent.capabilities)) agent.capabilities = []
@@ -803,6 +805,8 @@ function normalizeStoredRecordInner(
   if ('missionSummary' in session) delete session.missionSummary
   // Messages are now stored in session_messages table — ensure default empty array
   if (!Array.isArray(session.messages)) session.messages = []
+  // Default CLI extra arguments for sessions copied from agents
+  if (session.cliExtraArgs === undefined) session.cliExtraArgs = null
   // Default messageCount for pre-migration blobs
   if (typeof session.messageCount !== 'number') {
     session.messageCount = (session.messages as unknown[]).length

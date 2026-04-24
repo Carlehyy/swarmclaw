@@ -5,7 +5,7 @@ import { spawn } from 'child_process'
 import type { StreamChatOptions } from './index'
 import { log } from '../server/logger'
 import { loadRuntimeSettings } from '@/lib/server/runtime/runtime-settings'
-import { resolveCliBinary, buildCliEnv, probeCliAuth, attachAbortHandler, symlinkConfigFiles, isStderrNoise } from './cli-utils'
+import { resolveCliBinary, buildCliEnv, probeCliAuth, attachAbortHandler, symlinkConfigFiles, isStderrNoise, parseCliExtraArgs } from './cli-utils'
 import { getAgent } from '@/lib/server/agents/agent-repository'
 import { loadMcpServers } from '@/lib/server/storage'
 
@@ -50,6 +50,12 @@ export function streamCodexCliChat({ session, message, imagePath, systemPrompt, 
 
   // Read from stdin
   args.push('-')
+
+  // CLI Extra Args: allow runtime-specified flags from the agent/session
+  try {
+    const extra = parseCliExtraArgs(session.cliExtraArgs)
+    if (extra?.length) args.push(...extra)
+  } catch { /* ignore if not present */ }
 
   // Build clean env — preserves user's CODEX_HOME for auth
   const env = buildCliEnv()

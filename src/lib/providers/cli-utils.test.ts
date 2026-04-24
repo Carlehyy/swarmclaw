@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 
-import { isStderrNoise, buildCliEnv, isCliProvider, CLI_PROVIDER_CAPABILITIES } from './cli-utils'
+import { isStderrNoise, buildCliEnv, isCliProvider, CLI_PROVIDER_CAPABILITIES, parseCliExtraArgs } from './cli-utils'
 
 // ---------------------------------------------------------------------------
 // isStderrNoise
@@ -80,6 +80,49 @@ describe('buildCliEnv', () => {
     const env = buildCliEnv()
     assert.equal(env.TERM, 'dumb')
     assert.equal(env.NO_COLOR, '1')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// parseCliExtraArgs
+// ---------------------------------------------------------------------------
+
+describe('parseCliExtraArgs', () => {
+  it('null -> []', () => {
+    const result = parseCliExtraArgs(null)
+    assert.equal(result.length, 0)
+  })
+  it('undefined -> []', () => {
+    const result = parseCliExtraArgs(undefined)
+    assert.equal(result.length, 0)
+  })
+  it('empty string -> []', () => {
+    const result = parseCliExtraArgs('')
+    assert.equal(result.length, 0)
+  })
+  it('spaces only -> []', () => {
+    const result = parseCliExtraArgs('   ')
+    assert.equal(result.length, 0)
+  })
+  it('single arg preserved', () => {
+    const result = parseCliExtraArgs('--thinking')
+    assert.deepEqual(result, ['--thinking'])
+  })
+  it('multiple with spaces preserved', () => {
+    const result = parseCliExtraArgs('--dangerously-skip-permissions --variant high')
+    assert.deepEqual(result, ['--dangerously-skip-permissions', '--variant', 'high'])
+  })
+  it('trimmed spaces between args', () => {
+    const result = parseCliExtraArgs('  --flag1   --flag2  ')
+    assert.deepEqual(result, ['--flag1', '--flag2'])
+  })
+  it('control chars stripped', () => {
+    const result = parseCliExtraArgs('--flag\x00value')
+    assert.deepEqual(result, ['--flagvalue'])
+  })
+  it('newline treated as whitespace', () => {
+    const result = parseCliExtraArgs('--flag\n--other')
+    assert.deepEqual(result, ['--flag', '--other'])
   })
 })
 

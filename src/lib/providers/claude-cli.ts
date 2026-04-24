@@ -6,7 +6,7 @@ import type { StreamChatOptions } from './index'
 import { log } from '../server/logger'
 import { loadRuntimeSettings } from '@/lib/server/runtime/runtime-settings'
 import { getEnabledToolIds } from '@/lib/capability-selection'
-import { resolveCliBinary, buildCliEnv, probeCliAuth, attachAbortHandler, isStderrNoise } from './cli-utils'
+import { resolveCliBinary, buildCliEnv, probeCliAuth, attachAbortHandler, isStderrNoise, parseCliExtraArgs } from './cli-utils'
 
 const TAG = 'provider-claude-cli'
 
@@ -29,6 +29,13 @@ export function streamClaudeCliChat({ session, message, imagePath, systemPrompt,
   const selectedModel = typeof session.model === 'string' ? session.model : ''
   if (resumeSessionId) args.push('--resume', resumeSessionId)
   if (selectedModel) args.push('--model', selectedModel)
+
+  // CLI Extra Args: allow runtime-specified flags from the agent/session
+  try {
+    // @ts-ignore - session.cliExtraArgs is injected by runtime wiring
+    const extra = parseCliExtraArgs(session.cliExtraArgs)
+    if (extra?.length) args.push(...extra)
+  } catch { /* ignore if not present */ }
 
   // Inject agent system prompt
   if (systemPrompt && !resumeSessionId) {

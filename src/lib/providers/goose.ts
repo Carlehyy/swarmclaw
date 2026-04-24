@@ -2,7 +2,7 @@ import { spawn } from 'child_process'
 import type { StreamChatOptions } from './index'
 import { log } from '../server/logger'
 import { loadRuntimeSettings } from '@/lib/server/runtime/runtime-settings'
-import { resolveCliBinary, buildCliEnv, probeCliAuth, attachAbortHandler, isStderrNoise } from './cli-utils'
+import { resolveCliBinary, buildCliEnv, probeCliAuth, attachAbortHandler, isStderrNoise, parseCliExtraArgs } from './cli-utils'
 
 function buildGoosePrompt(message: string, systemPrompt?: string, imagePath?: string): string {
   const parts: string[] = []
@@ -61,6 +61,11 @@ export function streamGooseChat({ session, message, imagePath, systemPrompt, wri
   const sessionName = session.acpSessionId || deriveGooseSessionName(session.id)
   const args = ['run', '-t', prompt, '--format', 'json', '--quiet', '--name', sessionName]
   if (session.acpSessionId) args.push('--resume')
+  // CLI Extra Args: allow runtime-specified flags from the agent/session
+  try {
+    const extra = parseCliExtraArgs(session.cliExtraArgs)
+    if (extra?.length) args.push(...extra)
+  } catch { /* ignore if not present */ }
   if (session.model && session.model !== 'default') args.push('--model', session.model)
 
   log.info('goose', `Spawning: ${binary}`, {

@@ -2,7 +2,7 @@ import { spawn } from 'child_process'
 import type { StreamChatOptions } from './index'
 import { log } from '../server/logger'
 import { loadRuntimeSettings } from '@/lib/server/runtime/runtime-settings'
-import { resolveCliBinary, buildCliEnv, probeCliAuth, attachAbortHandler, isStderrNoise } from './cli-utils'
+import { resolveCliBinary, buildCliEnv, probeCliAuth, attachAbortHandler, isStderrNoise, parseCliExtraArgs } from './cli-utils'
 
 /**
  * Gemini CLI provider — spawns `gemini --prompt <message> --output-format stream-json --yolo`.
@@ -45,6 +45,11 @@ export function streamGeminiCliChat({ session, message, imagePath, systemPrompt,
   const args = ['--prompt', prompt, '--output-format', 'stream-json', '--yolo']
   if (session.geminiSessionId) args.push('--resume', session.geminiSessionId)
   if (session.model) args.push('--model', session.model)
+  // CLI Extra Args: allow runtime-specified flags from the agent/session
+  try {
+    const extra = parseCliExtraArgs(session.cliExtraArgs)
+    if (extra?.length) args.push(...extra)
+  } catch { /* ignore if not present */ }
   if (imagePath) args.push('--file', imagePath)
 
   log.info('gemini-cli', `Spawning: ${binary}`, {

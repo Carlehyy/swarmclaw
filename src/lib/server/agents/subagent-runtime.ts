@@ -300,7 +300,7 @@ async function spawnSubagentImpl(
     name: `subagent-${agent.name}`,
     cwd: input.cwd || context.cwd,
     user: 'agent',
-    provider: agent.provider,
+    provider: agent.provider, cliExtraArgs: agent.cliExtraArgs ?? null,
     model: agent.model,
     credentialId: agent.credentialId || null,
     messages: [],

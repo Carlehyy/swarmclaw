@@ -2,7 +2,7 @@ import { spawn } from 'child_process'
 import type { StreamChatOptions } from './index'
 import { log } from '../server/logger'
 import { loadRuntimeSettings } from '@/lib/server/runtime/runtime-settings'
-import { resolveCliBinary, buildCliEnv, probeCliAuth, attachAbortHandler, isStderrNoise } from './cli-utils'
+import { resolveCliBinary, buildCliEnv, probeCliAuth, attachAbortHandler, isStderrNoise, parseCliExtraArgs } from './cli-utils'
 
 function buildCursorPrompt(message: string, systemPrompt?: string, imagePath?: string): string {
   const parts: string[] = []
@@ -62,6 +62,11 @@ export function streamCursorCliChat({ session, message, imagePath, systemPrompt,
   if (session.cursorSessionId) args.push('--resume', session.cursorSessionId)
   if (session.model && session.model !== 'auto') args.push('--model', session.model)
   args.push(prompt)
+  // CLI Extra Args: allow runtime-specified flags from the agent/session
+  try {
+    const extra = parseCliExtraArgs(session.cliExtraArgs)
+    if (extra?.length) args.push(...extra)
+  } catch { /* ignore if not present */ }
 
   log.info('cursor-cli', `Spawning: ${binary}`, {
     args: args.map((value) => value.length > 100 ? `${value.slice(0, 100)}...` : value),

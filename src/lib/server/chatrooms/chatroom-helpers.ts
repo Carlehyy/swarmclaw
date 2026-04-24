@@ -48,7 +48,7 @@ export function isMuted(chatroom: Chatroom, agentId: string): boolean {
 
 export function resolveAgentApiEndpoint(agent: Agent): string | null {
   return resolveProviderApiEndpoint({
-    provider: agent.provider,
+    provider: agent.provider, cliExtraArgs: agent.cliExtraArgs ?? null,
     model: agent.model,
     ollamaMode: agent.ollamaMode ?? null,
     credentialId: agent.credentialId ?? null,
@@ -336,7 +336,7 @@ export function ensureSyntheticSession(agent: Agent, chatroomId: string): Sessio
         name: `Chatroom session for ${agent.name}`,
         cwd: roomWorkspace,
         user: 'chatroom',
-        provider: agent.provider,
+        provider: agent.provider, cliExtraArgs: agent.cliExtraArgs ?? null,
         model: agent.model,
         credentialId: agent.credentialId ?? null,
         fallbackCredentialIds: Array.isArray(agent.fallbackCredentialIds) ? [...agent.fallbackCredentialIds] : [],

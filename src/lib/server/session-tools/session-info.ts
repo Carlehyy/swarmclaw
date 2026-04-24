@@ -189,7 +189,7 @@ async function executeSessionsAction(args: any, context: { sessionId?: string; a
       const now = Date.now()
       sessions[id] = {
         id, name: (name || `${agent.name} Chat`).trim(), cwd: context.cwd, user: 'system',
-        provider: agent.provider, model: agent.model, credentialId: agent.credentialId || null,
+        provider: agent.provider, cliExtraArgs: agent.cliExtraArgs ?? null, model: agent.model, credentialId: agent.credentialId || null,
         claudeSessionId: null,
         codexThreadId: null,
         opencodeSessionId: null,

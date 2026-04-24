@@ -134,6 +134,7 @@ export const AgentCreateSchema = z.object({
   dailyBudget: z.number().positive().nullable().optional().default(null),
   hourlyBudget: z.number().positive().nullable().optional().default(null),
   budgetAction: z.enum(['warn', 'block']).optional().default('warn'),
+  cliExtraArgs: z.string().nullable().optional().default(null),
 })
 
 /**

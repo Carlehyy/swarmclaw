@@ -267,14 +267,15 @@ export async function createSkillSuggestionFromSession(
   const responseText = options?.generateText
     ? await options.generateText(prompt)
     : await (async () => {
-      const preferredModels: GenerationModelPreference[] = [{
-        provider: session.provider,
-        model: session.model,
-        credentialId: session.credentialId || null,
-        apiEndpoint: session.apiEndpoint || null,
-        gatewayProfileId: session.gatewayProfileId || null,
-        thinkingLevel: session.thinkingLevel || null,
-      }]
+  const preferredModels: GenerationModelPreference[] = [{
+    provider: session.provider,
+    model: session.model,
+    credentialId: session.credentialId || null,
+    apiEndpoint: session.apiEndpoint || null,
+    gatewayProfileId: session.gatewayProfileId || null,
+    thinkingLevel: session.thinkingLevel || null,
+    cliExtraArgs: session.cliExtraArgs ?? null,
+  }]
       if (agent) {
         preferredModels.push({
           provider: agent.provider,

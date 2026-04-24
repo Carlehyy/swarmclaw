@@ -5,7 +5,7 @@ import { spawn } from 'child_process'
 import type { StreamChatOptions } from './index'
 import { log } from '../server/logger'
 import { loadRuntimeSettings } from '@/lib/server/runtime/runtime-settings'
-import { resolveCliBinary, buildCliEnv, probeCliAuth, attachAbortHandler, symlinkConfigFiles, isStderrNoise } from './cli-utils'
+import { resolveCliBinary, buildCliEnv, probeCliAuth, attachAbortHandler, symlinkConfigFiles, isStderrNoise, parseCliExtraArgs } from './cli-utils'
 
 /**
  * Factory Droid CLI provider — spawns `droid exec <message> --output-format stream-json`.
@@ -45,6 +45,11 @@ export function streamDroidCliChat({ session, message, imagePath, systemPrompt, 
   const args = ['exec', prompt, '--output-format', 'stream-json']
   if (session.droidSessionId) args.push('-s', session.droidSessionId)
   if (session.model) args.push('-m', session.model)
+  // CLI Extra Args: allow runtime-specified flags from the agent/session
+  try {
+    const extra = parseCliExtraArgs(session.cliExtraArgs)
+    if (extra?.length) args.push(...extra)
+  } catch { /* ignore if not present */ }
 
   let tempFactoryHome: string | null = null
   if (systemPrompt && !session.droidSessionId) {
