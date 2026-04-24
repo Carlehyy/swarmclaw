@@ -399,6 +399,14 @@ Operational docs: https://swarmclaw.ai/docs/observability
 
 ## Releases
 
+### v1.5.71 Highlights
+
+Fast-follow release for [#60](https://github.com/swarmclawai/swarmclaw/pull/60) by [@borislavnnikolov](https://github.com/borislavnnikolov). Thanks Borislav!
+
+- **Browser MCP works from standalone builds again.** The Next standalone output now includes the Playwright MCP runtime packages required by packaged SwarmClaw builds.
+- **Host browser launches use cached Chromium.** Local Playwright MCP startup now selects Chromium explicitly instead of depending on a system Chrome install.
+- **Standalone repair is more robust.** The build repair step now fills partially traced Playwright MCP package directories, and the packaging and browser startup paths are covered by regression tests.
+
 ### v1.5.70 Highlights
 
 Fast-follow release for [#56](https://github.com/swarmclawai/swarmclaw/pull/56) by [@latentwill](https://github.com/latentwill). Thanks latentwill!
