@@ -10,10 +10,12 @@ import {
   DEFAULT_MAX_OLD_SPACE_SIZE_MB,
   NEXT_STANDALONE_METADATA_RELATIVE_DIR,
   REQUIRED_NEXT_METADATA_FILES,
+  REQUIRED_STANDALONE_BROWSER_PACKAGES,
   buildNextBuildEnv,
   deriveMaxOldSpaceSizeMb,
   hasTraceCopyWarning,
   mergeNodeOptions,
+  repairStandaloneBrowserMcpRuntime,
   readCgroupMemoryLimitBytes,
   repairStandaloneCssTreeData,
   repairStandaloneNextMetadata,
@@ -197,6 +199,43 @@ describe('run-next-build', () => {
       const standaloneNm = path.join(tempDir, '.next', 'standalone', 'node_modules')
       assert.equal(fs.existsSync(path.join(standaloneNm, 'css-tree', 'data', 'patch.json')), true)
       assert.equal(fs.existsSync(path.join(standaloneNm, 'mdn-data', 'css', 'at-rules.json')), true)
+    } finally {
+      fs.rmSync(tempDir, { recursive: true, force: true })
+    }
+  })
+
+  it('repairStandaloneBrowserMcpRuntime copies Playwright MCP runtime packages into standalone output', () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'swarmclaw-browser-mcp-'))
+    try {
+      fs.mkdirSync(path.join(tempDir, '.next', 'standalone'), { recursive: true })
+      for (const packageName of REQUIRED_STANDALONE_BROWSER_PACKAGES) {
+        const packageDir = path.join(tempDir, 'node_modules', ...packageName.split('/'))
+        fs.mkdirSync(packageDir, { recursive: true })
+        fs.writeFileSync(path.join(packageDir, 'package.json'), `{"name":${JSON.stringify(packageName)}}`)
+      }
+      fs.writeFileSync(
+        path.join(tempDir, 'node_modules', '@playwright', 'mcp', 'cli.js'),
+        '#!/usr/bin/env node\n',
+      )
+
+      const repaired = repairStandaloneBrowserMcpRuntime(tempDir)
+      assert.equal(repaired, true)
+
+      for (const packageName of REQUIRED_STANDALONE_BROWSER_PACKAGES) {
+        const targetPackageJson = path.join(
+          tempDir,
+          '.next',
+          'standalone',
+          'node_modules',
+          ...packageName.split('/'),
+          'package.json',
+        )
+        assert.equal(fs.existsSync(targetPackageJson), true)
+      }
+      assert.equal(
+        fs.existsSync(path.join(tempDir, '.next', 'standalone', 'node_modules', '@playwright', 'mcp', 'cli.js')),
+        true,
+      )
     } finally {
       fs.rmSync(tempDir, { recursive: true, force: true })
     }

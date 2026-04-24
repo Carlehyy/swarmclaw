@@ -35,6 +35,11 @@ export const REQUIRED_NEXT_METADATA_FILES = [
   'get-metadata-route.js',
   'is-metadata-route.js',
 ]
+export const REQUIRED_STANDALONE_BROWSER_PACKAGES = [
+  '@playwright/mcp',
+  'playwright',
+  'playwright-core',
+]
 
 function parsePositiveInteger(value) {
   const parsed = Number.parseInt(String(value ?? '').trim(), 10)
@@ -187,6 +192,28 @@ export function repairStandaloneCssTreeData(cwd = process.cwd()) {
   return repaired
 }
 
+export function repairStandaloneBrowserMcpRuntime(cwd = process.cwd()) {
+  const standaloneDir = path.join(cwd, '.next', 'standalone')
+  if (!fs.existsSync(standaloneDir)) return false
+
+  let repaired = false
+  const standaloneNodeModules = path.join(standaloneDir, 'node_modules')
+  for (const packageName of REQUIRED_STANDALONE_BROWSER_PACKAGES) {
+    const sourceDir = path.join(cwd, 'node_modules', ...packageName.split('/'))
+    const targetDir = path.join(standaloneNodeModules, ...packageName.split('/'))
+    if (fs.existsSync(targetDir)) continue
+    if (!fs.existsSync(sourceDir)) {
+      throw new Error(`Missing required browser MCP runtime package under ${sourceDir}.`)
+    }
+
+    fs.mkdirSync(path.dirname(targetDir), { recursive: true })
+    fs.cpSync(sourceDir, targetDir, { recursive: true, force: true })
+    repaired = true
+  }
+
+  return repaired
+}
+
 export function repairStandaloneNextMetadata(cwd = process.cwd()) {
   const standaloneDir = path.join(cwd, '.next', 'standalone')
   if (!fs.existsSync(standaloneDir)) return false
@@ -247,6 +274,9 @@ function main() {
     }
     if (result.status === 0 && repairStandaloneCssTreeData(process.cwd())) {
       console.error('Copied css-tree/data/ into standalone build output.')
+    }
+    if (result.status === 0 && repairStandaloneBrowserMcpRuntime(process.cwd())) {
+      console.error('Copied Playwright MCP runtime packages into standalone build output.')
     }
     process.exit(result.status)
   }

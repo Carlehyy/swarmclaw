@@ -134,6 +134,7 @@ export function buildBrowserStdioServerParams(
     }
   } else {
     args.push(
+      '--browser', 'chromium',
       '--headless',
       '--user-data-dir', profileDir,
     )
@@ -145,6 +146,7 @@ export function buildBrowserStdioServerParams(
     env: {
       ...env,
       ...(cdpEndpoint ? { PLAYWRIGHT_MCP_CDP_ENDPOINT: cdpEndpoint } : {
+        PLAYWRIGHT_MCP_BROWSER: 'chromium',
         PLAYWRIGHT_MCP_USER_DATA_DIR: profileDir,
         PLAYWRIGHT_MCP_HEADLESS: '1',
       }),
