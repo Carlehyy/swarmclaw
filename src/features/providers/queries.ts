@@ -85,7 +85,6 @@ export function useSaveBuiltinProviderMutation() {
     mutationFn: async ({ id, models, isEnabled, baseUrl }: SaveBuiltinProviderInput) => {
       await api('PUT', `/providers/${id}/models`, { models })
       return api('PUT', `/providers/${id}`, {
-        type: 'builtin',
         isEnabled,
         ...(baseUrl ? { baseUrl } : {}),
       })
