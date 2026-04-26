@@ -20,6 +20,18 @@ const chinaTimezones = new Set([
   'Asia/Macau',
 ])
 
+function isChinaUser() {
+  const envOverride = (process.env.SWARMCLAW_NPM_REGISTRY ?? '').trim()
+  if (envOverride) return true
+  try {
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone
+    if (chinaTimezones.has(tz)) return true
+  } catch {
+    // Intl not available — assume non-China
+  }
+  return false
+}
+
 function resolveNpmRegistry() {
   const envOverride = (process.env.SWARMCLAW_NPM_REGISTRY ?? '').trim()
   if (envOverride) return envOverride
@@ -30,6 +42,15 @@ function resolveNpmRegistry() {
     // Intl not available or timezone cannot be resolved — fall back to default
   }
   return null
+}
+
+function applyChinaBinaryMirrors() {
+  if (!isChinaUser()) return
+  // Electron binary downloads from GitHub Releases are very slow in China
+  if (!process.env.ELECTRON_MIRROR) {
+    process.env.ELECTRON_MIRROR = 'https://npmmirror.com/mirrors/electron/'
+    log('Set ELECTRON_MIRROR for China mirror.')
+  }
 }
 
 function log(message) {
@@ -144,6 +165,7 @@ function main() {
   ensureEnvFile()
 
   if (!skipInstall) {
+    applyChinaBinaryMirrors()
     const mirror = resolveNpmRegistry()
     const installArgs = ['install', '--prefer-offline']
     if (mirror) {
