@@ -14,7 +14,7 @@ import type { ProviderType, ClaudeSkill, AgentPackManifest, AgentRoutingStrategy
 import { AVAILABLE_TOOLS, PLATFORM_TOOLS } from '@/lib/tool-definitions'
 import { MCP_INJECTION_PROVIDER_IDS, NATIVE_CAPABILITY_PROVIDER_IDS, NON_LANGGRAPH_PROVIDER_IDS, WORKER_ONLY_PROVIDER_IDS } from '@/lib/provider-sets'
 import { isOrchestratorProviderEligible } from '@/lib/orchestrator-config'
-import { isCliProvider } from '@/lib/providers/cli-utils'
+import { isCliProvider } from '@/lib/providers/cli-provider-ids'
 import { AgentAvatar } from './agent-avatar'
 import { AgentPickerList } from '@/components/shared/agent-picker-list'
 import { randomSoul } from '@/lib/soul-suggestions'
