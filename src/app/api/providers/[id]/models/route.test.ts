@@ -58,3 +58,80 @@ test('provider models route updates custom provider configs without creating mod
     hasOverride: false,
   })
 })
+
+test('model overrides persist after save and load for built-in providers', () => {
+  const output = runWithTempDataDir<{
+    savedOverrides: Record<string, string[]>
+    loadedOverrides: Record<string, string[]>
+    getPayload: { models: string[]; hasOverride: boolean }
+  }>(`
+    const storageMod = await import('./src/lib/server/storage')
+    const routeMod = await import('./src/app/api/providers/[id]/models/route')
+    const storage = storageMod.default || storageMod
+    const route = routeMod.default || routeMod
+
+    await route.PUT(
+      new Request('http://local/api/providers/opencode-cli/models', {
+        method: 'PUT',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ models: ['test-model-1', 'test-model-2'] }),
+      }),
+      { params: Promise.resolve({ id: 'opencode-cli' }) },
+    )
+
+    const savedOverrides = storage.loadModelOverrides()
+    const loadedOverrides = storage.loadModelOverrides()
+
+    const getResponse = await route.GET(
+      new Request('http://local/api/providers/opencode-cli/models'),
+      { params: Promise.resolve({ id: 'opencode-cli' }) },
+    )
+
+    console.log(JSON.stringify({
+      savedOverrides,
+      loadedOverrides,
+      getPayload: await getResponse.json(),
+    }))
+  `, { prefix: 'swarmclaw-model-overrides-persist-test-' })
+
+  assert.deepEqual(output.savedOverrides['opencode-cli'], ['test-model-1', 'test-model-2'])
+  assert.deepEqual(output.loadedOverrides['opencode-cli'], ['test-model-1', 'test-model-2'])
+  assert.deepEqual(output.getPayload.models, ['test-model-1', 'test-model-2'])
+  assert.equal(output.getPayload.hasOverride, true)
+})
+
+test('empty array model overrides persist correctly', () => {
+  const output = runWithTempDataDir<{
+    loadedOverrides: Record<string, string[]>
+    getPayload: { models: string[]; hasOverride: boolean }
+  }>(`
+    const storageMod = await import('./src/lib/server/storage')
+    const routeMod = await import('./src/app/api/providers/[id]/models/route')
+    const storage = storageMod.default || storageMod
+    const route = routeMod.default || routeMod
+
+    await route.PUT(
+      new Request('http://local/api/providers/opencode-cli/models', {
+        method: 'PUT',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ models: [] }),
+      }),
+      { params: Promise.resolve({ id: 'opencode-cli' }) },
+    )
+
+    const loadedOverrides = storage.loadModelOverrides()
+
+    const getResponse = await route.GET(
+      new Request('http://local/api/providers/opencode-cli/models'),
+      { params: Promise.resolve({ id: 'opencode-cli' }) },
+    )
+
+    console.log(JSON.stringify({
+      loadedOverrides,
+      getPayload: await getResponse.json(),
+    }))
+  `, { prefix: 'swarmclaw-empty-overrides-test-' })
+
+  assert.deepEqual(output.loadedOverrides['opencode-cli'], [])
+  assert.equal(output.getPayload.hasOverride, true)
+})

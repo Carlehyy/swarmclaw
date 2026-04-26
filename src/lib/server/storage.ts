@@ -256,7 +256,10 @@ function loadCollectionWithNormalizationState(table: string): {
   for (const [id, data] of raw.entries()) {
     try {
       const { value: normalized, changed } = normalize(table, JSON.parse(data))
-      if (!normalized || typeof normalized !== 'object' || Array.isArray(normalized)) continue
+      if (!normalized || typeof normalized !== 'object') continue
+      // model_overrides stores string[] arrays (model lists) as row values;
+      // all other collections store plain objects, so the guard stays.
+      if (Array.isArray(normalized) && table !== 'model_overrides') continue
       result[id] = normalized as StoredObject
       if (changed) normalizedCount += 1
     } catch (err) {
