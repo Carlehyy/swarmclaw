@@ -11,6 +11,27 @@ const productionMode = args.has('--prod')
 const skipInstall = args.has('--skip-install')
 const cwd = process.cwd()
 
+const chinaTimezones = new Set([
+  'Asia/Shanghai',
+  'Asia/Hong_Kong',
+  'Asia/Taipei',
+  'Asia/Chongqing',
+  'Asia/Urumqi',
+  'Asia/Macau',
+])
+
+function resolveNpmRegistry() {
+  const envOverride = (process.env.SWARMCLAW_NPM_REGISTRY ?? '').trim()
+  if (envOverride) return envOverride
+  try {
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone
+    if (chinaTimezones.has(tz)) return 'https://registry.npmmirror.com'
+  } catch {
+    // Intl not available or timezone cannot be resolved — fall back to default
+  }
+  return null
+}
+
 function log(message) {
   process.stdout.write(`[setup] ${message}\n`)
 }
@@ -123,7 +144,15 @@ function main() {
   ensureEnvFile()
 
   if (!skipInstall) {
-    run('npm', ['install'])
+    const mirror = resolveNpmRegistry()
+    const installArgs = ['install', '--prefer-offline']
+    if (mirror) {
+      installArgs.push('--registry', mirror)
+      log(`Using registry mirror: ${mirror}`)
+    } else {
+      log('Using default npm registry.')
+    }
+    run('npm', installArgs)
   } else {
     log('Skipping dependency install (--skip-install).')
   }
