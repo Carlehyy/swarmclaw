@@ -14,6 +14,12 @@ const connectionStateListeners = hmrSingleton('wsClient_connectionStateListeners
 function getWsUrl(): string {
   if (typeof window === 'undefined') return 'ws://localhost:3457/ws'
 
+  // Explicit override: use NEXT_PUBLIC_WS_URL if set (for reverse proxy deployments)
+  const explicitUrl = process.env.NEXT_PUBLIC_WS_URL
+  if (explicitUrl && explicitUrl.trim()) {
+    return explicitUrl.trim()
+  }
+
   const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws'
   const pagePort = window.location.port
   const buildPort = process.env.NEXT_PUBLIC_WS_PORT || '3457'

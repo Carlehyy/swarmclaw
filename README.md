@@ -171,6 +171,88 @@ Hosted deployments should:
 - point health checks at `/api/healthz`
 - set `SWARMCLAW_ALLOWED_ORIGINS` to control which origins can access the API (see below)
 
+## Deployment Configuration / 部署配置
+
+This section describes how to deploy SwarmClaw behind reverse proxies, with a dual-port runtime (HTTP and WebSocket) and environment-based configuration. 本节介绍在反向代理后部署 SwarmClaw 的方法，包含双端口运行时（HTTP 与 WebSocket）及基于环境变量的配置。
+
+Architecture Overview / 架构概览
+- English: Dual-port design: 3456 is the HTTP port for the Next.js web UI and API, while 3457 is the WebSocket server port. The Next.js standalone runtime does not bind an internal WS server, so the WS server must run on a separate port.  双端口设计：3456 是 Next.js 的 HTTP 端口（Web UI + API），3457 是 WebSocket 服务端口。Next.js 独立运行时不暴露内部的 WS 服务器，因此 WS 需要单独端口来绑定。
+- 中文：双端口设计：3456 为 HTTP（Next.js）的端口，3457 为 WebSocket 服务端口。Next.js 独立运行时不绑定 WebSocket，WS 服务需独立端口。
+
+Configuration / 配置
+- English: .env (committed, all vars + defaults) + .env.local (gitignored, secrets only). .env holds the default values used in production; .env.local is for secrets and local overrides.  。env 文件分为提交到仓库的默认变量与本地私密变量。
+- 中文：.env（已提交，包含所有变量及默认值）+ .env.local（忽略在 Git、仅用于 secrets）。.env 保存生产默认值，.env.local 用于本地密钥与机密信息。
+
+Examples:
+```ini
+# .env (committed)  - 适用于仓库默认值
+NEXT_PUBLIC_WS_URL=
+WS_URL=ws://localhost:3457
+SWARMCLAW_ALLOWED_ORIGINS=http://localhost:3456,https://swarm-new.carleopoc.top
+DATA_DIR=
+WORKSPACE_DIR=
+LOG_LEVEL=info
+ACCESS_KEY=
+```
+
+```ini
+# .env.local  - 机密信息，仅本地使用
+WS_URL=ws://localhost:3457
+NEXT_PUBLIC_WS_URL=wss://swarm-new.carleopoc.top/ws
+ACCESS_KEY=put-your-secret-access-key-here
+```
+
+- English: Set NEXT_PUBLIC_WS_URL=wss://swarm-new.carleopoc.top/ws in .env, then configure your reverse proxy to forward /ws to port 3457.  将 NEXT_PUBLIC_WS_URL 设置为 wss://swarm-new.carleopoc.top/ws，并将反向代理配置为将 /ws 转发到 3457 端口。
+- 中文：将 NEXT_PUBLIC_WS_URL 设置为 wss://your-domain/ws，然后将反向代理配置为把 /ws 转发到 3457 端口。
+
+nginx Configuration / nginx 配置
+```nginx
+# nginx WebSocket proxy for SwarmClaw
+location /ws {
+    proxy_pass http://127.0.0.1:3457;
+    proxy_http_version 1.1;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection "upgrade";
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_read_timeout 86400s;
+}
+
+location / {
+    proxy_pass http://127.0.0.1:3456;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+}
+```
+
+Caddy Configuration / Caddy 配置
+```caddy
+swarm-new.carleopoc.top {
+    reverse_proxy /ws/* localhost:3457
+    reverse_proxy /* localhost:3456
+}
+```
+
+Docker Deployment / Docker 部署
+- English: Expose both ports in Docker so HTTP and WS traffic can reach the respective servers. If needed, set WS_URL in environment overrides.
+- 中文：在 Docker 中暴露两个端口，使 HTTP 与 WS 流量分别到达对应的服务器。如果需要，可在环境变量中覆盖 WS_URL。
+Example snippet (in docker-compose):
+```yaml
+services:
+  swarmclaw:
+    ports:
+      - "3456:3456"
+      - "3457:3457"
+    environment:
+      - WS_URL=ws://localhost:3457
+```
+
+Common Issues / 常见问题
+- English: WebSocket connection fails behind proxy → ensure NEXT_PUBLIC_WS_URL is set and WS can be reached from the client. The page may auto-refresh if WS connectivity is unstable.  若反向代理后 WebSocket 连接失败，请确保已设置 NEXT_PUBLIC_WS_URL，并确保客户端能够连接 WS。若 WS 连接不稳定，页面可能会自动刷新。
+- 中文：在代理后遇到 WebSocket 连接失败的情况，请确保已经设置 NEXT_PUBLIC_WS_URL，并且客户端能够连接到 WS。如果 WS 连接不稳定，页面可能会自动刷新。
+
+This section mirrors the existing hosted deployment guidance and adds dual-port deployment considerations.  本节基于现有的托管部署指南，补充了双端口部署的要点。
+
 ### Network Access & CORS
 
 By default SwarmClaw only allows API requests from `localhost` and `127.0.0.1` (ports 3000 and 3456). To access the API from other addresses — LAN IPs, public IPs, or custom domains — set the `SWARMCLAW_ALLOWED_ORIGINS` environment variable.

@@ -25,8 +25,25 @@ function getHub(): WsHub | null {
 export function initWsServer() {
   if (getHub()) return
 
-  const port = Number(process.env.WS_PORT) || (Number(process.env.PORT) || 3456) + 1
-  const wss = new WebSocketServer({ port, path: '/ws' })
+  // WS_URL support: allow binding to a full URL, with sensible fallbacks
+  const wsUrlEnv = process.env.WS_URL
+  let port: number
+  let wsPath = '/ws'
+
+  if (wsUrlEnv) {
+    try {
+      const parsed = new URL(wsUrlEnv)
+      port = parseInt(parsed.port, 10) || ((Number(process.env.PORT) || 3456) + 1)
+      if (parsed.pathname && parsed.pathname !== '/') {
+        wsPath = parsed.pathname
+      }
+    } catch {
+      port = Number(process.env.WS_PORT) || (Number(process.env.PORT) || 3456) + 1
+    }
+  } else {
+    port = Number(process.env.WS_PORT) || (Number(process.env.PORT) || 3456) + 1
+  }
+  const wss = new WebSocketServer({ port, path: wsPath })
   const clients = new Set<WsClient>()
 
   const hub: WsHub = { wss, clients }
@@ -73,7 +90,7 @@ export function initWsServer() {
     log.error(TAG, 'WebSocket server error:', err.message)
   })
 
-  log.info(TAG, `WebSocket server listening on port ${port}`)
+  log.info(TAG, `WebSocket server listening on port ${port} path ${wsPath}`)
 }
 
 export function closeWsServer(): Promise<void> {
