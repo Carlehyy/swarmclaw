@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { createCredential, fetchCredentials } from '@/lib/chat/chats'
+import { createCredential, deleteCredential, fetchCredentials } from '@/lib/chat/chats'
 import type { Credentials } from '@/types'
 
 type QueryOptions = {
@@ -30,6 +30,16 @@ export function useCreateCredentialMutation() {
   return useMutation({
     mutationFn: ({ provider, name, apiKey }: CreateCredentialInput) =>
       createCredential(provider, name, apiKey),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: credentialQueryKeys.all })
+    },
+  })
+}
+
+export function useDeleteCredentialMutation() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (id: string) => deleteCredential(id),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: credentialQueryKeys.all })
     },

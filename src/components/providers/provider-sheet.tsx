@@ -16,7 +16,7 @@ import {
   useSaveBuiltinProviderMutation,
   useSaveCustomProviderMutation,
 } from '@/features/providers/queries'
-import { useCreateCredentialMutation, useCredentialsQuery } from '@/features/credentials/queries'
+import { useCreateCredentialMutation, useCredentialsQuery, useDeleteCredentialMutation } from '@/features/credentials/queries'
 
 export function ProviderSheet() {
   const open = useAppStore((s) => s.providerSheetOpen)
@@ -33,6 +33,7 @@ export function ProviderSheet() {
   const checkProviderConnectionMutation = useCheckProviderConnectionMutation()
   const providerModelDiscoveryMutation = useProviderModelDiscoveryMutation()
   const createCredentialMutation = useCreateCredentialMutation()
+  const deleteCredentialMutation = useDeleteCredentialMutation()
 
   const providerConfigs = providerConfigsQuery.data ?? []
   const providers = providersQuery.data ?? []
@@ -62,6 +63,9 @@ export function ProviderSheet() {
   const [contextWindowSize, setContextWindowSize] = useState('')
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [deleting, setDeleting] = useState(false)
+
+  const [confirmDeleteKey, setConfirmDeleteKey] = useState(false)
+  const [deletingKey, setDeletingKey] = useState(false)
 
   // Find editing provider in custom configs OR built-in list
   const editingCustom = editingId ? providerConfigs.find((c) => c.id === editingId && c.type === 'custom') : null
@@ -152,6 +156,8 @@ export function ProviderSheet() {
   const onClose = () => {
     setConfirmDelete(false)
     setDeleting(false)
+    setConfirmDeleteKey(false)
+    setDeletingKey(false)
     setOpen(false)
     setEditingId(null)
   }
@@ -227,6 +233,46 @@ export function ProviderSheet() {
     setAddingKey(false)
     setNewKeyName('')
     setNewKeyValue('')
+  }
+
+  const handleDeleteCredential = async () => {
+    if (!credentialId) return
+    setDeletingKey(true)
+    try {
+      const deletedId = credentialId
+      await deleteCredentialMutation.mutateAsync(deletedId)
+      await credentialsQuery.refetch()
+      setCredentialId(null)
+      const modelList = models.split(',').map((m) => m.trim()).filter(Boolean)
+      if (isBuiltin) {
+        await saveBuiltinProviderMutation.mutateAsync({
+          id: editingId || '',
+          models: modelList,
+          isEnabled,
+          baseUrl: baseUrl.trim() || undefined,
+          contextWindowSize: contextWindowSize ? Number(contextWindowSize) : undefined,
+        })
+      } else if (editingCustom) {
+        await saveCustomProviderMutation.mutateAsync({
+          id: editingCustom.id,
+          data: {
+            name: editingCustom.name,
+            baseUrl: editingCustom.baseUrl || '',
+            models: modelList,
+            requiresApiKey: editingCustom.requiresApiKey,
+            credentialId: null,
+            isEnabled: editingCustom.isEnabled,
+            contextWindowSize: editingCustom.contextWindowSize,
+          },
+        })
+      }
+      toast.success('API key deleted')
+      setConfirmDeleteKey(false)
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : 'Failed to delete API key')
+    } finally {
+      setDeletingKey(false)
+    }
   }
 
   const handleLoadLiveModels = async (force = false) => {
@@ -470,6 +516,18 @@ export function ProviderSheet() {
               >
                 + New
               </button>
+              {credentialId && (
+                <button
+                  type="button"
+                  onClick={() => setConfirmDeleteKey(true)}
+                  className="shrink-0 p-2.5 rounded-[10px] bg-red-500/10 text-red-400 hover:bg-red-500/20 transition-colors cursor-pointer border border-red-500/20"
+                  title="Delete API key"
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                    <path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                  </svg>
+                </button>
+              )}
             </div>
           ) : (
             <div className="space-y-3 p-4 rounded-[12px] border border-accent-bright/15 bg-accent-soft/20">
@@ -608,6 +666,17 @@ export function ProviderSheet() {
         danger
         onConfirm={() => { void handleDelete() }}
         onCancel={() => { if (!deleting) setConfirmDelete(false) }}
+      />
+      <ConfirmDialog
+        open={confirmDeleteKey}
+        title="Delete API Key?"
+        message={credentialId ? `Delete "${credentials[credentialId]?.name || 'this key'}"? This cannot be undone.` : 'Delete this key?'}
+        confirmLabel={deletingKey ? 'Deleting...' : 'Delete'}
+        confirmDisabled={deletingKey}
+        cancelDisabled={deletingKey}
+        danger
+        onConfirm={() => { void handleDeleteCredential() }}
+        onCancel={() => { if (!deletingKey) setConfirmDeleteKey(false) }}
       />
     </BottomSheet>
   )
