@@ -6,6 +6,7 @@ import {
   isExtensionInstallCorsPath,
   resolveExtensionInstallCorsOrigin,
 } from '@/lib/extension-install-cors'
+import { resolveApiCorsOrigin, buildApiCorsHeaders } from '@/lib/api-cors'
 import { isProductionRuntime } from '@/lib/runtime/runtime-env'
 import { hmrSingleton } from '@/lib/shared-utils'
 
@@ -59,6 +60,21 @@ function withExtensionInstallCorsHeaders(pathname: string, origin: string | null
   return merged
 }
 
+/** Mutate a NextResponse with API-CORS headers when origin is allowed. */
+function augmentResponseWithApiCors(res: NextResponse, requestOrigin: string | null): NextResponse {
+  const origin = resolveApiCorsOrigin(requestOrigin)
+  if (!origin) {
+    // Ensure Vary header exists when no origin is allowed
+    res.headers.set('Vary', 'Origin')
+    return res
+  }
+  const corsHeaders = buildApiCorsHeaders(origin)
+  corsHeaders.forEach((value, key) => {
+    res.headers.set(key, value)
+  })
+  return res
+}
+
 /* ------------------------------------------------------------------ */
 /*  Proxy                                                              */
 /* ------------------------------------------------------------------ */
@@ -79,12 +95,28 @@ export function proxy(request: NextRequest) {
 
   if (request.method === 'OPTIONS' && isExtensionInstallCorsPath(pathname)) {
     if (!corsOrigin) {
-      return NextResponse.json({ error: 'Origin not allowed' }, { status: 403 })
+      const resp = NextResponse.json({ error: 'Origin not allowed' }, { status: 403 })
+      return augmentResponseWithApiCors(resp, request.headers.get('Origin'))
     }
-    return new NextResponse(null, {
+    const resp = new NextResponse(null, {
       status: 204,
       headers: buildExtensionInstallCorsHeaders(corsOrigin),
     })
+    return augmentResponseWithApiCors(resp, request.headers.get('Origin'))
+  }
+
+  // General API CORS preflight for all /api/ routes
+  if (request.method === 'OPTIONS' && pathname.startsWith('/api/')) {
+    const apiCorsOrigin = resolveApiCorsOrigin(request.headers.get('origin'))
+    if (!apiCorsOrigin) {
+      const resp = new NextResponse(null, { status: 204, headers: { 'Vary': 'Origin' } })
+      return augmentResponseWithApiCors(resp, request.headers.get('Origin'))
+    }
+    const resp = new NextResponse(null, {
+      status: 204,
+      headers: buildApiCorsHeaders(apiCorsOrigin),
+    })
+    return augmentResponseWithApiCors(resp, request.headers.get('Origin'))
   }
 
   // A2A endpoints use their own authentication (Authorization: Bearer / x-a2a-access-key)
@@ -101,13 +133,13 @@ export function proxy(request: NextRequest) {
     || isConnectorWebhook
     || isA2ARoute
   ) {
-    return NextResponse.next()
+    return augmentResponseWithApiCors(NextResponse.next(), request.headers.get('Origin'))
   }
 
   const accessKey = process.env.ACCESS_KEY
   if (!accessKey) {
     // No key configured — allow all (dev mode)
-    return NextResponse.next()
+    return augmentResponseWithApiCors(NextResponse.next(), request.headers.get('Origin'))
   }
 
   // --- Rate-limit housekeeping ---
@@ -119,13 +151,14 @@ export function proxy(request: NextRequest) {
   // Check lockout before even validating the key
   if (rateLimitEnabled && entry && entry.lockedUntil > Date.now()) {
     const retryAfter = Math.ceil((entry.lockedUntil - Date.now()) / 1000)
-    return NextResponse.json(
+    const resp = NextResponse.json(
       { error: 'Too many failed attempts. Try again later.', retryAfter },
       {
         status: 429,
         headers: withExtensionInstallCorsHeaders(pathname, corsOrigin, { 'Retry-After': String(retryAfter) }),
       },
     )
+    return augmentResponseWithApiCors(resp, request.headers.get('Origin'))
   }
 
   const cookieKey = request.cookies.get(AUTH_COOKIE_NAME)?.value?.trim() || ''
@@ -145,13 +178,14 @@ export function proxy(request: NextRequest) {
       rateLimitMap.set(clientIp, current)
       remaining = Math.max(0, MAX_ATTEMPTS - current.count)
     }
-    return NextResponse.json(
+    const resp = NextResponse.json(
       { error: 'Unauthorized' },
       {
         status: 401,
         headers: withExtensionInstallCorsHeaders(pathname, corsOrigin, { 'X-RateLimit-Remaining': String(remaining) }),
       },
     )
+    return augmentResponseWithApiCors(resp, request.headers.get('Origin'))
   }
 
   // Successful auth — clear any prior failed-attempt tracking for this IP
@@ -159,7 +193,7 @@ export function proxy(request: NextRequest) {
     rateLimitMap.delete(clientIp)
   }
 
-  return NextResponse.next()
+  return augmentResponseWithApiCors(NextResponse.next(), request.headers.get('Origin'))
 }
 
 export const config = {

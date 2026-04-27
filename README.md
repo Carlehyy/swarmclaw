@@ -169,6 +169,27 @@ Hosted deployments should:
 - manage secrets through the provider dashboard
 - set `ACCESS_KEY` and `CREDENTIAL_SECRET`
 - point health checks at `/api/healthz`
+- set `SWARMCLAW_ALLOWED_ORIGINS` to control which origins can access the API (see below)
+
+### Network Access & CORS
+
+By default SwarmClaw only allows API requests from `localhost` and `127.0.0.1` (ports 3000 and 3456). To access the API from other addresses — LAN IPs, public IPs, or custom domains — set the `SWARMCLAW_ALLOWED_ORIGINS` environment variable.
+
+**Allow specific origins** (comma-separated):
+
+```bash
+SWARMCLAW_ALLOWED_ORIGINS=http://192.168.1.100:3456,https://swarmclaw.example.com npm run start
+```
+
+**Allow any origin** (use with caution — ensure `ACCESS_KEY` is set):
+
+```bash
+SWARMCLAW_ALLOWED_ORIGINS=* npm run start
+```
+
+When `SWARMCLAW_ALLOWED_ORIGINS=*` is set, the server prints a warning at startup. This mode sets `Access-Control-Allow-Credentials: false`, so cookie-based auth will not work cross-origin — use the `X-Access-Key` header instead.
+
+The dev server (`npm run dev`) and production server (`npm run start`) both bind to `0.0.0.0` by default, making them reachable from any network interface. The Electron desktop app binds only to `127.0.0.1` and is not affected by this setting.
 
 Full hosted deployment guides live at https://swarmclaw.ai/docs/deployment
 
@@ -488,6 +509,7 @@ Older releases: https://swarmclaw.ai/docs/release-notes
 - Do not expose port `3456` directly without a reverse proxy and TLS.
 - Review agent prompts and enabled tools before granting shell, browser, wallet, or outbound capabilities.
 - Wallet and outbound actions can be approval-gated globally.
+- When using `SWARMCLAW_ALLOWED_ORIGINS=*`, always set a strong `ACCESS_KEY` — wildcard CORS without authentication exposes your instance to any website.
 
 ## Learn More
 
